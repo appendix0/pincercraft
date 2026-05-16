@@ -9,13 +9,27 @@ import fs from 'fs';
 import path from 'path';
 
 const STATUS = {PENDING: 'pending', IN_PROGRESS: 'in_progress', DONE: 'done'};
+const LOG_PATH = path.resolve('./queue.log');
 
 export class TaskQueue {
     constructor(agentName) {
+        this.agentName = agentName;
         this.path = path.resolve(`./bots/${agentName}/tasks.json`);
         this.tasks = [];
         this._nextId = 1;
         this._load();
+    }
+
+    _log(action, task) {
+        try {
+            const ts = new Date().toISOString();
+            const line = task
+                ? `${ts} [${this.agentName}] ${action} #${task.id} ${task.status} ${JSON.stringify(task.description)}\n`
+                : `${ts} [${this.agentName}] ${action}\n`;
+            fs.appendFileSync(LOG_PATH, line);
+        } catch (e) {
+            console.warn('queue log append failed:', e?.message || e);
+        }
     }
 
     _load() {
@@ -43,38 +57,54 @@ export class TaskQueue {
         if (!description) return {ok: false, message: 'Task description was empty.'};
         const task = {id: this._nextId++, description, status: STATUS.PENDING, createdAt: Date.now()};
         this.tasks.push(task);
+        // Auto-advance: if nothing is in progress, promote this one immediately
+        // so the model never has to chain !addTask + !startTask manually.
+        const hasActive = this.tasks.some(x => x.status === STATUS.IN_PROGRESS);
+        if (!hasActive) {
+            task.status = STATUS.IN_PROGRESS;
+            this._persist();
+            this._log('add+start', task);
+            return {ok: true, message: `Task #${task.id} added and started: ${description}. Begin executing it now.`, task};
+        }
         this._persist();
-        return {ok: true, message: `Task #${task.id} added: ${description}`, task};
+        this._log('add', task);
+        return {ok: true, message: `Task #${task.id} queued: ${description}`, task};
     }
 
     // Mark a task as in_progress. If no id, picks the first pending one.
+    // Mostly used to re-order; auto-start covers the common case.
     startTask(id = null) {
         const t = id != null ? this._find(id) : this.tasks.find(x => x.status === STATUS.PENDING);
         if (!t) return {ok: false, message: id != null ? `No task #${id}.` : 'No pending tasks.'};
         if (t.status === STATUS.DONE) return {ok: false, message: `Task #${t.id} is already done.`};
-        // Demote any other in_progress task back to pending — one active task at a time.
         for (const o of this.tasks) if (o.status === STATUS.IN_PROGRESS && o.id !== t.id) o.status = STATUS.PENDING;
         t.status = STATUS.IN_PROGRESS;
         this._persist();
+        this._log('start', t);
         return {ok: true, message: `Started task #${t.id}: ${t.description}`, task: t};
     }
 
-    // Mark a task done. If no id, picks the in_progress one.
+    // Mark a task done. If no id, picks the in_progress one. Auto-advances to
+    // the next pending task so the model can immediately execute it.
     finishTask(id = null) {
         const t = id != null ? this._find(id) : this.tasks.find(x => x.status === STATUS.IN_PROGRESS);
         if (!t) return {ok: false, message: id != null ? `No task #${id}.` : 'No task in progress.'};
         if (t.status === STATUS.DONE) return {ok: false, message: `Task #${t.id} was already done.`};
         t.status = STATUS.DONE;
         t.finishedAt = Date.now();
-        this._persist();
+        this._log('finish', t);
         const next = this.tasks.find(x => x.status === STATUS.PENDING);
         if (next) {
+            next.status = STATUS.IN_PROGRESS;
+            this._persist();
+            this._log('auto-start', next);
             return {
                 ok: true,
-                message: `Finished task #${t.id}: ${t.description}. Next pending: #${next.id} ${next.description}. Continue immediately with !startTask(-1).`,
+                message: `Finished task #${t.id}: ${t.description}. Auto-started #${next.id}: ${next.description}. Begin executing it now.`,
                 task: t,
             };
         }
+        this._persist();
         return {
             ok: true,
             message: `Finished task #${t.id}: ${t.description}. Queue is empty — all done. Tell the player you're done.`,
@@ -87,6 +117,7 @@ export class TaskQueue {
         if (idx === -1) return {ok: false, message: `No task #${id}.`};
         const [t] = this.tasks.splice(idx, 1);
         this._persist();
+        this._log('cancel', t);
         return {ok: true, message: `Cancelled task #${t.id}: ${t.description}`, task: t};
     }
 
@@ -94,6 +125,7 @@ export class TaskQueue {
         const before = this.tasks.length;
         this.tasks = this.tasks.filter(x => x.status !== STATUS.DONE);
         this._persist();
+        this._log(`clearDone (removed ${before - this.tasks.length})`);
         return {ok: true, message: `Cleared ${before - this.tasks.length} done task(s).`};
     }
 
