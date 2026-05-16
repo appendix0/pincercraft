@@ -17,12 +17,20 @@ import settings from './settings.js';
 import { Task } from './tasks/tasks.js';
 import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
+import { RunQueue } from './run_queue.js';
+import { InputRouter } from './input_router.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
         this.last_sender = null;
         this.count_id = count_id;
         this._disconnectHandled = false;
+
+        // Phase 1 action queue: one serial lane, no self-collisions.
+        // See docs/queue-design.md.
+        this.alive = true;
+        this.run_queue = new RunQueue();
+        this.input_router = new InputRouter();
 
         // Initialize components
         this.actions = new ActionManager(this);
@@ -121,6 +129,7 @@ export class Agent {
               
                 this._setupEventHandlers(save_data, init_message);
                 this.startEvents();
+                this._runWorker(); // single consumer loop for the action queue
               
                 if (!load_mem) {
                     if (settings.task) {
@@ -170,7 +179,7 @@ export class Agent {
                 }
                 else {
                     let translation = await handleEnglishTranslation(message);
-                    this.handleMessage(username, translation);
+                    this.enqueue({source: username, message: translation, kind: 'player_chat'});
                 }
             } catch (error) {
                 console.error('Error handling message:', error);
@@ -211,7 +220,7 @@ export class Agent {
             }
         }
         else if (init_message) {
-            await this.handleMessage('system', init_message, 2);
+            this.enqueue({source: 'system', message: init_message, max_responses: 2, kind: 'init'});
         }
         else {
             this.openChat("Hello world! I am "+this.name);
@@ -251,12 +260,62 @@ export class Agent {
         convoManager.endAllConversations();
     }
 
-    async handleMessage(source, message, max_responses=null) {
-        await this.checkTaskDone();
-        if (!source || !message) {
-            console.warn('Received empty message from', source);
-            return false;
+    // Backwards-compat shim. Pre-Phase 1 code called handleMessage directly; now
+    // everything flows through the queue.
+    handleMessage(source, message, max_responses=null) {
+        this.enqueue({source, message, max_responses, kind: 'legacy'});
+    }
+
+    // Producer side: called by event handlers. Classifies the input, applies
+    // interrupt semantics if needed, then pushes to the queue.
+    enqueue(input) {
+        if (!input || !input.source || !input.message) {
+            console.warn('enqueue ignored empty input:', input);
+            return;
         }
+        const mode = this.input_router.classify(input);
+        input.mode = mode;
+        if (mode === 'interrupt') {
+            // Append marker so the LLM knows its previous turn was cut off
+            // (design doc §7). Safe even when nothing is running.
+            if (this.run_queue.state === 'running') {
+                this.history.add('system', `[Interrupted by: ${input.source}]`);
+            }
+            this.run_queue.abortCurrent();
+            this.run_queue.clear();
+            this.requestInterrupt(); // stop mineflayer movement now, don't wait for LLM
+        }
+        this.run_queue.push(input);
+    }
+
+    // Consumer side: single forever loop. Owns the LLM + bot for one input at a time.
+    async _runWorker() {
+        while (this.alive) {
+            let input;
+            try {
+                input = await this.run_queue.next();
+            } catch (e) {
+                console.error('run_queue.next() failed:', e);
+                continue;
+            }
+            this.run_queue.beginRun();
+            try {
+                await this._processInput(input);
+            } catch (e) {
+                if (e && e.name === 'AbortError') {
+                    // expected when an interrupt cuts the run short
+                } else {
+                    console.error('_processInput failed:', e);
+                }
+            } finally {
+                this.run_queue.endRun();
+            }
+        }
+    }
+
+    async _processInput(input) {
+        let {source, message, max_responses = null} = input;
+        await this.checkTaskDone();
 
         let used_command = false;
         if (max_responses === null) {
@@ -278,12 +337,10 @@ export class Agent {
                 }
                 this.routeResponse(source, `*${source} used ${user_command_name.substring(1)}*`);
                 if (user_command_name === '!newAction') {
-                    // all user-initiated commands are ignored by the bot except for this one
-                    // add the preceding message to the history to give context for newAction
                     this.history.add(source, message);
                 }
                 let execute_res = await executeCommand(this, message);
-                if (execute_res) 
+                if (execute_res)
                     this.routeResponse(source, execute_res);
                 return true;
             }
@@ -292,12 +349,11 @@ export class Agent {
         if (from_other_bot)
             this.last_sender = source;
 
-        // Now translate the message
         message = await handleEnglishTranslation(message);
         console.log('received message from', source, ':', message);
 
-        const checkInterrupt = () => this.self_prompter.shouldInterrupt(self_prompt) || this.shut_up || convoManager.responseScheduledFor(source);
-        
+        const checkInterrupt = () => this.run_queue.aborted || this.self_prompter.shouldInterrupt(self_prompt) || this.shut_up || convoManager.responseScheduledFor(source);
+
         let behavior_log = this.bot.modes.flushBehaviorLog().trim();
         if (behavior_log.length > 0) {
             const MAX_LOG = 500;
@@ -308,30 +364,30 @@ export class Agent {
             await this.history.add('system', behavior_log);
         }
 
-        // Handle other user messages
         await this.history.add(source, message);
         this.history.save();
 
-        if (!self_prompt && this.self_prompter.isActive()) // message is from user during self-prompting
-            max_responses = 1; // force only respond to this message, then let self-prompting take over
+        if (!self_prompt && this.self_prompter.isActive())
+            max_responses = 1;
         for (let i=0; i<max_responses; i++) {
             if (checkInterrupt()) break;
             let history = this.history.getHistory();
             let res = await this.prompter.promptConvo(history);
+            if (checkInterrupt()) break;
 
             console.log(`${this.name} full response to ${source}: ""${res}""`);
 
             if (res.trim().length === 0) {
                 console.warn('no response')
-                break; // empty response ends loop
+                break;
             }
 
             let command_name = containsCommand(res);
 
-            if (command_name) { // contains query or command
-                res = truncCommandMessage(res); // everything after the command is ignored
+            if (command_name) {
+                res = truncCommandMessage(res);
                 this.history.add(this.name, res);
-                
+
                 if (!commandExists(command_name)) {
                     this.history.add('system', `Command ${command_name} does not exist.`);
                     console.warn('Agent hallucinated command:', command_name)
@@ -345,7 +401,6 @@ export class Agent {
                     this.routeResponse(source, res);
                 }
                 else if (settings.show_command_syntax === "shortened") {
-                    // show only "used !commandname"
                     let pre_message = res.substring(0, res.indexOf(command_name)).trim();
                     let chat_message = `*used ${command_name.substring(1)}*`;
                     if (pre_message.length > 0)
@@ -353,13 +408,13 @@ export class Agent {
                     this.routeResponse(source, chat_message);
                 }
                 else {
-                    // no command at all
                     let pre_message = res.substring(0, res.indexOf(command_name)).trim();
                     if (pre_message.trim().length > 0)
                         this.routeResponse(source, pre_message);
                 }
 
                 let execute_res = await executeCommand(this, res);
+                if (checkInterrupt()) break;
 
                 console.log('Agent executed:', command_name, 'and got:', execute_res);
                 used_command = true;
@@ -369,12 +424,12 @@ export class Agent {
                 else
                     break;
             }
-            else { // conversation response
+            else {
                 this.history.add(this.name, res);
                 this.routeResponse(source, res);
                 break;
             }
-            
+
             this.history.save();
         }
 
@@ -477,7 +532,11 @@ export class Agent {
                     death_pos_text = `x: ${death_pos.x.toFixed(2)}, y: ${death_pos.y.toFixed(2)}, z: ${death_pos.z.toFixed(2)}`;
                 }
                 let dimention = this.bot.game.dimension;
-                this.handleMessage('system', `You died at position ${death_pos_text || "unknown"} in the ${dimention} dimension with the final message: '${message}'. Your place of death is saved as 'last_death_position' if you want to return. Previous actions were stopped and you have respawned.`);
+                this.enqueue({
+                    source: 'system',
+                    message: `You died at position ${death_pos_text || "unknown"} in the ${dimention} dimension with the final message: '${message}'. Your place of death is saved as 'last_death_position' if you want to return. Previous actions were stopped and you have respawned.`,
+                    kind: 'game_event_critical',
+                });
             }
         });
         this.bot.on('idle', () => {
@@ -524,6 +583,7 @@ export class Agent {
     
 
     cleanKill(msg='Killing agent process...', code=1) {
+        this.alive = false;
         this.history.add('system', msg);
         this.bot.chat(code > 1 ? 'Restarting.': 'Exiting.');
         this.history.save();
