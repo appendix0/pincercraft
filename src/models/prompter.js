@@ -137,6 +137,11 @@ export class Prompter {
     async replaceStrings(prompt, messages, examples=null, to_summarize=[], last_goals=null) {
         prompt = prompt.replaceAll('$NAME', this.agent.name);
 
+        if (prompt.includes('$TASKQUEUE')) {
+            const tq = this.agent.task_queue ? this.agent.task_queue.serialize() : '';
+            prompt = prompt.replaceAll('$TASKQUEUE', tq);
+        }
+
         if (prompt.includes('$COC')) {
             let coc = '';
             try {

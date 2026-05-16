@@ -56,6 +56,12 @@ const TEMPLATES = {
     checkBlueprintLevel: () => `checking blueprint level`,
     getCraftingPlan: () => `planning craft`,
     restart: () => `restarting`,
+    addTask: ([desc]) => `queued: ${desc}`,
+    startTask: ([id]) => id === '-1' || id === undefined ? `starting next task` : `starting task #${id}`,
+    finishTask: ([id]) => id === '-1' || id === undefined ? `done with current task` : `finished task #${id}`,
+    cancelTask: ([id]) => `cancelling task #${id}`,
+    showQueue: () => `checking my queue`,
+    clearDoneTasks: () => `clearing done tasks`,
 };
 
 // "searchForBlock" -> "search for block"

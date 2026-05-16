@@ -500,4 +500,62 @@ export const actionsList = [
             await skills.useToolOn(agent.bot, tool_name, target);
         })
     },
+    {
+        name: '!addTask',
+        description: 'Add a task to your own queue. Use this when the player asks you to do something so you don\'t forget. The task list is visible to you in every prompt as $TASKQUEUE.',
+        params: {
+            'description': { type: 'string', description: 'Short description of the task (e.g. "mine 5 iron", "build a 3x3 wall").' }
+        },
+        perform: async function (agent, description) {
+            return agent.task_queue.addTask(description).message;
+        }
+    },
+    {
+        name: '!startTask',
+        description: 'Mark a task as in-progress so you and the player know what you\'re working on. Omit id to start the next pending task.',
+        params: {
+            'id': { type: 'int', description: 'Task id to start, or -1 to start the next pending task.', domain: [-1, Number.MAX_SAFE_INTEGER] }
+        },
+        perform: async function (agent, id) {
+            return agent.task_queue.startTask(id === -1 ? null : id).message;
+        }
+    },
+    {
+        name: '!finishTask',
+        description: 'Mark the current in-progress task done. Call this when you\'ve completed what was asked. Omit id to finish the in-progress task.',
+        params: {
+            'id': { type: 'int', description: 'Task id to finish, or -1 to finish whatever is in progress.', domain: [-1, Number.MAX_SAFE_INTEGER] }
+        },
+        perform: async function (agent, id) {
+            return agent.task_queue.finishTask(id === -1 ? null : id).message;
+        }
+    },
+    {
+        name: '!cancelTask',
+        description: 'Remove a task from your queue (e.g. when the player tells you to skip it).',
+        params: {
+            'id': { type: 'int', description: 'Task id to cancel.', domain: [1, Number.MAX_SAFE_INTEGER] }
+        },
+        perform: async function (agent, id) {
+            return agent.task_queue.cancelTask(id).message;
+        }
+    },
+    {
+        name: '!showQueue',
+        description: 'Print your current task queue to chat so the player can see it. Use when asked "what are you doing" or "what\'s in your queue".',
+        params: {},
+        perform: async function (agent) {
+            const text = agent.task_queue.formatForChat();
+            agent.openChat(text);
+            return text;
+        }
+    },
+    {
+        name: '!clearDoneTasks',
+        description: 'Remove all completed tasks from your queue to keep it tidy.',
+        params: {},
+        perform: async function (agent) {
+            return agent.task_queue.clearDone().message;
+        }
+    },
 ];

@@ -18,8 +18,9 @@ import { Task } from './tasks/tasks.js';
 import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
 import { RunQueue } from './run_queue.js';
-import { InputRouter, isPureStopMessage } from './input_router.js';
+import { InputRouter } from './input_router.js';
 import { humanizeCommand } from './command_humanizer.js';
+import { TaskQueue } from './task_queue.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
@@ -53,6 +54,7 @@ export class Agent {
         this.npc = new NPCContoller(this);
         this.memory_bank = new MemoryBank();
         this.self_prompter = new SelfPrompter(this);
+        this.task_queue = new TaskQueue(this.name);
         convoManager.initAgent(this);
         await this.prompter.initExamples();
 
@@ -267,8 +269,10 @@ export class Agent {
         this.enqueue({source, message, max_responses, kind: 'legacy'});
     }
 
-    // Producer side: called by event handlers. Classifies the input, applies
-    // interrupt semantics if needed, then pushes to the queue.
+    // Producer side: called by event handlers. Serializes inputs so two
+    // chats arriving close together don't race the LLM. The LLM itself
+    // decides what to do with each input — chat, queue a task, run one,
+    // refuse, etc. via the !addTask / !finishTask / !showQueue commands.
     enqueue(input) {
         if (!input || !input.source || !input.message) {
             console.warn('enqueue ignored empty input:', input);
@@ -277,66 +281,14 @@ export class Agent {
         const mode = this.input_router.classify(input);
         input.mode = mode;
         if (mode === 'interrupt') {
-            // Append marker so the LLM knows its previous turn was cut off
-            // (design doc §7). Safe even when nothing is running.
             if (this.run_queue.state === 'running') {
                 this.history.add('system', `[Interrupted by: ${input.source}]`);
             }
             this.run_queue.abortCurrent();
             this.run_queue.clear();
-            this.requestInterrupt(); // stop mineflayer movement now, don't wait for LLM
+            this.requestInterrupt();
         }
-        this._announceEnqueue(input);
         this.run_queue.push(input);
-    }
-
-    // ---- queue chat announcements (design doc §8 Phase 4, brought forward) ----
-
-    _truncForAnnounce(msg, n=30) {
-        if (!msg) return '';
-        msg = String(msg).replace(/\s+/g, ' ').trim();
-        return msg.length > n ? msg.substring(0, n-1) + '…' : msg;
-    }
-
-    _say(line) {
-        if (!settings.chat_ingame) return;
-        try { this.bot.chat(line); } catch (e) { console.warn('queue announce bot.chat failed:', e); }
-    }
-
-    _announceEnqueue(input) {
-        const running = this.run_queue.current_input;
-        const newSnip = this._truncForAnnounce(input.message);
-        if (input.mode === 'interrupt' && running) {
-            // If it's a bare !stop, the "→ N: !stop" tail is noise — user just sees the stop.
-            if (isPureStopMessage(input.message)) {
-                this._say(`STOP ${this._truncForAnnounce(running.message)}`);
-            } else {
-                this._say(`STOP ${this._truncForAnnounce(running.message)} → N: ${newSnip}`);
-            }
-            return;
-        }
-        if (running) {
-            // followup arriving while busy: show current + existing queue + this new tail item
-            const tail = [...this.run_queue.queuedInputs, input];
-            const parts = [`N: ${this._truncForAnnounce(running.message)}`];
-            tail.forEach((it, idx) => parts.push(`Q${idx + 1}: ${this._truncForAnnounce(it.message)}`));
-            this._say(parts.join(' | '));
-        } else {
-            // queue was idle: this input is about to become N
-            this._say(`N: ${newSnip}`);
-        }
-    }
-
-    _announceCompletion(input) {
-        const next = this.run_queue.queuedInputs[0];
-        if (!next) {
-            this._say(`✓ ${this._truncForAnnounce(input.message)} (idle)`);
-            return;
-        }
-        // Show the next-up + remaining queue after it.
-        const parts = [`✓ ${this._truncForAnnounce(input.message)}`, `N: ${this._truncForAnnounce(next.message)}`];
-        this.run_queue.queuedInputs.slice(1).forEach((it, idx) => parts.push(`Q${idx + 1}: ${this._truncForAnnounce(it.message)}`));
-        this._say(parts.join(' | '));
     }
 
     // Consumer side: single forever loop. Owns the LLM + bot for one input at a time.
@@ -350,7 +302,6 @@ export class Agent {
                 continue;
             }
             this.run_queue.beginRun(input);
-            let aborted = false;
             try {
                 await this._processInput(input);
             } catch (e) {
@@ -360,10 +311,8 @@ export class Agent {
                     console.error('_processInput failed:', e);
                 }
             } finally {
-                aborted = this.run_queue.aborted;
                 this.run_queue.endRun();
             }
-            if (!aborted) this._announceCompletion(input);
         }
     }
 
