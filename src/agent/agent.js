@@ -18,7 +18,7 @@ import { Task } from './tasks/tasks.js';
 import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
 import { RunQueue } from './run_queue.js';
-import { InputRouter } from './input_router.js';
+import { InputRouter, isPureStopMessage } from './input_router.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
@@ -285,7 +285,57 @@ export class Agent {
             this.run_queue.clear();
             this.requestInterrupt(); // stop mineflayer movement now, don't wait for LLM
         }
+        this._announceEnqueue(input);
         this.run_queue.push(input);
+    }
+
+    // ---- queue chat announcements (design doc §8 Phase 4, brought forward) ----
+
+    _truncForAnnounce(msg, n=30) {
+        if (!msg) return '';
+        msg = String(msg).replace(/\s+/g, ' ').trim();
+        return msg.length > n ? msg.substring(0, n-1) + '…' : msg;
+    }
+
+    _say(line) {
+        if (!settings.chat_ingame) return;
+        try { this.bot.chat(line); } catch (e) { console.warn('queue announce bot.chat failed:', e); }
+    }
+
+    _announceEnqueue(input) {
+        const running = this.run_queue.current_input;
+        const newSnip = this._truncForAnnounce(input.message);
+        if (input.mode === 'interrupt' && running) {
+            // If it's a bare !stop, the "→ N: !stop" tail is noise — user just sees the stop.
+            if (isPureStopMessage(input.message)) {
+                this._say(`STOP ${this._truncForAnnounce(running.message)}`);
+            } else {
+                this._say(`STOP ${this._truncForAnnounce(running.message)} → N: ${newSnip}`);
+            }
+            return;
+        }
+        if (running) {
+            // followup arriving while busy: show current + existing queue + this new tail item
+            const tail = [...this.run_queue.queuedInputs, input];
+            const parts = [`N: ${this._truncForAnnounce(running.message)}`];
+            tail.forEach((it, idx) => parts.push(`Q${idx + 1}: ${this._truncForAnnounce(it.message)}`));
+            this._say(parts.join(' | '));
+        } else {
+            // queue was idle: this input is about to become N
+            this._say(`N: ${newSnip}`);
+        }
+    }
+
+    _announceCompletion(input) {
+        const next = this.run_queue.queuedInputs[0];
+        if (!next) {
+            this._say(`✓ ${this._truncForAnnounce(input.message)} (idle)`);
+            return;
+        }
+        // Show the next-up + remaining queue after it.
+        const parts = [`✓ ${this._truncForAnnounce(input.message)}`, `N: ${this._truncForAnnounce(next.message)}`];
+        this.run_queue.queuedInputs.slice(1).forEach((it, idx) => parts.push(`Q${idx + 1}: ${this._truncForAnnounce(it.message)}`));
+        this._say(parts.join(' | '));
     }
 
     // Consumer side: single forever loop. Owns the LLM + bot for one input at a time.
@@ -298,7 +348,8 @@ export class Agent {
                 console.error('run_queue.next() failed:', e);
                 continue;
             }
-            this.run_queue.beginRun();
+            this.run_queue.beginRun(input);
+            let aborted = false;
             try {
                 await this._processInput(input);
             } catch (e) {
@@ -308,8 +359,10 @@ export class Agent {
                     console.error('_processInput failed:', e);
                 }
             } finally {
+                aborted = this.run_queue.aborted;
                 this.run_queue.endRun();
             }
+            if (!aborted) this._announceCompletion(input);
         }
     }
 

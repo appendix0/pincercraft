@@ -4,6 +4,11 @@
 
 const INTERRUPT_KEYWORDS = ['!stop', '!halt', '!cancel'];
 
+export function isPureStopMessage(message) {
+    const msg = (message || '').trim().toLowerCase();
+    return INTERRUPT_KEYWORDS.includes(msg);
+}
+
 export class InputRouter {
     classify(input) {
         // Critical game events (low health, on fire, drowning) — life-threatening,

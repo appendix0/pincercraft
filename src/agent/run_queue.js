@@ -12,6 +12,11 @@ export class RunQueue {
         this._waiters = [];
         this._abort = null;
         this.state = 'idle'; // 'idle' | 'running' | 'interrupted'
+        this.current_input = null;
+    }
+
+    get queuedInputs() {
+        return [...this._items];
     }
 
     push(input) {
@@ -44,15 +49,16 @@ export class RunQueue {
     }
 
     // Called by the worker before executing a new input.
-    beginRun() {
+    beginRun(input) {
         this._abort = new AbortController();
         this.state = 'running';
+        this.current_input = input;
     }
 
     endRun() {
         this._abort = null;
-        if (this.state !== 'interrupted') this.state = 'idle';
-        else this.state = 'idle';
+        this.state = 'idle';
+        this.current_input = null;
     }
 
     get aborted() {
