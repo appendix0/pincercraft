@@ -1,7 +1,7 @@
 const settings = {
-    "minecraft_version": "1.21.11", // YOON AGAIN runs Paper 1.21.11
+    "minecraft_version": "1.21.6", // PincerCraft TS runs Paper 1.21.6 (set 1.21.11 when flipping to YOON)
     "host": "127.0.0.1",
-    "port": 25565, // YOON Java port
+    "port": 25566, // PincerCraft TS Java port (was 25565 = YOON; flip back when promoting)
     "auth": "microsoft", // device-code flow with PinBench1502 MS account (owns Java)
 
     // the mindserver manages all agents and hosts the UI
