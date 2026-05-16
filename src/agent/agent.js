@@ -133,6 +133,7 @@ export class Agent {
                 this._setupEventHandlers(save_data, init_message);
                 this.startEvents();
                 this._runWorker(); // single consumer loop for the action queue
+                this._startQueueHeartbeat();
               
                 if (!load_mem) {
                     if (settings.task) {
@@ -225,9 +226,63 @@ export class Agent {
         else if (init_message) {
             this.enqueue({source: 'system', message: init_message, max_responses: 2, kind: 'init'});
         }
-        else {
-            this.openChat("Hello world! I am "+this.name);
+        // Always greet players based on queue state. Then, if there's an
+        // in-progress task, prompt the LLM to keep going so a reboot
+        // mid-task resumes instead of stalling.
+        const {greeting, hasActive, activeDesc, activeId} = this._rebootContext();
+        this.openChat(greeting);
+        if (hasActive && !save_data?.self_prompt && !init_message) {
+            this.enqueue({
+                source: 'system',
+                message: `You just rebooted and rejoined the server. Task #${activeId} (${activeDesc}) was in progress. Continue executing it now.`,
+                kind: 'init',
+            });
         }
+    }
+
+    // Every minute, if a task is in progress, chat a one-line status so the
+    // player isn't left wondering. No LLM call — rotates through a few stock
+    // phrases with the current task description plugged in.
+    _startQueueHeartbeat() {
+        const PHRASES = [
+            'Still on it — ',
+            'Working on ',
+            'Currently: ',
+            'Continuing ',
+            'Heads up, still ',
+        ];
+        let i = 0;
+        this._heartbeat = setInterval(() => {
+            if (!this.alive || !this.task_queue) return;
+            if (this.run_queue.state !== 'running') return;
+            const active = this.task_queue.tasks.find(t => t.status === 'in_progress');
+            if (!active) return;
+            const phrase = PHRASES[i++ % PHRASES.length];
+            try { this.openChat(`${phrase}${active.description}.`); } catch (e) { /* ignore */ }
+        }, 60000);
+    }
+
+    _rebootContext() {
+        const tq = this.task_queue;
+        if (!tq) return {greeting: `Hi, I'm ${this.name}. Ready for a mission.`, hasActive: false};
+        const active = tq.tasks.find(t => t.status === 'in_progress');
+        const pending = tq.tasks.filter(t => t.status === 'pending');
+        if (active) {
+            const tail = pending.length > 0 ? ` (+ ${pending.length} more queued)` : '';
+            return {
+                greeting: `Back online. Was working on: ${active.description}${tail}. Picking it up.`,
+                hasActive: true,
+                activeId: active.id,
+                activeDesc: active.description,
+            };
+        }
+        if (pending.length > 0) {
+            return {
+                greeting: `Back online. ${pending.length} task${pending.length === 1 ? '' : 's'} waiting — starting now.`,
+                hasActive: false,
+            };
+        }
+        return {greeting: `Online and ready. No tasks queued — what'll it be?`, hasActive: false};
     }
 
     checkAllPlayersPresent() {
@@ -626,6 +681,7 @@ export class Agent {
 
     cleanKill(msg='Killing agent process...', code=1) {
         this.alive = false;
+        if (this._heartbeat) clearInterval(this._heartbeat);
         this.history.add('system', msg);
         this.bot.chat(code > 1 ? 'Restarting.': 'Exiting.');
         this.history.save();

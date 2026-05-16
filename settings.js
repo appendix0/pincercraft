@@ -50,7 +50,7 @@ const settings = {
     "num_examples": 2, // number of examples to give to the model
     "max_commands": -1, // max number of commands that can be used in consecutive responses. -1 for no limit
     "show_command_syntax": "none", // chat shows only the LLM's prose, never the command syntax. The model speaks naturally about what it's doing.
-    "narrate_behavior": true, // chat simple automatic actions ('Picking up item!')
+    "narrate_behavior": false, // suppress mode chatter ("I'm stuck!", "I'm free.", "Picking up item!", "Hunting ...!"). The internal behavior_log still records them for the LLM.
     "chat_bot_messages": true, // publicly chat messages to other bots
 
     "spawn_timeout": 300, // 5min — first-time MS device-code auth needs time
