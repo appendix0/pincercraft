@@ -1,0 +1,13 @@
+{
+    "name": "nvidia",
+
+    "cooldown": 3000,
+
+    "model": {
+        "api": "openai",
+        "url": "https://integrate.api.nvidia.com/v1",
+        "model": "meta/llama-3.3-70b-instruct"
+    },
+
+    "max_tokens": 4000
+}

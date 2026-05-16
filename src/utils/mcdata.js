@@ -60,6 +60,7 @@ export function initBot(username) {
         auth: settings.auth,
         version: mc_version,
         checkTimeoutInterval: 60000,  // 60s keep-alive check (default 30s) — reduces disconnects on slow servers
+        disableChatSigning: true,  // bot has no Java profile key; server reports "Chat disabled due to missing profile public key" without this. Required for bot to receive AND send chat.
     }
     if (!mc_version || mc_version === "auto") {
         delete options.version;
