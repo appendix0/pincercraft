@@ -182,15 +182,36 @@ export const actionsList = [
     },
     {
         name: '!givePlayer',
-        description: 'Give the specified item to the given player.',
-        params: { 
-            'player_name': { type: 'string', description: 'The name of the player to give the item to.' }, 
+        description: 'Give the specified item to the given player. Drops the item near them. When this succeeds, delivery is COMPLETE from your end — the active delivery task auto-finishes.',
+        params: {
+            'player_name': { type: 'string', description: 'The name of the player to give the item to.' },
             'item_name': { type: 'ItemName', description: 'The name of the item to give.' },
             'num': { type: 'int', description: 'The number of items to give.', domain: [1, Number.MAX_SAFE_INTEGER] }
         },
-        perform: runAsAction(async (agent, player_name, item_name, num) => {
-            await skills.giveToPlayer(agent.bot, item_name, player_name, num);
-        })
+        perform: async function (agent, player_name, item_name, num) {
+            const inner = runAsAction(async (agent, player_name, item_name, num) => {
+                await skills.giveToPlayer(agent.bot, item_name, player_name, num);
+            });
+            const result = await inner(agent, player_name, item_name, num);
+            // Mineflayer can't observe the player picking up the dropped item.
+            // Treat the drop itself as completion of any matching delivery task,
+            // so the bot doesn't loop trying to re-craft thinking delivery failed.
+            try {
+                const active = agent.task_queue?.tasks.find(t => t.status === 'in_progress');
+                if (active) {
+                    const desc = active.description.toLowerCase();
+                    const item = String(item_name).toLowerCase();
+                    const isDelivery = /(give|deliver|bring|hand|return|drop)/i.test(desc);
+                    if (isDelivery && desc.includes(item)) {
+                        const finish = agent.task_queue.finishTask();
+                        return `${result ?? ''}\n${finish.message}`.trim();
+                    }
+                }
+            } catch (e) {
+                console.warn('auto-finish on !givePlayer failed:', e?.message || e);
+            }
+            return result;
+        }
     },
     {
         name: '!consume',

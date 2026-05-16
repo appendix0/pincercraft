@@ -359,21 +359,39 @@ export class Agent {
 
     // Parallel LLM call that produces a short prose reply while a task is
     // running. Strips any commands the model emits so we never accidentally
-    // interfere with the task that owns the bot's body.
+    // interfere with the task that owns the bot's body. Always replies
+    // something so the player isn't ignored — even if the LLM blanks or
+    // only emits commands.
     async _handleSideChat(input) {
         const {source, message} = input;
         try {
             await this.history.add(source, `(mid-task) ${message}`);
             const history = this.history.getHistory();
-            let res = await this.prompter.promptConvo(history);
-            if (!res || res.trim().length === 0) return;
+            let res;
+            try {
+                res = await this.prompter.promptConvo(history);
+            } catch (e) {
+                console.warn('side-chat LLM call failed:', e?.message || e);
+                this.routeResponse(source, `Kinda busy right now, sorry — I'll get back to you.`);
+                return;
+            }
+            if (!res || res.trim().length === 0) {
+                this.routeResponse(source, `Heard you — give me a sec.`);
+                return;
+            }
             const cmdName = containsCommand(res);
             const prose = cmdName ? res.substring(0, res.indexOf(cmdName)).trim() : res.trim();
-            if (!prose) return;
+            if (!prose) {
+                // LLM only wanted to act. Don't run the command (would hijack
+                // the running task) but acknowledge the player anyway.
+                this.routeResponse(source, `Got it — let me finish what I'm on first.`);
+                return;
+            }
             await this.history.add(this.name, prose);
             this.routeResponse(source, prose);
         } catch (e) {
             console.error('_handleSideChat failed:', e);
+            try { this.routeResponse(source, `(I heard you but hit an error replying.)`); } catch {}
         }
     }
 
