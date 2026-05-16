@@ -137,6 +137,16 @@ export class Prompter {
     async replaceStrings(prompt, messages, examples=null, to_summarize=[], last_goals=null) {
         prompt = prompt.replaceAll('$NAME', this.agent.name);
 
+        if (prompt.includes('$COC')) {
+            let coc = '';
+            try {
+                coc = readFileSync(path.join(__dirname, '../../coc.md'), 'utf8').trim();
+            } catch (e) {
+                coc = 'No specific rules configured. Use good judgment and refuse clearly harmful requests.';
+            }
+            prompt = prompt.replaceAll('$COC', coc);
+        }
+
         if (prompt.includes('$STATS')) {
             let stats = await getCommand('!stats').perform(this.agent) + '\n';
             stats += await getCommand('!entities').perform(this.agent) + '\n';
