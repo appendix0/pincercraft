@@ -19,6 +19,7 @@ import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
 import { RunQueue } from './run_queue.js';
 import { InputRouter, isPureStopMessage } from './input_router.js';
+import { humanizeCommand } from './command_humanizer.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
@@ -458,6 +459,14 @@ export class Agent {
                     let chat_message = `*used ${command_name.substring(1)}*`;
                     if (pre_message.length > 0)
                         chat_message = `${pre_message}  ${chat_message}`;
+                    this.routeResponse(source, chat_message);
+                }
+                else if (settings.show_command_syntax === "natural") {
+                    let pre_message = res.substring(0, res.indexOf(command_name)).trim();
+                    let cmd_text = res.substring(res.indexOf(command_name)).trim();
+                    let chat_message = humanizeCommand(cmd_text);
+                    if (pre_message.length > 0)
+                        chat_message = `${pre_message} ${chat_message}`;
                     this.routeResponse(source, chat_message);
                 }
                 else {
