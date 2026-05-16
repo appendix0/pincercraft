@@ -67,7 +67,19 @@ export class TaskQueue {
         t.status = STATUS.DONE;
         t.finishedAt = Date.now();
         this._persist();
-        return {ok: true, message: `Finished task #${t.id}: ${t.description}`, task: t};
+        const next = this.tasks.find(x => x.status === STATUS.PENDING);
+        if (next) {
+            return {
+                ok: true,
+                message: `Finished task #${t.id}: ${t.description}. Next pending: #${next.id} ${next.description}. Continue immediately with !startTask(-1).`,
+                task: t,
+            };
+        }
+        return {
+            ok: true,
+            message: `Finished task #${t.id}: ${t.description}. Queue is empty — all done. Tell the player you're done.`,
+            task: t,
+        };
     }
 
     cancelTask(id) {
