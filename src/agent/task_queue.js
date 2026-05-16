@@ -54,7 +54,13 @@ export class TaskQueue {
 
     addTask(description) {
         description = String(description || '').trim();
-        if (!description) return {ok: false, message: 'Task description was empty.'};
+        if (!description) return {ok: false, message: 'Task description was empty — rejected.'};
+        if (description.length < 4) return {ok: false, message: `Task description "${description}" too short (need at least 4 chars). Be specific — rejected.`};
+        // Reject duplicates among live (non-done) tasks. Compare case-insensitive
+        // exact match — fuzzy match would risk false rejects on similar-but-
+        // distinct tasks (e.g. "mine 3 iron_ore" vs "mine 5 iron_ore").
+        const dupe = this.tasks.find(t => t.status !== STATUS.DONE && t.description.toLowerCase() === description.toLowerCase());
+        if (dupe) return {ok: false, message: `Duplicate of task #${dupe.id} (${dupe.status}): "${dupe.description}" — rejected. Use the existing task.`};
         const task = {id: this._nextId++, description, status: STATUS.PENDING, createdAt: Date.now()};
         this.tasks.push(task);
         // Auto-advance: if nothing is in progress, promote this one immediately

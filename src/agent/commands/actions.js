@@ -193,18 +193,24 @@ export const actionsList = [
                 await skills.giveToPlayer(agent.bot, item_name, player_name, num);
             });
             const result = await inner(agent, player_name, item_name, num);
-            // Mineflayer can't observe the player picking up the dropped item.
-            // Treat the drop itself as completion of any matching delivery task,
-            // so the bot doesn't loop trying to re-craft thinking delivery failed.
+            // skills.giveToPlayer only logs "<player> received <item>" after the
+            // mineflayer `playerCollect` event fires — so we know the player
+            // physically picked it up. Use that as the auto-finish gate. If
+            // the drop happened but no pickup observed within 3s, don't auto-
+            // finish; the LLM can decide whether to retry.
             try {
-                const active = agent.task_queue?.tasks.find(t => t.status === 'in_progress');
-                if (active) {
-                    const desc = active.description.toLowerCase();
-                    const item = String(item_name).toLowerCase();
-                    const isDelivery = /(give|deliver|bring|hand|return|drop)/i.test(desc);
-                    if (isDelivery && desc.includes(item)) {
-                        const finish = agent.task_queue.finishTask();
-                        return `${result ?? ''}\n${finish.message}`.trim();
+                const pickedUp = result && /\breceived\b/i.test(result);
+                if (pickedUp) {
+                    const active = agent.task_queue?.tasks.find(t => t.status === 'in_progress');
+                    if (active) {
+                        const desc = active.description.toLowerCase();
+                        const item = String(item_name).toLowerCase();
+                        const player = String(player_name).toLowerCase().replace(/^\./, '');
+                        const isDelivery = /(give|deliver|bring|hand|return|drop)/i.test(desc);
+                        if (isDelivery && desc.includes(item) && desc.includes(player)) {
+                            const finish = agent.task_queue.finishTask();
+                            return `${result}\n${finish.message}`.trim();
+                        }
                     }
                 }
             } catch (e) {
