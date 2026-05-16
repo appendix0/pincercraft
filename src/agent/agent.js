@@ -273,6 +273,10 @@ export class Agent {
     // chats arriving close together don't race the LLM. The LLM itself
     // decides what to do with each input — chat, queue a task, run one,
     // refuse, etc. via the !addTask / !finishTask / !showQueue commands.
+    //
+    // Special case: player chat that arrives while a task is running gets
+    // a parallel "side reply" so the player isn't left hanging. The task
+    // keeps executing; only the bot's voice talks back.
     enqueue(input) {
         if (!input || !input.source || !input.message) {
             console.warn('enqueue ignored empty input:', input);
@@ -287,8 +291,35 @@ export class Agent {
             this.run_queue.abortCurrent();
             this.run_queue.clear();
             this.requestInterrupt();
+            this.run_queue.push(input);
+            return;
+        }
+        if (input.kind === 'player_chat' && this.run_queue.state === 'running') {
+            // Don't enqueue — the running task keeps going. Just answer the player.
+            this._handleSideChat(input).catch(e => console.error('_handleSideChat:', e));
+            return;
         }
         this.run_queue.push(input);
+    }
+
+    // Parallel LLM call that produces a short prose reply while a task is
+    // running. Strips any commands the model emits so we never accidentally
+    // interfere with the task that owns the bot's body.
+    async _handleSideChat(input) {
+        const {source, message} = input;
+        try {
+            await this.history.add(source, `(mid-task) ${message}`);
+            const history = this.history.getHistory();
+            let res = await this.prompter.promptConvo(history);
+            if (!res || res.trim().length === 0) return;
+            const cmdName = containsCommand(res);
+            const prose = cmdName ? res.substring(0, res.indexOf(cmdName)).trim() : res.trim();
+            if (!prose) return;
+            await this.history.add(this.name, prose);
+            this.routeResponse(source, prose);
+        } catch (e) {
+            console.error('_handleSideChat failed:', e);
+        }
     }
 
     // Consumer side: single forever loop. Owns the LLM + bot for one input at a time.
