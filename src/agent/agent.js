@@ -58,6 +58,22 @@ export class Agent {
         convoManager.initAgent(this);
         await this.prompter.initExamples();
 
+        // Optionally wipe the summary memory before loading so stale task
+        // context from a previous session doesn't leak into the new prompt.
+        // Doesn't touch tasks.json (the queue) or histories/ (full chat logs).
+        if (settings.wipe_memory_on_start) {
+            try {
+                const fs = await import('fs');
+                const memPath = `./bots/${this.name}/memory.json`;
+                if (fs.existsSync(memPath)) {
+                    fs.unlinkSync(memPath);
+                    console.log(`[start] wiped ${memPath} (wipe_memory_on_start=true)`);
+                }
+            } catch (e) {
+                console.warn('[start] memory wipe failed:', e?.message || e);
+            }
+        }
+
         // load mem first before doing task
         let save_data = null;
         if (load_mem) {

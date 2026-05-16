@@ -85,18 +85,22 @@
 
         [
             {"role": "user", "content": "greg: Collect 10 wood"},
-            {"role": "assistant", "content": "Let me see what's nearby... !nearbyBlocks"},
+            {"role": "assistant", "content": "On it. !addTask(\"collect 10 oak_log\", \"10 oak_log in inventory\")"},
+            {"role": "system", "content": "Task #1 added and started: collect 10 oak_log. Done when: 10 oak_log in inventory."},
+            {"role": "assistant", "content": "!nearbyBlocks"},
             {"role": "system", "content": "NEARBY_BLOCKS\n- oak_log\n- dirt\n- cobblestone"},
-            {"role": "assistant", "content": "I see some oak logs, dirt, and cobblestone. I'll collect oak logs. !collectBlocks(\"oak_log\", 10)"}
+            {"role": "assistant", "content": "!collectBlocks(\"oak_log\", 10)"},
+            {"role": "system", "content": "Collected 10 oak_log."},
+            {"role": "assistant", "content": "Got the wood. !finishTask(-1)"}
         ],
-    
+
         [
             {"role": "user", "content": "bobby: Craft a plank"},
-            {"role": "assistant", "content": "Okay! !craftable"},
-            {"role": "system", "content": "CRAFTABLE_ITEMS\n- spruce_planks\n- spruce_wood\n- ladder"},
-            {"role": "assistant", "content": "!craftRecipe(\"spruce_planks\", 1)"},
-            {"role": "system", "content": "Code Output:\nYou have crafted 4 spruce_planks.\nCode execution finished successfully."},
-            {"role": "assistant", "content": "I've crafted 4 spruce planks!"}
+            {"role": "assistant", "content": "!addTask(\"craft 1 oak_planks\", \"oak_planks in inventory\")"},
+            {"role": "system", "content": "Task #1 added and started: craft 1 oak_planks. Done when: oak_planks in inventory."},
+            {"role": "assistant", "content": "!craftRecipe(\"oak_planks\", 1)"},
+            {"role": "system", "content": "You have crafted 4 oak_planks."},
+            {"role": "assistant", "content": "Done. !finishTask(-1)"}
         ],
     
         [
@@ -110,7 +114,11 @@
     
         [
             {"role": "user", "content": "hanky: collect some cobblestone"},
-            {"role": "assistant", "content": "Sure, I can do that by collecting stone. !collectBlocks(\"stone\", 10)"}
+            {"role": "assistant", "content": "!addTask(\"collect 10 stone\", \"10 cobblestone in inventory\")"},
+            {"role": "system", "content": "Task #1 added and started: collect 10 stone. Done when: 10 cobblestone in inventory."},
+            {"role": "assistant", "content": "!collectBlocks(\"stone\", 10)"},
+            {"role": "system", "content": "Collected 10 cobblestone."},
+            {"role": "assistant", "content": "Got 10 cobblestone. !finishTask(-1)"}
         ],
     
         [
@@ -151,19 +159,29 @@
 
         [
             {"role": "user", "content": "trixy88: craft some sticks"},
+            {"role": "assistant", "content": "!addTask(\"craft 4 sticks\", \"4 stick in inventory\")"},
+            {"role": "system", "content": "Task #1 added and started: craft 4 sticks. Done when: 4 stick in inventory."},
             {"role": "assistant", "content": "!craftRecipe(\"stick\", 4)"},
-            {"role": "system", "content": "Code Output:\nYou have crafted 16 sticks.\nCode execution finished successfully."},
-            {"role": "assistant", "content": "I've crafted 16 sticks!"}
+            {"role": "system", "content": "You have crafted 16 sticks."},
+            {"role": "assistant", "content": "Got 16 sticks. !finishTask(-1)"}
         ],
-    
+
         [
             {"role": "user", "content": "poppy: build a cobblestone house"},
-            {"role": "assistant", "content": "Sure, I'll to build a small cobblestone house where I am. !newAction(\"Build a cobblestone house with a door, furnishings, and window.\")"}
+            {"role": "assistant", "content": "On it. !addTask(\"build a cobblestone house with door, window, furnishings\", \"cobblestone house structure standing where I am\")"},
+            {"role": "system", "content": "Task #1 added and started: build a cobblestone house with door, window, furnishings. Done when: cobblestone house structure standing where I am."},
+            {"role": "assistant", "content": "!newAction(\"Build a cobblestone house with a door, furnishings, and window.\")"},
+            {"role": "system", "content": "Action completed."},
+            {"role": "assistant", "content": "House built. !finishTask(-1)"}
         ],
-    
+
         [
             {"role": "user", "content": "zib: build a dirt tower"},
-            {"role": "assistant", "content": "Sure, I'll build a dirt tower 5 tall where I am. !newAction(\"Build a dirt tower 5 tall.\")"}
+            {"role": "assistant", "content": "!addTask(\"build a dirt tower 5 tall\", \"5-block dirt tower standing where I am\")"},
+            {"role": "system", "content": "Task #1 added and started: build a dirt tower 5 tall. Done when: 5-block dirt tower standing where I am."},
+            {"role": "assistant", "content": "!newAction(\"Build a dirt tower 5 tall.\")"},
+            {"role": "system", "content": "Action completed."},
+            {"role": "assistant", "content": "Tower up. !finishTask(-1)"}
         ],
     
         [

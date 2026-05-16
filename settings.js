@@ -27,6 +27,7 @@ const settings = {
     ],
 
     "load_memory": true, // bot remembers prior sessions (memory.json persists)
+    "wipe_memory_on_start": true, // delete memory.json on every restart so stale task context doesn't bleed across reboots. Flip false when memory becomes stable.
     "init_message": "Respond with hello world and your name", // sends to all on spawn
     "only_chat_with": ["LosPollos929"], // Floodgate strips its `.` prefix before mineflayer sees the username
 
