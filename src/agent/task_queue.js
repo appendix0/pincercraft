@@ -52,29 +52,32 @@ export class TaskQueue {
         }
     }
 
-    addTask(description) {
+    addTask(description, endFactor = null) {
         description = String(description || '').trim();
+        endFactor = String(endFactor || '').trim() || null;
         if (!description) return {ok: false, message: 'Task description was empty — rejected.'};
         if (description.length < 4) return {ok: false, message: `Task description "${description}" too short (need at least 4 chars). Be specific — rejected.`};
+        if (!endFactor) return {ok: false, message: `Task "${description}" missing end_factor — rejected. Every task needs an explicit completion criterion (e.g. "3 iron_ore in inventory", "player picked up the pickaxe", "bot at coords 100,64,-50").`};
         // Reject duplicates among live (non-done) tasks. Compare case-insensitive
         // exact match — fuzzy match would risk false rejects on similar-but-
         // distinct tasks (e.g. "mine 3 iron_ore" vs "mine 5 iron_ore").
         const dupe = this.tasks.find(t => t.status !== STATUS.DONE && t.description.toLowerCase() === description.toLowerCase());
         if (dupe) return {ok: false, message: `Duplicate of task #${dupe.id} (${dupe.status}): "${dupe.description}" — rejected. Use the existing task.`};
-        const task = {id: this._nextId++, description, status: STATUS.PENDING, createdAt: Date.now()};
+        const task = {id: this._nextId++, description, endFactor, status: STATUS.PENDING, createdAt: Date.now()};
         this.tasks.push(task);
         // Auto-advance: if nothing is in progress, promote this one immediately
         // so the model never has to chain !addTask + !startTask manually.
         const hasActive = this.tasks.some(x => x.status === STATUS.IN_PROGRESS);
+        const endHint = ` Done when: ${endFactor}.`;
         if (!hasActive) {
             task.status = STATUS.IN_PROGRESS;
             this._persist();
             this._log('add+start', task);
-            return {ok: true, message: `Task #${task.id} added and started: ${description}. Begin executing it now.`, task};
+            return {ok: true, message: `Task #${task.id} added and started: ${description}.${endHint} Begin executing it now.`, task};
         }
         this._persist();
         this._log('add', task);
-        return {ok: true, message: `Task #${task.id} queued: ${description}`, task};
+        return {ok: true, message: `Task #${task.id} queued: ${description}.${endHint}`, task};
     }
 
     // Mark a task as in_progress. If no id, picks the first pending one.
@@ -140,13 +143,16 @@ export class TaskQueue {
     }
 
     // What the LLM sees in $TASKQUEUE every turn. Done tasks are hidden so the
-    // list stays focused on what's left to do; cleared via !clearDone.
+    // list stays focused on what's left to do; cleared via !clearDone. Each
+    // line carries its end factor so the model self-checks against the same
+    // criterion it set at add-time.
     serialize() {
         const live = this.tasks.filter(t => t.status !== STATUS.DONE);
         if (live.length === 0) return 'Your task queue is empty.';
         const lines = live.map(t => {
             const tag = t.status === STATUS.IN_PROGRESS ? 'IN PROGRESS' : 'pending';
-            return `  #${t.id} [${tag}] ${t.description}`;
+            const end = t.endFactor ? `  (done when: ${t.endFactor})` : '';
+            return `  #${t.id} [${tag}] ${t.description}${end}`;
         });
         return 'Your task queue:\n' + lines.join('\n');
     }
@@ -157,7 +163,8 @@ export class TaskQueue {
         if (live.length === 0) return 'No tasks queued.';
         return live.map(t => {
             const tag = t.status === STATUS.IN_PROGRESS ? '▶' : '○';
-            return `${tag} #${t.id} ${t.description}`;
+            const end = t.endFactor ? ` (done: ${t.endFactor})` : '';
+            return `${tag} #${t.id} ${t.description}${end}`;
         }).join(' | ');
     }
 }

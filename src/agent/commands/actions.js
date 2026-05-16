@@ -529,12 +529,13 @@ export const actionsList = [
     },
     {
         name: '!addTask',
-        description: 'Add a task to your own queue. Use this when the player asks you to do something so you don\'t forget. The task queue is shown to you at the top of every prompt.',
+        description: 'Add a task to your own queue. Every task REQUIRES an end_factor — the observable condition that means the task is complete. Without an end factor the task is rejected. The task queue (with end factors) is shown to you at the top of every prompt.',
         params: {
-            'description': { type: 'string', description: 'Short description of the task (e.g. "mine 5 iron", "build a 3x3 wall").' }
+            'description': { type: 'string', description: 'Short description of the task (e.g. "mine 5 iron_ore", "build a 3x3 oak_planks wall").' },
+            'end_factor': { type: 'string', description: 'Observable completion criterion (e.g. "5 iron_ore in inventory", "iron_pickaxe in inventory", "player picked up the pickaxe", "bot at coords 100,64,-50"). Required — be specific.' }
         },
-        perform: async function (agent, description) {
-            return agent.task_queue.addTask(description).message;
+        perform: async function (agent, description, end_factor) {
+            return agent.task_queue.addTask(description, end_factor).message;
         }
     },
     {
