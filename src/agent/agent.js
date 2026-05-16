@@ -54,7 +54,7 @@ export class Agent {
         this.npc = new NPCContoller(this);
         this.memory_bank = new MemoryBank();
         this.self_prompter = new SelfPrompter(this);
-        this.task_queue = new TaskQueue(this.name);
+        this.task_queue = new TaskQueue(this.name, (kind, task) => this._onQueueChange(kind, task));
         convoManager.initAgent(this);
         await this.prompter.initExamples();
 
@@ -240,9 +240,11 @@ export class Agent {
         }
     }
 
-    // Every minute, if a task is in progress, chat a one-line status so the
-    // player isn't left wondering. No LLM call — rotates through a few stock
-    // phrases with the current task description plugged in.
+    // Every minute, if there's an in_progress task, chat a one-line status so
+    // the player isn't left wondering. No LLM call — rotates through stock
+    // phrases with the current task description plugged in. Triggers on the
+    // *task* being active, not the run_queue (which goes idle between LLM
+    // turns even while mineflayer is still busy).
     _startQueueHeartbeat() {
         const PHRASES = [
             'Still on it — ',
@@ -254,12 +256,35 @@ export class Agent {
         let i = 0;
         this._heartbeat = setInterval(() => {
             if (!this.alive || !this.task_queue) return;
-            if (this.run_queue.state !== 'running') return;
             const active = this.task_queue.tasks.find(t => t.status === 'in_progress');
             if (!active) return;
             const phrase = PHRASES[i++ % PHRASES.length];
-            try { this.openChat(`${phrase}${active.description}.`); } catch (e) { /* ignore */ }
+            try {
+                this.openChat(`${phrase}${active.description}.`);
+                console.log(`[heartbeat] tick → task #${active.id}: ${active.description}`);
+            } catch (e) { console.warn('[heartbeat] openChat failed:', e?.message || e); }
         }, 60000);
+    }
+
+    // Fires whenever the queue mutates. Debounces a plan-brief chat so a
+    // bulk-add (3-7 !addTask calls in <2s) collapses to a single summary
+    // sent shortly after the last add. Player sees the plan even if the LLM
+    // forgot to brief it.
+    _onQueueChange(kind, _task) {
+        if (kind !== 'add') return; // only briefing on adds for now
+        clearTimeout(this._planBriefTimer);
+        this._planBriefTimer = setTimeout(() => {
+            if (!this.alive || !this.task_queue) return;
+            const live = this.task_queue.tasks.filter(t => t.status !== 'done');
+            if (live.length === 0) return;
+            const lines = live.map(t => {
+                const tag = t.status === 'in_progress' ? '▶' : '○';
+                return `${tag} ${t.description}`;
+            });
+            try {
+                this.openChat(`Plan (${live.length} task${live.length === 1 ? '' : 's'}): ${lines.join(' · ')}.`);
+            } catch (e) { /* ignore */ }
+        }, 2500);
     }
 
     _rebootContext() {

@@ -12,12 +12,19 @@ const STATUS = {PENDING: 'pending', IN_PROGRESS: 'in_progress', DONE: 'done'};
 const LOG_PATH = path.resolve('./queue.log');
 
 export class TaskQueue {
-    constructor(agentName) {
+    constructor(agentName, onChange = null) {
         this.agentName = agentName;
         this.path = path.resolve(`./bots/${agentName}/tasks.json`);
         this.tasks = [];
         this._nextId = 1;
+        this.onChange = onChange; // (kind, task) => void; kind in {add, start, finish, cancel, clearDone, auto-start}
         this._load();
+    }
+
+    _fire(kind, task) {
+        if (this.onChange) {
+            try { this.onChange(kind, task); } catch (e) { console.warn('TaskQueue.onChange failed:', e?.message || e); }
+        }
     }
 
     _log(action, task) {
@@ -73,10 +80,12 @@ export class TaskQueue {
             task.status = STATUS.IN_PROGRESS;
             this._persist();
             this._log('add+start', task);
+            this._fire('add', task);
             return {ok: true, message: `Task #${task.id} added and started: ${description}.${endHint} Begin executing it now.`, task};
         }
         this._persist();
         this._log('add', task);
+        this._fire('add', task);
         return {ok: true, message: `Task #${task.id} queued: ${description}.${endHint}`, task};
     }
 
