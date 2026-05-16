@@ -502,7 +502,7 @@ export const actionsList = [
     },
     {
         name: '!addTask',
-        description: 'Add a task to your own queue. Use this when the player asks you to do something so you don\'t forget. The task list is visible to you in every prompt as $TASKQUEUE.',
+        description: 'Add a task to your own queue. Use this when the player asks you to do something so you don\'t forget. The task queue is shown to you at the top of every prompt.',
         params: {
             'description': { type: 'string', description: 'Short description of the task (e.g. "mine 5 iron", "build a 3x3 wall").' }
         },

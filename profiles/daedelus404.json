@@ -1,13 +1,9 @@
 {
     "name": "Daedelus404",
 
-    "model": {
-        "api": "openai",
-        "url": "https://integrate.api.nvidia.com/v1",
-        "model": "meta/llama-3.3-70b-instruct"
-    },
+    "model": "claude-haiku-4-5-20251001",
 
-    "max_tokens": 4000,
+    "max_tokens": 2000,
 
-    "cooldown": 3000
+    "cooldown": 500
 }
