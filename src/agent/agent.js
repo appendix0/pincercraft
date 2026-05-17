@@ -45,6 +45,17 @@ function detectMemoryRequest(message) {
     return MEMORY_REQUEST_PATTERNS.test(message);
 }
 
+// Patterns in execute_res that indicate a primitive command failed to make
+// progress on the physical world. After 2 in a row, the orchestrator nudges
+// the LLM to escalate to !newAction (Coder dispatch) or !cancelTask —
+// chaining more primitives just burns LLM turns without progress (the
+// 2026-05-17 task #10 diamond-hunt thrash that motivated this fix).
+const PATH_FAILURE_PATTERNS = /(Path not found|Unable to reach|Took to long to decide path|Pathfinding stopped|Cannot break .* with current tools|Don'?t have right tools to break|Could not find any .* in \d+ blocks|Dug down 0 blocks)/i;
+function isPathFailure(execute_res) {
+    if (!execute_res || typeof execute_res !== 'string') return false;
+    return PATH_FAILURE_PATTERNS.test(execute_res);
+}
+
 // Commands that don't touch the bot's body / current action. Safe to execute
 // in parallel with a running task when the player chats mid-task. Without
 // this whitelist, _handleSideChat strips all commands including !remember
@@ -633,9 +644,22 @@ export class Agent {
                 console.log('Agent executed:', command_name, 'and got:', execute_res);
                 used_command = true;
 
-                if (execute_res)
+                if (execute_res) {
                     this.history.add('system', execute_res);
-                else
+                    // Path-failure escalation: track consecutive primitive failures
+                    // and force !newAction (or !cancelTask) after 2 in a row. !newAction
+                    // itself doesn't count — once the LLM has escalated, leave it alone.
+                    if (command_name === '!newAction' || command_name === '!cancelTask') {
+                        this._consecutivePathFailures = 0;
+                    } else if (isPathFailure(execute_res)) {
+                        this._consecutivePathFailures = (this._consecutivePathFailures || 0) + 1;
+                        if (this._consecutivePathFailures >= 2) {
+                            this.history.add('system', `[pathfinding stuck — ${this._consecutivePathFailures} consecutive failures] Your next action MUST be !newAction(detailed_prompt) with a multi-step plan that handles the obstacle (dig stairs through stone, bridge water with cobblestone, tower up with dirt). Be specific about materials and target coords. If no such plan is possible, call !cancelTask and tell the player you're stuck. Chaining another primitive will not work.`);
+                        }
+                    } else {
+                        this._consecutivePathFailures = 0;
+                    }
+                } else
                     break;
             }
             else {

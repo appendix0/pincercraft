@@ -67,19 +67,37 @@ The bot needs the same shape. Our `!newAction(prompt)` command is the closest an
 | `CLAUDE.md` (system rules) | `CLAUDE.md` + `$COC` token re-read every prompt | ✅ (instant via file watch — see §6.1) |
 | `/memory` (MEMORY.md + topic files) | `MemoryStore` (`MEMORY.md` + slug `.md` files) | ✅ structure mirrors Claude Code; legacy `saving_memory` summarizer duplicates it (see §6.3) |
 | `TodoWrite` | `TaskQueue` with required `end_factor` | ✅ |
-| `Task` tool (subagents) | — | Missing (Phase 4) |
-| Skills (`/init`, `/review`) | — | Missing (Phase 5) |
+| `Task` tool (subagents) | — | Missing — see Phase G |
+| Skills (`/init`, `/review`) | — | Missing — see Phase H |
 | Auto-compaction of history | — | Missing (cross-cutting) |
-| `EnterPlanModeTool` / `ExitPlanModeTool` | — | Missing — see Phase 2.5 |
-| Tool metadata (`isReadOnly`, `isConcurrencySafe`, per-tool `prompt()`) | command name + params + perform | Missing — see Phase 2 |
-| Coordinator (`TeamCreate`, `SendMessage`, multi-agent) | — | Missing — see Phase 4 |
-| Skill registry (`/skills` + `remember`, `loop`, `stuck`) | informal | Missing — see Phase 5 |
-| Permission System (per-tool gating) | informal (only_chat_with) | Missing — see Phase 6 |
-| MCP server mode (expose tools to other agents) | — | Missing — see Phase 6 |
+| `EnterPlanModeTool` / `ExitPlanModeTool` | — | Missing — see Phase C |
+| Tool metadata (`isReadOnly`, `isConcurrencySafe`, per-tool `prompt()`) | command name + params + perform | Missing — see Phase B |
+| Coordinator (`TeamCreate`, `SendMessage`, multi-agent) | — | Missing — see Phase G |
+| Skill registry (`/skills` + `remember`, `loop`, `stuck`) | informal | Missing — see Phase H |
+| Permission System (per-tool gating) | informal (only_chat_with) | Missing — see Phase I |
+| MCP server mode (expose tools to other agents) | — | Missing — see Phase I |
 
-## 4. The plan — five phases, ordered by ROI
+## 4. The plan — hybrid order: Phase 1 ROI-first, then foundations-first
 
-### Phase 1 — Stop the per-step burn
+**Decision (2026-05-17):** Phase 1 ships immediately as a small ROI-first patch because the bot is burning tokens *now* on per-step thrash. Once Phase 1 stops the bleeding, everything else is built foundations-first so each piece lands on the proper orchestrator contract instead of being retrofitted later.
+
+```
+Phase 1  Stop the burn (today, ROI-first)              ← prompt + path-failure classifier
+─────────────── switch to foundations-first ───────────────
+Phase A  Orchestrator contract                          ← multi-command parsing, retry, tracking
+Phase B  Tool metadata standardization                  ← isReadOnly, isConcurrencySafe, prompt()
+Phase C  Plan Mode (queue + planning live alive)        ← !enterPlanMode/!exitPlanMode
+Phase D  Smart tools (smartGoTo, smartGather)           ← built on B's contract
+Phase E  `stuck` meta-skill                             ← replaces Phase 1's Lever-2 classifier
+Phase F  Memory unification + layered hierarchy
+Phase G  Coordinator (subagents + SendMessage)
+Phase H  Skill registry (slash skills + meta-skills)
+Phase I  Permissions + MCP server mode
+```
+
+The Lever-2 path-failure classifier from Phase 1 is *deliberate throwaway code* — it gets deleted when Phase E lands the proper `stuck` meta-skill. ~30 lines, worth it to stop the burn today.
+
+### Phase 1 — Stop the per-step burn (SHIPPED 2026-05-17)
 
 **Goal:** end the pathfinding thrash. One-shot fix for the diagnosed bug.
 
@@ -87,9 +105,47 @@ The bot needs the same shape. Our `!newAction(prompt)` command is the closest an
 - **1b. Path-failure classifier.** Same Lever-2 pattern as the existing task/memory triggers. In `agent.js`, count consecutive system messages containing `Path not found` / `Unable to reach` / `Cannot break ... with current tools` / `Pathfinding stopped`. After two in a row on the same task, inject a system note before the next LLM turn:
   > `[pathfinding stuck — 2 consecutive failures] Your next action MUST be !newAction(...) with a multi-step plan that handles the obstacle (dig stairs, bridge water, tower up), OR !cancelTask + tell the player you're stuck.`
 
-**Decision point after Phase 1:** if Haiku still micro-steps despite the prompt + classifier, the answer is "Haiku is not smart enough to be the planner — use Sonnet." Skip Phases 2-3 and go straight to Phase 4 (subagents with model routing). Don't keep polishing.
+**Decision point after Phase 1:** if Haiku still micro-steps despite the prompt + classifier, the answer is "Haiku is not smart enough to be the planner — use Sonnet." Skip ahead to Phase G (Coordinator with model routing). Don't keep polishing Haiku's discipline.
 
-### Phase 2 — Smarten the tools
+---
+
+## After Phase 1: foundations-first order
+
+The phases below are renumbered A–I. Each phase explicitly states what foundation it relies on, so the dependency chain is visible.
+
+### Phase A — Orchestrator contract
+
+**Goal:** the central loop in `agent.js` (`_processInput` + `_runWorker`) satisfies the 9-point contract in §6.5 below. This is the bedrock everything else lands on.
+
+- **A1. Multi-command parsing.** Today `parseCommandMessage` returns the first command and drops the rest. Bot responses like `!stop\n\n!remember(...)` lose the `!remember`. Upgrade to parse N tool calls per response.
+- **A2. Per-command retry policy.** For transient failures (network blip, momentary chunk unload), retry with backoff before reporting to the LLM. Terminal failures pass through.
+- **A3. Token + cost telemetry.** Log tokens-per-turn and per-task to `queue.log`. Surfaces which tasks burn.
+- **A4. Context auto-compaction.** When prompt exceeds 8K tokens, summarize turns >30 min old into a single system message. Mirrors Claude Code's `/compact`.
+- **A5. Centralized classify+gate step.** Today `SIDE_CHAT_SAFE_COMMANDS`, interrupt classifier, task/memory triggers all live as scattered checks. Pull them into one `classifyAndGate(input, response)` function that produces a single decision: execute / block / nudge / interrupt.
+
+### Phase B — Tool metadata standardization
+
+**Goal:** mirror Claude Code's tool definition pattern. Each command in `commands/actions.js` gets the metadata the orchestrator (Phase A) and downstream subsystems (Plan Mode, Permissions) need.
+
+- **B1.** `isReadOnly: (args) => boolean` — non-destructive (`!inventory`, `!nearbyBlocks`, `!getCraftingPlan`). Read-only tools are always allowed in plan mode, never need permission gating.
+- **B2.** `isConcurrencySafe: (args) => boolean` — can run in parallel with the current body action. Today informally captured by `SIDE_CHAT_SAFE_COMMANDS`; promote to per-tool flag.
+- **B3.** `prompt(ctx)` — optional per-tool system prompt contribution. Today all command docs concatenate into `$COMMAND_DOCS`; per-tool ownership lets a tool turn itself on/off based on context (e.g. don't advertise `!sleep` during the day).
+- **B4.** `checkPermissions(args, ctx)` — hook the permission rules from Phase I in advance.
+
+### Phase C — Plan Mode (queue + planning live alive)
+
+**Depends on:** B (needs `isReadOnly` to know what to block).
+
+**Goal:** make planning a first-class subsystem the player can see and interact with, exactly like Claude Code's `EnterPlanModeTool` / `ExitPlanModeTool`.
+
+When the bot enters plan mode, it can propose a plan but cannot execute non-read-only tools. Memory writes, queue mutations, and observation tools (`!inventory`, `!nearbyBlocks`, `!getCraftingPlan`, `!showQueue`) all still work. The bot lays out the full task chain via `!addTask` calls, posts the plan in chat, and waits for the player to approve.
+
+- **C1.** New commands `!enterPlanMode` and `!exitPlanMode`. While in plan mode, attempting a non-read-only command returns `"In plan mode — execute blocked. Post the plan in chat and wait for approval."` back to the LLM.
+- **C2.** Auto-trigger: when the task-request classifier fires (player asks for a multi-step thing), the orchestrator auto-enters plan mode. The LLM plans via `!addTask`, posts the plan, the player says "yes" → bot auto-exits plan mode → first task auto-starts.
+- **C3.** Plan mode is visible. Chat prefix changes: `[planning] Plan: 1) … 2) … 3) … (say ok to start)`. After approval: `[executing] Starting task #1: mine 5 iron_ore.`
+- **C4.** TaskQueue + Plan Mode together = the planning subsystem. TaskQueue is the *what*; Plan Mode is the *when does it start*.
+
+### Phase D — Smart tools
 
 **Goal:** make primitives Bash-tool-quality. Each command completes a unit of work, retries internally, returns terminal success/fail.
 
@@ -104,27 +160,17 @@ The bot needs the same shape. Our `!newAction(prompt)` command is the closest an
 - **2d. Rebind primitives.** `!goToCoordinates` and `!collectBlocks` point at the smart versions. Keep the originals as low-level fallbacks but hide them from the prompt.
 - **2e. Audit Mineflayer `Movements` config.** Currently too conservative for an agent with a pickaxe. With a stone-pickaxe or better in inventory, `canDig` should be enabled for stone-family blocks. With dirt/cobblestone in inventory, `canPlace` for bridging.
 
-After Phase 2: the LLM almost never needs to micromanage physical execution. Same shape as Claude Code's `Bash` being smart enough that you rarely need to chain commands manually.
+After Phase D: the LLM almost never needs to micromanage physical execution. Same shape as Claude Code's `Bash` being smart enough that you rarely need to chain commands manually.
 
-**Also in Phase 2 — Tool metadata.** Mirror Claude Code's tool definition pattern. Each command in `commands/actions.js` gets new fields the orchestrator can use:
-- `isReadOnly: (args) => boolean` — non-destructive (e.g. `!inventory`, `!nearbyBlocks`) ⇒ never needs permission gating, safe to run during plan mode
-- `isConcurrencySafe: (args) => boolean` — can run in parallel with the current body action (already informally captured by `SIDE_CHAT_SAFE_COMMANDS`; promote to per-tool flag)
-- `prompt(ctx)` — optional per-tool system prompt contribution (today all command docs are concatenated into `$COMMAND_DOCS`; per-tool ownership lets a tool turn itself on/off based on context — e.g. don't advertise `!sleep` during the day)
+### Phase E — `stuck` meta-skill (replaces Phase 1's classifier)
 
-### Phase 2.5 — Plan Mode (queue + planning live alive)
+**Depends on:** B (tool metadata + `prompt()`), H (skill registry — but `stuck` can ship as a precursor).
 
-**Goal:** make planning a first-class subsystem the player can see and interact with, exactly like Claude Code's `EnterPlanModeTool` / `ExitPlanModeTool`.
+**Goal:** replace the Lever-2 path-failure classifier with a proper meta-skill, mirroring Claude Code's `stuck` skill. When the bot detects it's making no progress, it invokes `!invokeSkill("stuck")` which dispatches a curated escalation script: try `!newAction` with a different framing → fall back to `!cancelTask` + ask player.
 
-When the bot enters plan mode, it can propose a plan but cannot execute body-touching tools. Memory writes, queue mutations, and observation tools (`!inventory`, `!nearbyBlocks`, `!getCraftingPlan`, `!showQueue`) all still work — these are non-destructive. The bot lays out the full task chain via `!addTask` calls, posts the plan in chat, and waits for the player to approve.
+When this lands, the Phase 1 classifier in `agent.js` (`PATH_FAILURE_PATTERNS`, `_consecutivePathFailures`) gets deleted — `stuck` covers it more generally.
 
-- **2.5a.** New commands `!enterPlanMode` and `!exitPlanMode`. While in plan mode, attempting to execute a non-read-only command returns `"In plan mode — execute blocked. Post the plan in chat and wait for approval."` to the LLM.
-- **2.5b.** Auto-trigger: when the task-request classifier fires (player asks for a multi-step thing), the orchestrator auto-enters plan mode. The LLM plans via `!addTask`, posts the plan, the player says "yes" → bot auto-exits plan mode → first task auto-starts.
-- **2.5c.** Plan mode is visible. Chat prefix changes: `[planning] Plan: 1) … 2) … 3) … (say ok to start)`. After approval: `[executing] Starting task #1: mine 5 iron_ore.`
-- **2.5d.** Queue + Plan Mode together = the planning subsystem. The TaskQueue is the *what*; Plan Mode is the *when does it start*. Both stay alive as visible, first-class subsystems mirroring Claude Code's TodoWrite + Plan Mode.
-
-This solves a class of "bot did the wrong thing before I could correct it" issues — the player gets a checkpoint before any physical work begins.
-
-### Phase 3 — Memory unification
+### Phase F — Memory unification
 
 **Goal:** one source of truth for `$MEMORY`. Stop the cross-contamination.
 
@@ -139,7 +185,7 @@ This solves a class of "bot did the wrong thing before I could correct it" issue
 
   Each layer loaded into `$MEMORY` with clear section headers so the LLM knows which it's reading.
 
-### Phase 4 — Coordinator (subagents + inter-bot messaging)
+### Phase G — Coordinator (subagents + inter-bot messaging)
 
 **Goal:** Claude Code's `Task` tool, for the bot. Delegate complex tasks to focused agents on a stronger model.
 
@@ -154,7 +200,7 @@ This solves a class of "bot did the wrong thing before I could correct it" issue
 - **4d. Result protocol.** Subagent reports back via `[subagent finished] role=miner result=success summary="Got 5 diamonds, no casualties, returned to spawn"` system message. Planner integrates into the queue (`!finishTask` etc.).
 - **4e. SendMessage between bots.** Mirroring Claude Code's `SendMessageTool` / `TeamCreate` — if a second bot is on the server (e.g. a builder partner), they can coordinate without going through the player. `!sendMessage(targetBot, content)` + receiving bot gets it as a `[message from <bot>]` system event.
 
-### Phase 5 — Skill registry (slash skills + meta-skills)
+### Phase H — Skill registry (slash skills + meta-skills)
 
 **Goal:** Claude Code's `/init`, `/review`, `/explore` — but in chat.
 
@@ -173,7 +219,7 @@ Implementation: in-game chat handler in `agent.js` recognizes `/` prefix from au
 - `loop` — for iterative tasks like "keep mining iron until you have 64." Skill manages the outer loop, queue handles each iteration.
 - `verify` — re-checks an end_factor before `!finishTask` (was inventory actually updated? is the block actually placed?). Closes the LLM-honor-system loophole in the queue.
 
-### Phase 6 — Permissions + MCP server mode
+### Phase I — Permissions + MCP server mode
 
 **Goal:** make the bot a citizen of the broader agent ecosystem. Mirrors Claude Code's Permission System + MCP-server-mode entrypoint.
 
@@ -229,10 +275,10 @@ After Phases 1-2 land, our orchestrator loop in `agent.js` `_processInput` + `_r
 1. **Stream the LLM response** — already done via the Anthropic SDK.
 2. **Parse tool calls** — already done via `containsCommand` + `parseCommandMessage`. Needs upgrade: parse multiple commands per response (today drops everything after the first).
 3. **Check permissions and intent classification** — partially done (`SIDE_CHAT_SAFE_COMMANDS`, interrupt classifier, task/memory triggers). Need to centralize into a single `classifyAndGate(input, response)` step.
-4. **Execute the tool to a terminal result** — done for most commands; Phase 2 makes the *result* actually terminal instead of partial.
+4. **Execute the tool to a terminal result** — done for most commands; Phase D makes the *result* actually terminal instead of partial.
 5. **Feed the result back as a system message** — already done via `this.history.add('system', execute_res)`.
 6. **Retry on transient failures** — partial (Coder retries internally on `!newAction`). Need: command-level retry policy for primitives that hit "network blip" type failures.
-7. **Escalate on persistent failures** — Phase 1b path-failure classifier covers pathfinding; Phase 5 `stuck` skill generalizes it.
+7. **Escalate on persistent failures** — Phase 1b path-failure classifier covers pathfinding (shipped); Phase E `stuck` skill generalizes it and replaces the classifier.
 8. **Track tokens/cost per turn** — cost-telemetry cross-cutting upgrade in §5.
 9. **Manage context window** — auto-compaction cross-cutting upgrade in §5.
 
@@ -243,19 +289,22 @@ When all nine are in place, the bot's orchestrator IS a QueryEngine, just specia
 | Phase | Pass criterion |
 |---|---|
 | 1 | One run of "go get me 5 diamonds" produces ≤2 LLM turns before `!newAction` dispatch; total turn count ≤8 to completion (down from 10+ to *zero progress*) |
-| 2 | Same task: 0–1 LLM turns on navigation. `smartGoTo` handles its own bridging/digging in 90%+ of common cases |
-| 3 | `MEMORY.md` contains no task-state pollution after a 1-hour session; `!remember` produces clean text (no `\n` literals) |
-| 4 | `!dispatchAgent("miner", "get 5 diamonds")` runs end-to-end with the planner LLM only invoked twice (dispatch + integrate result) |
-| 2.5 | `!enterPlanMode` blocks body-touching tools; player approves plan in chat → `!exitPlanMode` → execution begins. Bot never starts work the player hasn't OK'd in plan-mode flows. |
-| 5 | Player types `/init` in chat → bot autonomously surveys + memorizes spawn area in <2 minutes |
-| 6 | External Claude Code session connects to bot via MCP, calls `mine_block("iron_ore", 5)` from outside the game, gets terminal success. Permission rules block strangers from `!addTask`. |
+| A | Orchestrator loop satisfies the 9-point contract in §6.5; multi-command-per-response works; auto-compaction triggers at 8K tokens |
+| B | Every command in `actions.js` has `isReadOnly` + `isConcurrencySafe` declared. `SIDE_CHAT_SAFE_COMMANDS` deleted (replaced by the per-tool flag) |
+| C | `!enterPlanMode` blocks body-touching tools; player approves plan in chat → `!exitPlanMode` → execution begins. Bot never starts work the player hasn't OK'd in plan-mode flows |
+| D | Same diamond task as Phase 1: 0–1 LLM turns on navigation. `smartGoTo` handles its own bridging/digging in 90%+ of common cases |
+| E | Phase 1's Lever-2 path-failure classifier deleted; the `stuck` meta-skill covers the same recovery paths and more |
+| F | `MEMORY.md` contains no task-state pollution after a 1-hour session; `!remember` produces clean text (no `\n` literals); server / bot / player memory layers loaded with section headers |
+| G | `!dispatchAgent("miner", "get 5 diamonds")` runs end-to-end with the planner LLM only invoked twice (dispatch + integrate result) |
+| H | Player types `/init` in chat → bot autonomously surveys + memorizes spawn area in <2 minutes |
+| I | External Claude Code session connects to bot via MCP, calls `mine_block("iron_ore", 5)` from outside the game, gets terminal success. Permission rules block strangers from `!addTask` |
 
 ## 8. Open questions
 
-- **Coder model.** Does `!newAction` use the same model as the planner, or can we route it independently? (Phase 4 wants Sonnet for execution but Haiku for planning — needs verifying that the Coder respects per-call model selection.)
+- **Coder model.** Does `!newAction` use the same model as the planner, or can we route it independently? (Phase G wants Sonnet for execution but Haiku for planning — needs verifying that the Coder respects per-call model selection.)
 - **Subagent state isolation.** When a subagent finishes, what state does the planner inherit? (Inventory snapshot, position, last action — needs a `[subagent finished]` system message schema.)
 - **Bedrock chat ergonomics.** Slash-skills in §5 assume the player can type `/init` in chat. Bedrock's `/` is reserved for vanilla commands — will need a different prefix or whisper-only handling.
-- **Multi-command per response.** Claude Code parses N tool calls per LLM turn (parallel-safe ones run concurrently). Today our parser takes only the first match and drops the rest, which is why `!stop\n\n!remember(...)` only ever stops. Worth fixing alongside Phase 2 tool metadata so `isConcurrencySafe` controls what can run together.
+- **Multi-command per response.** Claude Code parses N tool calls per LLM turn (parallel-safe ones run concurrently). Today our parser takes only the first match and drops the rest, which is why `!stop\n\n!remember(...)` only ever stops. Fixed in Phase A1; concurrency control falls out of Phase B's `isConcurrencySafe`.
 - **Plan-mode auto-approval timeouts.** If the bot enters plan mode and the player doesn't reply, does it sit forever, abort after N minutes, or auto-execute? Probably abort + ping. Needs a UX decision.
 
 ## 9. Related docs
