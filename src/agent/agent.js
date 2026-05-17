@@ -467,32 +467,52 @@ export class Agent {
                 this.routeResponse(source, `Heard you — give me a sec.`);
                 return;
             }
-            const cmdName = containsCommand(res);
-            const prose = cmdName ? res.substring(0, res.indexOf(cmdName)).trim() : res.trim();
-            // Safe commands (memory writes, queue mutations, mode toggles) don't
-            // touch the bot's body — execute them in parallel with the running
-            // task so the player isn't ignored when they say "remember X" or
-            // "add a task" mid-job.
-            if (cmdName && SIDE_CHAT_SAFE_COMMANDS.has(cmdName)) {
-                if (prose) this.routeResponse(source, prose);
+            // A1: parse all commands in the side-chat response, not just the first.
+            // Execute every safe command in order; defer body-touching ones until the
+            // current task finishes. Without this, a response like
+            // `!remember(...) !addTask(...)` would silently drop the !addTask.
+            const cmdSpans = findAllCommandSpans(res);
+
+            if (cmdSpans.length === 0) {
+                // No commands — pure prose reply
                 await this.history.add(this.name, res);
-                try {
-                    const execRes = await executeCommand(this, res);
-                    if (execRes) await this.history.add('system', execRes);
-                    console.log(`[side-chat] safe command executed: ${cmdName}`);
-                } catch (e) {
-                    console.warn(`[side-chat] ${cmdName} failed:`, e?.message || e);
+                this.routeResponse(source, res.trim());
+                return;
+            }
+
+            const preMessage = res.substring(0, cmdSpans[0].startIndex).trim();
+            const trailingProse = res.substring(cmdSpans[cmdSpans.length - 1].endIndex).trim();
+
+            await this.history.add(this.name, res);
+            if (preMessage) this.routeResponse(source, preMessage);
+
+            let executedCount = 0;
+            const deferred = [];
+            for (const span of cmdSpans) {
+                const cmdName = span.commandName;
+                if (SIDE_CHAT_SAFE_COMMANDS.has(cmdName)) {
+                    const cmdText = res.substring(span.startIndex, span.endIndex);
+                    try {
+                        const execRes = await executeCommand(this, cmdText);
+                        if (execRes) await this.history.add('system', execRes);
+                        console.log(`[side-chat] safe command executed: ${cmdName}`);
+                        executedCount++;
+                    } catch (e) {
+                        console.warn(`[side-chat] ${cmdName} failed:`, e?.message || e);
+                    }
+                } else {
+                    deferred.push(cmdName);
                 }
-                return;
             }
-            if (!prose) {
-                // LLM only wanted to act with a body-touching command. Don't
-                // run it (would hijack the running task) but acknowledge.
+
+            if (deferred.length > 0 && executedCount === 0 && !preMessage) {
+                // Nothing got through and no prose — give the player a heads-up.
                 this.routeResponse(source, `Got it — let me finish what I'm on first.`);
-                return;
+            } else if (deferred.length > 0) {
+                this.routeResponse(source, `(Deferring ${deferred.join(', ')} until I'm done with my current task.)`);
+            } else if (trailingProse) {
+                this.routeResponse(source, trailingProse);
             }
-            await this.history.add(this.name, prose);
-            this.routeResponse(source, prose);
         } catch (e) {
             console.error('_handleSideChat failed:', e);
             try { this.routeResponse(source, `(I heard you but hit an error replying.)`); } catch {}
