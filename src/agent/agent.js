@@ -21,6 +21,39 @@ import { RunQueue } from './run_queue.js';
 import { InputRouter } from './input_router.js';
 import { humanizeCommand } from './command_humanizer.js';
 import { TaskQueue } from './task_queue.js';
+import { MemoryStore } from './memory_store.js';
+import { RulebookLectern } from './rulebook_lectern.js';
+
+// Player messages containing any of these verbs are treated as actionable
+// requests and get a pre-prompt nudge reminding the LLM to plan via !addTask
+// before executing anything. Safety net for when the prompt rules aren't
+// enough on their own (Haiku drops the discipline under load). False
+// positives are cheap — the nudge just re-states a rule the model already has.
+const TASK_REQUEST_VERBS = /\b(mine|craft|build|make|get|bring|fetch|give|smelt|gather|find|collect|hand|deliver|cook|grab|harvest|chop|dig)\b/i;
+function detectTaskRequest(message) {
+    if (!message || message.length < 4) return false;
+    return TASK_REQUEST_VERBS.test(message);
+}
+
+// Player phrases that signal "save this to long-term memory". Same idea as
+// the task classifier — the prompt already tells the model to call !remember
+// on these cues, but Haiku drops the discipline. The nudge re-asserts the
+// rule right before the model's next response.
+const MEMORY_REQUEST_PATTERNS = /\b(remember|don'?t forget|note that|save (this|that)|from now on|always|never|keep in mind|my name is|i (like|prefer|hate|live|work))\b/i;
+function detectMemoryRequest(message) {
+    if (!message || message.length < 4) return false;
+    return MEMORY_REQUEST_PATTERNS.test(message);
+}
+
+// Commands that don't touch the bot's body / current action. Safe to execute
+// in parallel with a running task when the player chats mid-task. Without
+// this whitelist, _handleSideChat strips all commands including !remember
+// and !addTask, so the bot silently drops them while busy.
+const SIDE_CHAT_SAFE_COMMANDS = new Set([
+    '!remember', '!rememberHere', '!forget', '!recall', '!listMemory',
+    '!addTask', '!cancelTask', '!showQueue', '!clearDoneTasks',
+    '!setMode', '!loadCOCFromLectern', '!designateRulebookLectern',
+]);
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
@@ -55,6 +88,7 @@ export class Agent {
         this.memory_bank = new MemoryBank();
         this.self_prompter = new SelfPrompter(this);
         this.task_queue = new TaskQueue(this.name, (kind, task) => this._onQueueChange(kind, task));
+        this.memory_store = new MemoryStore(this.name);
         convoManager.initAgent(this);
         await this.prompter.initExamples();
 
@@ -150,6 +184,8 @@ export class Agent {
                 this.startEvents();
                 this._runWorker(); // single consumer loop for the action queue
                 this._startQueueHeartbeat();
+                this.rulebook_lectern = new RulebookLectern(this);
+                this.rulebook_lectern.installListener();
               
                 if (!load_mem) {
                     if (settings.task) {
@@ -422,9 +458,25 @@ export class Agent {
             }
             const cmdName = containsCommand(res);
             const prose = cmdName ? res.substring(0, res.indexOf(cmdName)).trim() : res.trim();
+            // Safe commands (memory writes, queue mutations, mode toggles) don't
+            // touch the bot's body — execute them in parallel with the running
+            // task so the player isn't ignored when they say "remember X" or
+            // "add a task" mid-job.
+            if (cmdName && SIDE_CHAT_SAFE_COMMANDS.has(cmdName)) {
+                if (prose) this.routeResponse(source, prose);
+                await this.history.add(this.name, res);
+                try {
+                    const execRes = await executeCommand(this, res);
+                    if (execRes) await this.history.add('system', execRes);
+                    console.log(`[side-chat] safe command executed: ${cmdName}`);
+                } catch (e) {
+                    console.warn(`[side-chat] ${cmdName} failed:`, e?.message || e);
+                }
+                return;
+            }
             if (!prose) {
-                // LLM only wanted to act. Don't run the command (would hijack
-                // the running task) but acknowledge the player anyway.
+                // LLM only wanted to act with a body-touching command. Don't
+                // run it (would hijack the running task) but acknowledge.
                 this.routeResponse(source, `Got it — let me finish what I'm on first.`);
                 return;
             }
@@ -513,6 +565,12 @@ export class Agent {
         }
 
         await this.history.add(source, message);
+        if (!self_prompt && !from_other_bot && detectTaskRequest(message)) {
+            await this.history.add('system', '[task request detected] Your first action this turn MUST be one or more !addTask(description, end_factor) calls — one per step, in execution order, including the final "tell the player" step. Only AFTER all !addTask calls may you execute the first task. Do not call any other command first.');
+        }
+        if (!self_prompt && !from_other_bot && detectMemoryRequest(message)) {
+            await this.history.add('system', '[memory cue detected] This message contains a fact worth keeping across sessions. Call !remember(topic, content) with a kebab-case topic slug — either now, or as the first step of your plan if you also have a task to do. Do not skip this. For exact coordinates use !rememberHere instead.');
+        }
         this.history.save();
 
         if (!self_prompt && this.self_prompter.isActive())

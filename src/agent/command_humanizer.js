@@ -62,6 +62,10 @@ const TEMPLATES = {
     cancelTask: ([id]) => `cancelling task #${id}`,
     showQueue: () => `checking my queue`,
     clearDoneTasks: () => `clearing done tasks`,
+    remember: ([topic]) => `remembering ${topic}`,
+    recall: ([topic]) => `recalling ${topic}`,
+    forget: ([topic]) => `forgetting ${topic}`,
+    listMemory: () => `checking my memory`,
 };
 
 // "searchForBlock" -> "search for block"

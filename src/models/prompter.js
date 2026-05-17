@@ -142,10 +142,15 @@ export class Prompter {
             prompt = prompt.replaceAll('$TASKQUEUE', tq);
         }
 
+        if (prompt.includes('$MEMORY')) {
+            const mem = this.agent.memory_store ? this.agent.memory_store.serializeIndex() : '';
+            prompt = prompt.replaceAll('$MEMORY', mem);
+        }
+
         if (prompt.includes('$COC')) {
             let coc = '';
             try {
-                coc = readFileSync(path.join(__dirname, '../../coc.md'), 'utf8').trim();
+                coc = readFileSync(path.join(__dirname, '../../CLAUDE.md'), 'utf8').trim();
             } catch (e) {
                 coc = 'No specific rules configured. Use good judgment and refuse clearly harmful requests.';
             }

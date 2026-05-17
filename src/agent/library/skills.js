@@ -2,6 +2,8 @@ import * as mc from "../../utils/mcdata.js";
 import * as world from "./world.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
+import fs from 'fs';
+import path from 'path';
 import settings from "../../../settings.js";
 
 const blockPlaceDelay = settings.block_place_delay == null ? 0 : settings.block_place_delay;
@@ -2094,3 +2096,96 @@ export async function useToolOn(bot, toolName, targetName) {
     log(bot, `Used ${toolName} on ${block.name}.`);
     return true;
  }
+
+function _extractBookPages(bookItem) {
+    // Written-book pages live in two places depending on protocol version:
+    // - Legacy NBT (≤1.20.4):  item.nbt.value.pages.value.value = [string, ...]
+    // - Item components (≥1.20.5): item.components contains a written_book_content / writable_book_content entry
+    // Pages may be plain text or JSON text components — normalize both to plain text.
+    let raw = [];
+    try {
+        if (bookItem?.nbt?.value?.pages?.value?.value) {
+            raw = bookItem.nbt.value.pages.value.value;
+        } else if (Array.isArray(bookItem?.components)) {
+            const c = bookItem.components.find(x => x?.type === 'written_book_content' || x?.type === 'writable_book_content' || x?.name === 'written_book_content' || x?.name === 'writable_book_content');
+            const pages = c?.data?.pages ?? c?.value?.pages ?? c?.data ?? [];
+            raw = pages.map(p => (typeof p === 'string') ? p : (p?.raw ?? p?.text ?? p?.contents ?? JSON.stringify(p)));
+        }
+    } catch { /* fall through, raw stays [] */ }
+    return raw.map(p => {
+        if (typeof p !== 'string') return '';
+        const t = p.trim();
+        if (t.startsWith('{') || t.startsWith('"')) {
+            try {
+                const j = JSON.parse(t);
+                if (typeof j === 'string') return j;
+                if (j?.text) return j.text + (Array.isArray(j.extra) ? j.extra.map(e => e?.text || '').join('') : '');
+                return t;
+            } catch { return t; }
+        }
+        return t;
+    }).filter(s => s.length > 0);
+}
+
+export async function loadCOCFromLectern(bot, distance=8, explicitPos=null) {
+    /**
+     * Find a lectern, read its book, and write the pages to CLAUDE.md.
+     * The next prompt build picks up the new COC automatically ($COC is re-read each turn).
+     * @param {Bot} bot
+     * @param {number} distance - max blocks to search for a lectern (default 8). Ignored if explicitPos given.
+     * @param {{x:number,y:number,z:number}|null} explicitPos - if given, read this specific lectern (used by the rulebook auto-watcher) instead of searching for nearest.
+     * @returns {boolean}
+     */
+    let lectern;
+    if (explicitPos) {
+        lectern = bot.blockAt(new Vec3(explicitPos.x, explicitPos.y, explicitPos.z));
+        if (!lectern || lectern.name !== 'lectern') {
+            log(bot, `No lectern at (${explicitPos.x},${explicitPos.y},${explicitPos.z}) — chunk may not be loaded.`);
+            return false;
+        }
+    } else {
+        const lecternId = bot.registry?.blocksByName?.lectern?.id;
+        if (lecternId == null) { log(bot, 'No lectern block id in registry.'); return false; }
+        const positions = bot.findBlocks({matching: lecternId, maxDistance: distance, count: 1});
+        if (!positions || positions.length === 0) {
+            log(bot, `No lectern within ${distance} blocks. Place a book on a lectern near me first.`);
+            return false;
+        }
+        lectern = bot.blockAt(positions[0]);
+    }
+    try {
+        await bot.pathfinder.goto(new pf.goals.GoalNear(lectern.position.x, lectern.position.y, lectern.position.z, 2));
+    } catch (e) {
+        log(bot, `Couldn't path to lectern at (${lectern.position.x},${lectern.position.y},${lectern.position.z}): ${e.message}`);
+        return false;
+    }
+    let window;
+    try {
+        window = await bot.openBlock(lectern);
+    } catch (e) {
+        log(bot, `Couldn't open lectern: ${e.message}`);
+        return false;
+    }
+    const book = (window.slots || []).find(s => s && (s.name === 'written_book' || s.name === 'writable_book'));
+    if (!book) {
+        try { window.close(); } catch {}
+        log(bot, `Lectern at (${lectern.position.x},${lectern.position.y},${lectern.position.z}) has no book.`);
+        return false;
+    }
+    const pages = _extractBookPages(book);
+    try { window.close(); } catch {}
+    if (pages.length === 0) {
+        log(bot, `Book on lectern had no readable pages (NBT structure not recognized). Slot dump: ${JSON.stringify(book).substring(0, 400)}`);
+        return false;
+    }
+    const cocPath = path.resolve('./CLAUDE.md');
+    const body = pages.join('\n\n');
+    try {
+        fs.writeFileSync(cocPath, body + (body.endsWith('\n') ? '' : '\n'));
+    } catch (e) {
+        log(bot, `Failed to write CLAUDE.md: ${e.message}`);
+        return false;
+    }
+    log(bot, `Read ${pages.length} page(s) from lectern at (${lectern.position.x},${lectern.position.y},${lectern.position.z}). CLAUDE.md updated — new rules apply next turn.`);
+    return true;
+}

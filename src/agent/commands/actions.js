@@ -586,4 +586,72 @@ export const actionsList = [
             return agent.task_queue.clearDone().message;
         }
     },
+    {
+        name: '!remember',
+        description: 'Save a persistent fact to your memory directory (survives reboots). Use for player preferences, world locations (non-coord), strategies, anything you should still know next session. For exact coordinates use !rememberHere instead. The MEMORY.md index is in every prompt; topic details load via !recall.',
+        params: {
+            'topic': { type: 'string', description: 'Short kebab-case slug (e.g. "lospollos929-prefs", "village-trading-tips", "lava-near-mining-tunnel"). Reused topic name = update.' },
+            'content': { type: 'string', description: 'The fact, in markdown. First line is shown as the summary in the index. Max ~4KB.' }
+        },
+        perform: async function (agent, topic, content) {
+            return agent.memory_store.write(topic, content).message;
+        }
+    },
+    {
+        name: '!recall',
+        description: 'Read the full content of a saved memory topic. Use when MEMORY.md shows a topic relevant to what you\'re doing and you need details. Returns the topic file body.',
+        params: {
+            'topic': { type: 'string', description: 'Topic slug from MEMORY.md (e.g. "lospollos929-prefs").' }
+        },
+        perform: async function (agent, topic) {
+            return agent.memory_store.read(topic).message;
+        }
+    },
+    {
+        name: '!forget',
+        description: 'Delete a saved memory topic. Use when a memory is wrong, outdated, or the player asks you to forget it.',
+        params: {
+            'topic': { type: 'string', description: 'Topic slug to delete.' }
+        },
+        perform: async function (agent, topic) {
+            return agent.memory_store.remove(topic).message;
+        }
+    },
+    {
+        name: '!listMemory',
+        description: 'Chat the list of saved memory topics to the player. Use when asked what you remember.',
+        params: {},
+        perform: async function (agent) {
+            const text = agent.memory_store.formatForChat();
+            agent.openChat(text);
+            return text;
+        }
+    },
+    {
+        name: '!loadCOCFromLectern',
+        description: 'Read the written_book on the nearest lectern and replace your Code of Conduct (CLAUDE.md) with its contents. The new rules apply from the next turn onward. Use when a player tells you to "read the rulebook", "update the rules", or "load the lectern". You must be within 8 blocks of the lectern; if not, !goToPlayer or !goToPosition first.',
+        params: {},
+        perform: runAsAction(async (agent) => {
+            await skills.loadCOCFromLectern(agent.bot, 8);
+        })
+    },
+    {
+        name: '!designateRulebookLectern',
+        description: 'Mark the nearest lectern (within 8 blocks) as the official rulebook. From then on, whenever a player edits the book on that lectern (takes it off, edits, places back), you automatically re-read it and update CLAUDE.md — no command needed. Use when a player says "this lectern is the rulebook" or "set the rulebook here". The lectern\'s chunk must stay loaded for auto-updates to work.',
+        params: {},
+        perform: async function (agent) {
+            const bot = agent.bot;
+            const lecternId = bot.registry?.blocksByName?.lectern?.id;
+            if (lecternId == null) return 'No lectern block id in registry.';
+            const positions = bot.findBlocks({matching: lecternId, maxDistance: 8, count: 1});
+            if (!positions || positions.length === 0) return 'No lectern within 8 blocks. Place one and stand near it.';
+            const block = bot.blockAt(positions[0]);
+            const res = agent.rulebook_lectern.designate(block);
+            if (res.ok) {
+                // read it once immediately so CLAUDE.md is in sync from the start
+                try { await skills.loadCOCFromLectern(bot, 8, agent.rulebook_lectern.position); } catch {}
+            }
+            return res.message;
+        }
+    },
 ];
