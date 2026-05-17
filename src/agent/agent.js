@@ -4,7 +4,7 @@ import { VisionInterpreter } from './vision/vision_interpreter.js';
 import { Prompter } from '../models/prompter.js';
 import { initModes } from './modes.js';
 import { initBot } from '../utils/mcdata.js';
-import { containsCommand, commandExists, executeCommand, truncCommandMessage, isAction, blacklistCommands } from './commands/index.js';
+import { containsCommand, commandExists, executeCommand, truncCommandMessage, isAction, blacklistCommands, findAllCommandSpans } from './commands/index.js';
 import { ActionManager } from './action_manager.js';
 import { NPCContoller } from './npc/controller.js';
 import { MemoryBank } from './memory_bank.js';
@@ -599,68 +599,83 @@ export class Agent {
                 break;
             }
 
-            let command_name = containsCommand(res);
+            // Phase A1: parse all commands in the response, execute in order.
+            // Previously only the first command was executed; trailing commands
+            // (`!stop\n\n!remember(...)`) were silently dropped, which is why
+            // !remember and !addTask sometimes failed after !stop.
+            const cmdSpans = findAllCommandSpans(res);
 
-            if (command_name) {
-                res = truncCommandMessage(res);
+            if (cmdSpans.length > 0) {
+                // Preserve the full response in history (no truncation) so the
+                // model sees all commands it issued + any trailing prose.
                 this.history.add(this.name, res);
 
-                if (!commandExists(command_name)) {
-                    this.history.add('system', `Command ${command_name} does not exist.`);
-                    console.warn('Agent hallucinated command:', command_name)
-                    continue;
-                }
+                const preMessage = res.substring(0, cmdSpans[0].startIndex).trim();
+                const trailingProse = res.substring(cmdSpans[cmdSpans.length - 1].endIndex).trim();
 
-                if (checkInterrupt()) break;
-                this.self_prompter.handleUserPromptedCmd(self_prompt, isAction(command_name));
-
+                // "full" mode: post the whole response once, no per-command chat
                 if (settings.show_command_syntax === "full") {
                     this.routeResponse(source, res);
                 }
-                else if (settings.show_command_syntax === "shortened") {
-                    let pre_message = res.substring(0, res.indexOf(command_name)).trim();
-                    let chat_message = `*used ${command_name.substring(1)}*`;
-                    if (pre_message.length > 0)
-                        chat_message = `${pre_message}  ${chat_message}`;
-                    this.routeResponse(source, chat_message);
-                }
-                else if (settings.show_command_syntax === "natural") {
-                    let pre_message = res.substring(0, res.indexOf(command_name)).trim();
-                    let cmd_text = res.substring(res.indexOf(command_name)).trim();
-                    let chat_message = humanizeCommand(cmd_text);
-                    if (pre_message.length > 0)
-                        chat_message = `${pre_message} ${chat_message}`;
-                    this.routeResponse(source, chat_message);
-                }
-                else {
-                    let pre_message = res.substring(0, res.indexOf(command_name)).trim();
-                    if (pre_message.trim().length > 0)
-                        this.routeResponse(source, pre_message);
-                }
 
-                let execute_res = await executeCommand(this, res);
-                if (checkInterrupt()) break;
+                for (let ci = 0; ci < cmdSpans.length; ci++) {
+                    const span = cmdSpans[ci];
+                    const cmdName = span.commandName;
+                    const cmdText = res.substring(span.startIndex, span.endIndex);
 
-                console.log('Agent executed:', command_name, 'and got:', execute_res);
-                used_command = true;
-
-                if (execute_res) {
-                    this.history.add('system', execute_res);
-                    // Path-failure escalation: track consecutive primitive failures
-                    // and force !newAction (or !cancelTask) after 2 in a row. !newAction
-                    // itself doesn't count — once the LLM has escalated, leave it alone.
-                    if (command_name === '!newAction' || command_name === '!cancelTask') {
-                        this._consecutivePathFailures = 0;
-                    } else if (isPathFailure(execute_res)) {
-                        this._consecutivePathFailures = (this._consecutivePathFailures || 0) + 1;
-                        if (this._consecutivePathFailures >= 2) {
-                            this.history.add('system', `[pathfinding stuck — ${this._consecutivePathFailures} consecutive failures] Your next action MUST be !newAction(detailed_prompt) with a multi-step plan that handles the obstacle (dig stairs through stone, bridge water with cobblestone, tower up with dirt). Be specific about materials and target coords. If no such plan is possible, call !cancelTask and tell the player you're stuck. Chaining another primitive will not work.`);
-                        }
-                    } else {
-                        this._consecutivePathFailures = 0;
+                    if (!commandExists(cmdName)) {
+                        this.history.add('system', `Command ${cmdName} does not exist.`);
+                        console.warn('Agent hallucinated command:', cmdName);
+                        continue;
                     }
-                } else
-                    break;
+
+                    if (checkInterrupt()) break;
+                    this.self_prompter.handleUserPromptedCmd(self_prompt, isAction(cmdName));
+
+                    // Per-command display (skip if "full" mode already posted everything)
+                    if (settings.show_command_syntax === "shortened") {
+                        let chat_message = `*used ${cmdName.substring(1)}*`;
+                        if (ci === 0 && preMessage.length > 0)
+                            chat_message = `${preMessage}  ${chat_message}`;
+                        this.routeResponse(source, chat_message);
+                    }
+                    else if (settings.show_command_syntax === "natural") {
+                        let chat_message = humanizeCommand(cmdText);
+                        if (ci === 0 && preMessage.length > 0)
+                            chat_message = `${preMessage} ${chat_message}`;
+                        this.routeResponse(source, chat_message);
+                    }
+                    else if (settings.show_command_syntax !== "full") {
+                        if (ci === 0 && preMessage.length > 0)
+                            this.routeResponse(source, preMessage);
+                    }
+
+                    let execute_res = await executeCommand(this, cmdText);
+                    if (checkInterrupt()) break;
+
+                    console.log('Agent executed:', cmdName, 'and got:', execute_res);
+                    used_command = true;
+
+                    if (execute_res) {
+                        this.history.add('system', execute_res);
+                        // Per-command path-failure tracking (Phase 1 classifier; replaced by `stuck` skill in Phase E).
+                        if (cmdName === '!newAction' || cmdName === '!cancelTask') {
+                            this._consecutivePathFailures = 0;
+                        } else if (isPathFailure(execute_res)) {
+                            this._consecutivePathFailures = (this._consecutivePathFailures || 0) + 1;
+                            if (this._consecutivePathFailures >= 2) {
+                                this.history.add('system', `[pathfinding stuck — ${this._consecutivePathFailures} consecutive failures] Your next action MUST be !newAction(detailed_prompt) with a multi-step plan that handles the obstacle (dig stairs through stone, bridge water with cobblestone, tower up with dirt). Be specific about materials and target coords. If no such plan is possible, call !cancelTask and tell the player you're stuck. Chaining another primitive will not work.`);
+                            }
+                        } else {
+                            this._consecutivePathFailures = 0;
+                        }
+                    }
+                }
+
+                // Trailing prose after the last command — post once if anything's there
+                if (trailingProse.length > 0 && settings.show_command_syntax !== "full") {
+                    this.routeResponse(source, trailingProse);
+                }
             }
             else {
                 this.history.add(this.name, res);

@@ -117,7 +117,7 @@ The phases below are renumbered A–I. Each phase explicitly states what foundat
 
 **Goal:** the central loop in `agent.js` (`_processInput` + `_runWorker`) satisfies the 9-point contract in §6.5 below. This is the bedrock everything else lands on.
 
-- **A1. Multi-command parsing.** Today `parseCommandMessage` returns the first command and drops the rest. Bot responses like `!stop\n\n!remember(...)` lose the `!remember`. Upgrade to parse N tool calls per response.
+- **A1. Multi-command parsing.** ✅ Shipped 2026-05-17. `findAllCommandSpans` in `commands/index.js` returns all command spans in a response; `agent.js` iterates and executes in order. Path-failure tracking now per-command. Bot responses like `!stop\n\n!remember(...)` now fire both. Multiple `!addTask` calls in one response queue all of them. Trailing prose after the last command is posted to chat.
 - **A2. Per-command retry policy.** For transient failures (network blip, momentary chunk unload), retry with backoff before reporting to the LLM. Terminal failures pass through.
 - **A3. Token + cost telemetry.** Log tokens-per-turn and per-task to `queue.log`. Surfaces which tasks burn.
 - **A4. Context auto-compaction.** When prompt exceeds 8K tokens, summarize turns >30 min old into a single system message. Mirrors Claude Code's `/compact`.

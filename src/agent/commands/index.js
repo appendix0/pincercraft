@@ -181,6 +181,26 @@ export function truncCommandMessage(message) {
     return message;
 }
 
+// Phase A1: return all command spans in the message, in order of appearance.
+// Each span is { commandName, startIndex, endIndex }. The orchestrator slices
+// message[startIndex:endIndex] and passes it to executeCommand for parsing +
+// execution, so we avoid duplicating the arg-coercion logic here.
+export function findAllCommandSpans(message) {
+    if (!message) return [];
+    const spans = [];
+    const re = new RegExp(commandRegex.source, 'g');
+    let m;
+    while ((m = re.exec(message)) !== null) {
+        if (m[0].length === 0) break; // safety against zero-width matches
+        spans.push({
+            commandName: '!' + m[1],
+            startIndex: m.index,
+            endIndex: m.index + m[0].length,
+        });
+    }
+    return spans;
+}
+
 export function isAction(name) {
     return actionsList.find(action => action.name === name) !== undefined;
 }
