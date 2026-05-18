@@ -45,7 +45,11 @@ export class Prompter {
 
         this.convo_examples = null;
         this.coding_examples = null;
-        
+
+        // Phase A3 telemetry: lifetime usage totals across all chat/code/memory calls.
+        // Per-turn lines logged from _recordUsage. Resets only on process restart.
+        this._usage_totals = { input: 0, output: 0, cache_read: 0, cache_creation: 0, turns: 0 };
+
         let name = this.profile.name;
         this.cooldown = this.profile.cooldown ? this.profile.cooldown : 0;
         this.last_prompt_time = 0;
@@ -103,6 +107,24 @@ export class Prompter {
 
     getName() {
         return this.profile.name;
+    }
+
+    // Phase A3: read out-of-band usage from the last sendRequest on the given model,
+    // log one [cost] line, accumulate into this._usage_totals. No-op if the model
+    // wrapper doesn't expose last_usage (non-Claude wrappers).
+    _recordUsage(kind, model) {
+        const u = model?.last_usage;
+        if (!u) return;
+        const input = u.input_tokens || 0;
+        const output = u.output_tokens || 0;
+        const cache_read = u.cache_read_input_tokens || 0;
+        const cache_creation = u.cache_creation_input_tokens || 0;
+        this._usage_totals.input += input;
+        this._usage_totals.output += output;
+        this._usage_totals.cache_read += cache_read;
+        this._usage_totals.cache_creation += cache_creation;
+        this._usage_totals.turns += 1;
+        console.log(`[cost] kind=${kind} input=${input} output=${output} cache_read=${cache_read} cache_creation=${cache_creation} | total_turns=${this._usage_totals.turns} total_input=${this._usage_totals.input} total_output=${this._usage_totals.output} total_cache_read=${this._usage_totals.cache_read}`);
     }
 
     getInitModes() {
@@ -247,6 +269,7 @@ export class Prompter {
 
             try {
                 generation = await this.chat_model.sendRequest(messages, prompt);
+                this._recordUsage('convo', this.chat_model);
                 if (typeof generation !== 'string') {
                     console.error('Error: Generated response is not a string', generation);
                     throw new Error('Generated response is not a string');
@@ -292,6 +315,7 @@ export class Prompter {
         prompt = await this.replaceStrings(prompt, messages, this.coding_examples);
 
         let resp = await this.code_model.sendRequest(messages, prompt);
+        this._recordUsage('coding', this.code_model);
         this.awaiting_coding = false;
         await this._saveLog(prompt, messages, resp, 'coding');
         return resp;
@@ -302,6 +326,7 @@ export class Prompter {
         let prompt = this.profile.saving_memory;
         prompt = await this.replaceStrings(prompt, null, null, to_summarize);
         let resp = await this.chat_model.sendRequest([], prompt);
+        this._recordUsage('memsave', this.chat_model);
         await this._saveLog(prompt, to_summarize, resp, 'memSaving');
         if (resp?.includes('</think>')) {
             const [_, afterThink] = resp.split('</think>')
@@ -317,6 +342,7 @@ export class Prompter {
         messages.push({role: 'user', content: new_message});
         prompt = await this.replaceStrings(prompt, null, null, messages);
         let res = await this.chat_model.sendRequest([], prompt);
+        this._recordUsage('respond_check', this.chat_model);
         return res.trim().toLowerCase() === 'respond';
     }
 

@@ -7,11 +7,14 @@ export class Claude {
     constructor(model_name, url, params) {
         this.model_name = model_name;
         this.params = params || {};
+        // Phase A3: out-of-band usage side-channel. sendRequest stays returning string
+        // (prompter.js:250 type-checks it); telemetry callers read this after each call.
+        this.last_usage = null;
 
         let config = {};
         if (url)
             config.baseURL = url;
-        
+
         config.apiKey = getKey('ANTHROPIC_API_KEY');
 
         this.anthropic = new Anthropic(config);
@@ -20,6 +23,7 @@ export class Claude {
     async sendRequest(turns, systemMessage) {
         const messages = strictFormat(turns);
         let res = null;
+        this.last_usage = null;
         try {
             console.log(`Awaiting anthropic response from ${this.model_name}...`)
             if (!this.params.max_tokens) {
@@ -38,6 +42,7 @@ export class Claude {
             });
 
             console.log('Received.')
+            this.last_usage = resp.usage || null;
             // get first content of type text
             const textContent = resp.content.find(content => content.type === 'text');
             if (textContent) {
