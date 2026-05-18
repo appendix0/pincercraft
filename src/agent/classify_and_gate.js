@@ -68,6 +68,50 @@ export function detectMemoryRequest(message) {
     return MEMORY_REQUEST_PATTERNS.test(message);
 }
 
+// Phase C2: plan-mode approval / rejection detection. Used by the orchestrator
+// to auto-exit plan mode when the player gives a clear yes/no on the proposed
+// plan. Bias is toward "no auto-action on ambiguous input" — the patterns
+// match short standalone replies (the way real players approve plans), not
+// substrings inside a longer sentence. The LLM also handles ambiguous cases
+// via prompt rules; this is a deterministic safety net.
+const PLAN_APPROVAL_WORDS = [
+    'yes', 'yep', 'yeah', 'ya', 'y',
+    'ok', 'okay', 'k',
+    'sure', 'fine', 'great', 'good',
+    'go', 'go ahead', 'do it', "let's go", 'lets go',
+    'approve', 'approved', 'accept', 'accepted',
+    'sounds good', 'looks good', 'lgtm', 'ship it',
+    'start', 'begin', 'execute', 'run it', 'do the plan',
+    'proceed', 'continue',
+];
+const PLAN_REJECTION_WORDS = [
+    'no', 'nope', 'nah',
+    'cancel', 'stop', 'wait', 'hold on', 'pause',
+    'nevermind', 'never mind',
+    'change', 'revise', 'edit', 'redo',
+    "don't", 'dont', 'reject', 'rejected',
+];
+
+function matchesShortReply(words, message) {
+    if (!message) return false;
+    // Strip trailing punctuation/emoji whitespace so "ok!" / "yes." still match.
+    const m = message.trim().toLowerCase().replace(/[.!?,]+$/, '').trim();
+    if (m.length === 0 || m.length > 40) return false; // approvals are short
+    return words.some(w => m === w || m.startsWith(w + ' ') || m.startsWith(w + ','));
+}
+
+export function detectPlanApproval(message) {
+    return matchesShortReply(PLAN_APPROVAL_WORDS, message);
+}
+
+export function detectPlanRejection(message) {
+    return matchesShortReply(PLAN_REJECTION_WORDS, message);
+}
+
+export const PLAN_MODE_AUTO_NUDGE = '[plan mode auto-entered] The player asked for a multi-step task and you are now in plan mode. Your job this turn: (1) !addTask(description, end_factor) for every step including the final "tell the player" step, in execution order. (2) Post the full plan to chat as a numbered list so the player can review. (3) Stop. Do NOT execute any body-touching command — the gate will reject it. Wait for the player to say "ok"/"yes"/"go" — that auto-exits plan mode and starts task #1. If the player asks for changes, !cancelTask the bad steps and !addTask the new ones.';
+export const PLAN_APPROVED_NUDGE = '[plan approved] The player approved your plan. Plan mode is now off and the first pending task has been auto-started. Execute it.';
+export const PLAN_REJECTED_NUDGE = '[plan rejected] The player wants changes. Plan mode is now off. Listen to what they want, then either revise the queue (!cancelTask the bad steps, !addTask the new ones, !enterPlanMode again to confirm) or just respond and wait for direction.';
+
 // Convenience: returns the list of nudge strings to inject as system messages
 // before the next LLM turn. Skip when from a self-prompt or another bot —
 // those messages don't carry player intent.

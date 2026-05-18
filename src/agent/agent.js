@@ -30,6 +30,12 @@ import {
     isSafeSideChatCommand,
     isPathFailure,
     PATH_FAILURE_NUDGE,
+    detectTaskRequest,
+    detectPlanApproval,
+    detectPlanRejection,
+    PLAN_MODE_AUTO_NUDGE,
+    PLAN_APPROVED_NUDGE,
+    PLAN_REJECTED_NUDGE,
 } from './classify_and_gate.js';
 
 export class Agent {
@@ -569,6 +575,37 @@ export class Agent {
         await this.history.add(source, message);
         for (const nudge of nudgesForUserMessage(message, { self_prompt, from_other_bot })) {
             await this.history.add('system', nudge);
+        }
+        // Phase C2: plan-mode auto-trigger/auto-exit. Player intent → state.
+        //   - Not in plan mode + task-request detected → enter plan mode +
+        //     inject the plan-mode nudge so the LLM proposes a plan instead
+        //     of charging into !startTask.
+        //   - Already in plan mode + clear "yes/ok/go" → exit plan mode and
+        //     auto-start the first pending task (mirrors !exitPlanMode).
+        //   - Already in plan mode + clear "no/cancel/revise" → exit plan mode
+        //     and tell the LLM to listen for changes instead of executing.
+        // Bot/self-prompt messages bypass this — only human input drives plan
+        // mode transitions.
+        if (!self_prompt && !from_other_bot) {
+            if (this.planMode === true) {
+                if (detectPlanApproval(message)) {
+                    this.planMode = false;
+                    let startMsg = '';
+                    try {
+                        const r = this.task_queue?.startTask(null);
+                        if (r?.message) startMsg = ' ' + r.message;
+                    } catch (e) {
+                        console.warn('plan-approval auto-start failed:', e?.message || e);
+                    }
+                    await this.history.add('system', PLAN_APPROVED_NUDGE + startMsg);
+                } else if (detectPlanRejection(message)) {
+                    this.planMode = false;
+                    await this.history.add('system', PLAN_REJECTED_NUDGE);
+                }
+            } else if (detectTaskRequest(message)) {
+                this.planMode = true;
+                await this.history.add('system', PLAN_MODE_AUTO_NUDGE);
+            }
         }
         this.history.save();
 
