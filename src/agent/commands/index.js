@@ -1,6 +1,7 @@
 import { getBlockId, getItemId } from "../../utils/mcdata.js";
 import { actionsList } from './actions.js';
 import { queryList } from './queries.js';
+import { checkPlayerPermission } from '../permissions.js';
 
 let suppressNoDomainWarning = true;
 
@@ -258,6 +259,16 @@ export async function executeCommand(agent, message) {
         }
         if (numArgs !== numParams(command))
             return `Command ${command.name} was given ${numArgs} args, but requires ${numParams(command)} args.`;
+        // Phase I1: global per-player permission gate. Runs first so denial
+        // rules can short-circuit before plan-mode / per-tool hooks. System
+        // inputs and self-prompts bypass — see permissions.js for the matrix.
+        try {
+            const ctx = { agent, source: agent.last_sender };
+            const perm = checkPlayerPermission(agent, command.name, ctx);
+            if (perm && perm.allow === false) return perm.message;
+        } catch (e) {
+            console.warn('checkPlayerPermission threw:', e?.message || e);
+        }
         // Phase C1: plan-mode gate. While agent.planMode is on, body-touching
         // commands are blocked. Read-only and concurrency-safe (non-body)
         // commands pass through. !exitPlanMode is always allowed regardless

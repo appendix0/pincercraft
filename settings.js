@@ -31,6 +31,19 @@ const settings = {
     "init_message": null, // upstream Mindcraft default was "Respond with hello world and your name" — we now use the reboot-context greeting in agent.js instead (queue-aware: "Online and ready" / "Back online, was working on X / picking it up")
     "only_chat_with": ["LosPollos929"], // Floodgate strips its `.` prefix before mineflayer sees the username
 
+    // Phase I1: per-player command permission rules. The chat filter above
+    // (only_chat_with) decides who the bot LISTENS to; this map decides what
+    // each listener can MAKE THE BOT DO. Two layers, not duplicates.
+    //
+    // Pattern syntax: '!exact' exact match, '!prefix*' suffix wildcard,
+    // '!*' or '*' for all commands. deny wins over allow.
+    //
+    // Missing player + missing '*' fallback → default deny. Set "*" with
+    // a permissive allow list if you want strangers to drive the bot.
+    "permissions": {
+        "LosPollos929": { "allow": ["!*"] }
+    },
+
     "speak": false,
     // allows all bots to speak through text-to-speech. 
     // specify speech model inside each profile with format: {provider}/{model}/{voice}.
