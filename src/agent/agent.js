@@ -37,6 +37,10 @@ import {
     PLAN_APPROVED_NUDGE,
     PLAN_REJECTED_NUDGE,
 } from './classify_and_gate.js';
+// Phase H1: player slash-commands ( /init, /review, !!init ) dispatch through
+// a registry instead of going to the LLM. Skill bodies register themselves
+// against this module.
+import { dispatchSlashCommand, parseSlashCommand } from './slash_skills.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
@@ -572,6 +576,24 @@ export class Agent {
         const from_other_bot = convoManager.isOtherAgent(source);
 
         if (!self_prompt && !from_other_bot) { // from user, check for forced commands
+            // Phase H1: slash-skills get first crack — /init, /review, etc.
+            // Players using Bedrock can spell it !!init since vanilla reserves '/'.
+            // Slash dispatch bypasses the LLM entirely: the skill composes the
+            // right !addTask + !newAction chain itself.
+            if (parseSlashCommand(message)) {
+                const slashReply = await dispatchSlashCommand(this, source, message);
+                if (slashReply !== undefined) {
+                    try {
+                        await this.history.add(source, message);
+                        if (slashReply) await this.history.add('system', `(slash skill output) ${slashReply}`);
+                        this.history.save();
+                    } catch (e) {
+                        console.warn('slash-skill history write failed:', e?.message || e);
+                    }
+                    if (slashReply) this.routeResponse(source, slashReply);
+                    return true;
+                }
+            }
             const user_command_name = containsCommand(message);
             if (user_command_name) {
                 if (!commandExists(user_command_name)) {
