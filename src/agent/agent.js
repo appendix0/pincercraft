@@ -42,6 +42,8 @@ import {
 import { dispatchSlashCommand, parseSlashCommand, invokeMetaSkill } from './slash_skills.js';
 // Phase G1+G2: role-based subagent runtime. !dispatchAgent routes through this.
 import { dispatchSubagent, finalizeSubagent, listRoles } from './subagent.js';
+// Phase I2: optional MCP server mode. Disabled by default — toggle via settings.mcp.enabled.
+import { startMcpServer } from '../mcp_server.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
@@ -143,6 +145,22 @@ export class Agent {
         });
 
         initModes(this);
+
+        // Phase I2: MCP server mode (start lazily once the bot is alive but
+        // before login — server only needs the agent reference, not the bot
+        // session). Disabled by default; set settings.mcp.enabled=true to
+        // expose tools on the configured port.
+        if (settings.mcp?.enabled && !this._mcpServer) {
+            try {
+                this._mcpServer = startMcpServer(this, {
+                    port: settings.mcp.port ?? 8765,
+                    host: settings.mcp.host ?? '127.0.0.1',
+                    token: settings.mcp.token ?? null,
+                });
+            } catch (e) {
+                console.warn('[mcp] failed to start:', e?.message || e);
+            }
+        }
 
         this.bot.on('login', () => {
             console.log(this.name, 'logged in!');

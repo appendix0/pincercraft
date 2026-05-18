@@ -72,6 +72,18 @@ const settings = {
     "spawn_timeout": 300, // 5min — first-time MS device-code auth needs time
     "block_place_delay": 0, // delay between placing blocks (ms) if using newAction. helps avoid bot being kicked by anti-cheat mechanisms on servers.
 
+    // Phase I2: MCP server mode. When enabled, the bot exposes a curated set
+    // of its commands as MCP tools via JSON-RPC 2.0 over HTTP on `mcp.port`.
+    // Auth: if `mcp.token` is set, clients must send Authorization: Bearer <token>.
+    // The synthetic player name 'mcp' is the source for external invocations,
+    // so add an entry to `permissions` (above) if you want to gate them.
+    "mcp": {
+        "enabled": false,
+        "host": "127.0.0.1",
+        "port": 8765,
+        "token": null
+    },
+
     // Phase D5: Movements tuning. The smart primitives in src/agent/library/
     // skills.js own their own Movements escalation now (tier 1 default →
     // tier 2 canDig with auto-equipped pickaxe → tier 3 canDig+towers with
