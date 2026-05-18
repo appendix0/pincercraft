@@ -94,8 +94,21 @@ export class Coder {
             } catch (e) {
                 if (this.agent.bot.interrupt_code)
                     return null;
-                
-                console.warn('Generated code threw error: ' + e.toString());
+
+                const errStr = e.toString();
+                console.warn('Generated code threw error: ' + errStr);
+
+                // MISSING_TOOL signal: when bot.equip() is called with null (item
+                // not found in inventory), mineflayer throws "Invalid item object
+                // in equip". Retrying the same code can't fix this — the planner
+                // needs to queue a craft task. Break out of the Coder loop with
+                // a structured signal instead of burning MAX_ATTEMPTS retries.
+                if (/Invalid item object in equip/i.test(errStr)) {
+                    const code_output = this.agent.actions.getBotOutputSummary();
+                    console.warn('Coder hit MISSING_TOOL — returning to planner without retry.');
+                    return `Code Output:\n${code_output}\nMISSING_TOOL: code tried to equip an item that isn't in inventory. The planner must !cancelTask and !addTask to craft the missing tool (and any prerequisite tier) FIRST. Do NOT immediately re-issue !newAction with the same plan.`;
+                }
+
                 console.warn('trying again...');
 
                 const code_output = this.agent.actions.getBotOutputSummary();
@@ -106,7 +119,7 @@ export class Coder {
                 });
                 messages.push({
                     role: 'system',
-                    content: `Code Output:\n${code_output}\nCODE EXECUTION THREW ERROR: ${e.toString()}\n Please try again:`
+                    content: `Code Output:\n${code_output}\nCODE EXECUTION THREW ERROR: ${errStr}\n Please try again:`
                 });
             }
         }
