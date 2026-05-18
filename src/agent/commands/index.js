@@ -242,10 +242,24 @@ export async function executeCommand(agent, message) {
         }
         if (numArgs !== numParams(command))
             return `Command ${command.name} was given ${numArgs} args, but requires ${numParams(command)} args.`;
-        else {
-            const result = await command.perform(agent, ...parsed.args);
-            return result;
+        // Phase B4: per-tool permission gate. The hook receives the parsed
+        // args + a runtime ctx and returns `{ allow: boolean, message?: string }`
+        // (or undefined for allow-by-default). Phase I will populate per-command
+        // checkPermissions for the player-permission system; for now the hook
+        // is wired in but commands don't define it, so nothing is gated.
+        if (typeof command.checkPermissions === 'function') {
+            try {
+                const ctx = { agent, source: agent.last_sender };
+                const perm = command.checkPermissions(parsed.args, ctx) ?? { allow: true };
+                if (perm && perm.allow === false) {
+                    return perm.message || `[permission denied] You cannot use ${command.name} in this context.`;
+                }
+            } catch (e) {
+                console.warn(`checkPermissions threw for ${command.name}:`, e?.message || e);
+            }
         }
+        const result = await command.perform(agent, ...parsed.args);
+        return result;
     }
 }
 
@@ -260,14 +274,30 @@ export function getCommandDocs(agent) {
         'BlockOrItemName':   'string',
         'boolean':           'bool'
     }
-    let docs = `\n*COMMAND DOCS\n You can use the following commands to perform actions and get information about the world. 
+    let docs = `\n*COMMAND DOCS\n You can use the following commands to perform actions and get information about the world.
     Use the commands with the syntax: !commandName or !commandName("arg1", 1.2, ...) if the command takes arguments.\n
     Do not use codeblocks. Use double quotes for strings. Only use one command in each response, trailing commands and comments will be ignored.\n`;
+    // Phase B3: per-tool prompt(ctx) hook. A tool can:
+    //   - return undefined → use the static command.description (default)
+    //   - return a string  → use that string as the rendered description
+    //   - return null      → omit the tool entirely (turn itself off for this turn)
+    // Lets context-sensitive tools self-gate (e.g. hide !goToBed when it's day).
+    const ctx = { agent };
     for (let command of commandList) {
         if (agent.blocked_actions.includes(command.name)) {
             continue;
         }
-        docs += command.name + ': ' + command.description + '\n';
+        let description = command.description;
+        if (typeof command.prompt === 'function') {
+            try {
+                const out = command.prompt(ctx);
+                if (out === null) continue;
+                if (typeof out === 'string') description = out;
+            } catch (e) {
+                console.warn(`command.prompt() threw for ${command.name}:`, e?.message || e);
+            }
+        }
+        docs += command.name + ': ' + description + '\n';
         if (command.params) {
             docs += 'Params:\n';
             for (let param in command.params) {
