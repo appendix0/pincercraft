@@ -40,6 +40,8 @@ import {
 // a registry instead of going to the LLM. Skill bodies register themselves
 // against this module.
 import { dispatchSlashCommand, parseSlashCommand, invokeMetaSkill } from './slash_skills.js';
+// Phase G1+G2: role-based subagent runtime. !dispatchAgent routes through this.
+import { dispatchSubagent, finalizeSubagent, listRoles } from './subagent.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
@@ -313,7 +315,27 @@ export class Agent {
     // bulk-add (3-7 !addTask calls in <2s) collapses to a single summary
     // sent shortly after the last add. Player sees the plan even if the LLM
     // forgot to brief it.
-    _onQueueChange(kind, _task) {
+    _onQueueChange(kind, task) {
+        // Phase G1+G2/G4: when a subagent's task finishes, inject the
+        // [subagent finished] result message into history so the planner
+        // sees the outcome on its next turn. Runs before the chat-brief
+        // logic so concurrent state doesn't race.
+        if (kind === 'finish' && this.activeSubagent && task && task.id === this.activeSubagent.taskId) {
+            try {
+                const msg = finalizeSubagent(this, task.id, { success: true, summary: task.description });
+                if (msg) this.history.add('system', msg);
+            } catch (e) {
+                console.warn('finalizeSubagent failed:', e?.message || e);
+            }
+        }
+        if (kind === 'cancel' && this.activeSubagent && task && task.id === this.activeSubagent.taskId) {
+            try {
+                const msg = finalizeSubagent(this, task.id, { success: false, summary: 'cancelled before completion' });
+                if (msg) this.history.add('system', msg);
+            } catch (e) {
+                console.warn('finalizeSubagent (cancel) failed:', e?.message || e);
+            }
+        }
         if (kind !== 'add') return; // only briefing on adds for now
         clearTimeout(this._planBriefTimer);
         this._planBriefTimer = setTimeout(() => {
@@ -329,6 +351,14 @@ export class Agent {
             } catch (e) { /* ignore */ }
         }, 2500);
     }
+
+    // Phase G1+G2: thin bridge so the !dispatchAgent command can call into
+    // the subagent runtime without each command importing subagent.js.
+    async dispatchSubagent(role, description, endFactor) {
+        return await dispatchSubagent(this, role, description, endFactor);
+    }
+
+    listSubagentRoles() { return listRoles(); }
 
     _rebootContext() {
         const tq = this.task_queue;

@@ -642,6 +642,19 @@ export const actionsList = [
         }
     },
     {
+        name: '!dispatchAgent',
+        isConcurrencySafe: true,
+        description: 'Hand off a focused unit of work to a role-specific subagent (miner, builder, navigator, scout). The subagent runs with a tight role prompt and the higher-quality action model; on !finishTask it returns a [subagent finished] summary. Use when the planner has identified a clearly-scoped sub-task that benefits from a focused mindset (e.g. "mine 5 diamonds" → miner; "go to coords 100,64,-50" → navigator). Only one subagent active at a time.',
+        params: {
+            'role': { type: 'string', description: 'Role name: miner, builder, navigator, or scout.' },
+            'description': { type: 'string', description: 'What the subagent should do, in one sentence.' },
+            'end_factor': { type: 'string', description: 'Observable completion criterion, same shape as !addTask end_factor.' }
+        },
+        perform: async function (agent, role, description, end_factor) {
+            return await agent.dispatchSubagent(role, description, end_factor);
+        }
+    },
+    {
         name: '!exitPlanMode',
         isConcurrencySafe: true,
         description: 'Leave plan mode and start the queued plan. Call after the player has approved the plan you posted in chat. The first pending task auto-starts.',
