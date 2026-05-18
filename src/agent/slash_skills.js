@@ -124,3 +124,121 @@ export async function queueTask(agent, description, end_factor, { autostart = fa
 export async function runCommand(agent, commandText) {
     return await executeCommand(agent, commandText);
 }
+
+// ----------------------------------------------------------------------------
+// Phase H2–H6: player-facing slash skills. Each one decomposes a single
+// player intent into the !addTask + !newAction chain the orchestrator wants.
+// Skills exit plan mode if it's on — typing /init is an unambiguous request,
+// not the kind of ambiguous chat where the plan-mode confirmation is useful.
+// ----------------------------------------------------------------------------
+
+function _xyz(pos) {
+    return `${pos.x.toFixed(0)}/${pos.y.toFixed(0)}/${pos.z.toFixed(0)}`;
+}
+
+// /init — survey spawn area, save coords and biome/landmarks to memory.
+registerSlashSkill('init', {
+    description: 'Survey the current area: save spawn coords, capture biome and key landmarks to memory.',
+    async run(agent, args, ctx) {
+        if (!agent.bot) return 'I\'m not in-world yet — try again in a few seconds.';
+        if (agent.planMode) agent.exitPlanMode();
+        const pos = agent.bot.entity.position;
+        try {
+            agent.memory_bank?.rememberPlace?.('init_spawn', pos.x, pos.y, pos.z);
+        } catch (e) {
+            console.warn('/init rememberPlace failed:', e?.message || e);
+        }
+        agent.task_queue.addTask(
+            `Survey the area for /init invoked from (${_xyz(pos)}). !newAction("Use !stats and !nearbyBlocks to describe: current biome, time of day, nearby water/lava, nearest tree species, highest block above. Then chat a 3-line summary to the player and call !remember(\\"spawn-survey\\", \\"<the summary>\\") so it persists.").`,
+            'spawn-survey memory written and 3-line summary chatted'
+        );
+        try { agent.task_queue.startTask(null); } catch {}
+        return `/init queued from (${_xyz(pos)}). I'll save the spawn point and survey the area.`;
+    },
+});
+
+// /review — quick health/inventory/queue snapshot, no movement.
+registerSlashSkill('review', {
+    description: 'Snapshot: position, time, HP/hunger, top inventory items, and the current task queue.',
+    async run(agent, args, ctx) {
+        if (!agent.bot) return 'I\'m not in-world yet.';
+        const bot = agent.bot;
+        const pos = bot.entity?.position;
+        const time = bot.time?.timeOfDay ?? 0;
+        const timeStr = time < 6000 ? 'morning' : time < 12000 ? 'afternoon' : 'night';
+        const health = Number.isFinite(bot.health) ? Math.round(bot.health) : '?';
+        const hunger = Number.isFinite(bot.food) ? Math.round(bot.food) : '?';
+        const inv = bot.inventory?.items?.() || [];
+        const top = [...inv].sort((a, b) => b.count - a.count).slice(0, 5);
+        const invStr = top.length ? top.map(i => `${i.count}x ${i.name}`).join(', ') : 'empty';
+        const queueText = agent.task_queue
+            ? agent.task_queue.formatForChat({ planMode: agent.planMode === true })
+            : '(no queue)';
+        return `/review · ${pos ? _xyz(pos) : '?'}, ${timeStr}, HP ${health}/20, hunger ${hunger}/20 · inv: ${invStr} · ${queueText}`;
+    },
+});
+
+// /explore <radius> — structured exploration, notes saved to memory.
+registerSlashSkill('explore', {
+    description: 'Explore a radius around the current position. Notes from each cardinal direction are saved to memory. Default radius 32.',
+    async run(agent, args, ctx) {
+        if (!agent.bot) return 'I\'m not in-world yet.';
+        const m = String(args || '').match(/(\d+)/);
+        let radius = m ? Number(m[1]) : 32;
+        radius = Math.max(8, Math.min(128, radius));
+        if (agent.planMode) agent.exitPlanMode();
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 16);
+        const topic = `explore-${ts}`;
+        agent.task_queue.addTask(
+            `Explore radius ${radius} around current position. !newAction("walk ${radius} blocks north then return, repeat for east/south/west, at each turnaround note via !nearbyBlocks: biome, notable ores/structures/hazards. After all four directions, call !remember(\\"${topic}\\", \\"<concise summary with one line per direction including notable findings>\\"). End by chatting the summary to the player.").`,
+            `${topic} memory written with notes from all four directions`
+        );
+        try { agent.task_queue.startTask(null); } catch {}
+        return `/explore: scanning ${radius}-block radius in 4 directions, saving notes to memory (${topic}).`;
+    },
+});
+
+// /sleep — auto-bed when night falls.
+registerSlashSkill('sleep', {
+    description: 'Find the nearest bed and sleep through the night.',
+    async run(agent, args, ctx) {
+        if (!agent.bot) return 'I\'m not in-world yet.';
+        const time = agent.bot.time?.timeOfDay ?? 0;
+        // Beds only work at night (timeOfDay >= 12541) or during thunderstorms.
+        const canSleep = time >= 12000 || agent.bot.thunderState > 0;
+        if (!canSleep) {
+            return `/sleep: it's still daytime (timeOfDay ${time}, beds need ≥12000). Try again at night.`;
+        }
+        if (agent.planMode) agent.exitPlanMode();
+        agent.task_queue.addTask(
+            'Find the nearest bed and sleep. !goToBed and stay until day breaks.',
+            'bot slept through the night (timeOfDay back to morning)'
+        );
+        try { agent.task_queue.startTask(null); } catch {}
+        return `/sleep: heading to bed.`;
+    },
+});
+
+// /restock <item> [target_qty=64] — top up an item to a target quantity.
+registerSlashSkill('restock', {
+    description: 'Top up an item to a target quantity (default 64). Usage: /restock <item> [quantity].',
+    async run(agent, args, ctx) {
+        if (!agent.bot) return 'I\'m not in-world yet.';
+        const tokens = String(args || '').trim().split(/\s+/).filter(Boolean);
+        if (tokens.length === 0) return 'Usage: /restock <item> [target_qty=64]';
+        const item = tokens[0].toLowerCase().replace(/^minecraft:/, '');
+        const target = tokens[1] ? Math.max(1, Math.floor(Number(tokens[1]))) : 64;
+        if (!Number.isFinite(target)) return `Invalid target qty: ${tokens[1]}`;
+        const inv = agent.bot.inventory?.items?.() || [];
+        const have = inv.filter(i => i.name === item).reduce((s, i) => s + i.count, 0);
+        if (have >= target) return `/restock: already have ${have} ${item} (target ${target}). Skipping.`;
+        const need = target - have;
+        if (agent.planMode) agent.exitPlanMode();
+        agent.task_queue.addTask(
+            `Restock ${item} to ${target} (currently ${have}, need ${need} more). !newAction("gather ${need} ${item} via the most efficient route — mine the ore if it's a block, craft from materials if craftable, or check a nearby chest. Equip the right tool first.").`,
+            `${target} ${item} in inventory`
+        );
+        try { agent.task_queue.startTask(null); } catch {}
+        return `/restock: queued ${need} more ${item} (have ${have} of ${target}).`;
+    },
+});
