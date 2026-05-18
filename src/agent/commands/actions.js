@@ -52,13 +52,20 @@ export const actionsList = [
     },
     {
         name: '!stop',
-        description: 'Force stop all actions and commands that are currently executing.',
+        description: 'Force stop the current action AND clear every pending task. Use whenever the player says stop/halt/abort.',
         perform: async function (agent) {
             await agent.actions.stop();
             agent.clearBotLogs();
             agent.actions.cancelResume();
             agent.bot.emit('idle');
             let msg = 'Agent stopped.';
+            // Stop = stop EVERYTHING. Wipe the task queue too — the player's
+            // mental model when they say "stop" is the whole plan, not just
+            // the currently-running step. (2026-05-18 user feedback.)
+            if (agent.task_queue) {
+                const r = agent.task_queue.cancelAllPending();
+                if (r.count > 0) msg += ` Cleared ${r.count} pending task(s).`;
+            }
             if (agent.self_prompter.isActive())
                 msg += ' Self-prompting still active.';
             return msg;

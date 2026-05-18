@@ -139,6 +139,20 @@ export class TaskQueue {
         return {ok: true, message: `Cancelled task #${t.id}: ${t.description}`, task: t};
     }
 
+    // Wipe everything not yet finished. Called by !stop so the player's mental
+    // model ("stop = stop everything") matches reality. Done tasks stay so they
+    // remain visible in history. Fires a 'cancel' event for each so any
+    // listeners (chat surface, persist hooks) react consistently.
+    cancelAllPending() {
+        const cancelled = this.tasks.filter(x => x.status !== STATUS.DONE);
+        if (cancelled.length === 0) return {ok: true, count: 0, message: 'No pending tasks to cancel.'};
+        this.tasks = this.tasks.filter(x => x.status === STATUS.DONE);
+        this._persist();
+        this._log(`cancelAllPending (removed ${cancelled.length})`);
+        cancelled.forEach(t => this._fire('cancel', t));
+        return {ok: true, count: cancelled.length, message: `Cancelled ${cancelled.length} pending task(s).`};
+    }
+
     clearDone() {
         const before = this.tasks.length;
         this.tasks = this.tasks.filter(x => x.status !== STATUS.DONE);
