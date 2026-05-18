@@ -100,14 +100,19 @@ export async function dispatchSubagent(agent, role, description, endFactor) {
 export function finalizeSubagent(agent, completedTaskId, { success = true, summary = '' } = {}) {
     const sub = agent.activeSubagent;
     if (!sub || sub.taskId !== completedTaskId) return null;
-    const result = success ? 'success' : 'failed';
+    // Phase G4: prefer the subagent's own summary (set via !setSubagentSummary)
+    // over the caller-supplied one over '(none)'. The result field can also be
+    // explicitly set by the LLM via !setSubagentResult before !finishTask.
+    const finalSummary = sub.summary || summary || '(none)';
+    const finalSuccess = (sub.result === 'failed') ? false : success;
+    const result = finalSuccess ? 'success' : 'failed';
     const elapsedSec = Math.round((Date.now() - sub.startedAt) / 1000);
     const deltas = inventoryDelta(sub.inventorySnapshot, snapshotInventory(agent));
     const deltaStr = deltas.length ? deltas.map(d => `${d.delta > 0 ? '+' : ''}${d.delta} ${d.name}`).join(', ') : 'no inventory change';
     const pos = snapshotPosition(agent);
     const role = sub.role;
     agent.activeSubagent = null;
-    return `[subagent finished] role=${role} result=${result} elapsed=${elapsedSec}s inventory_delta=[${deltaStr}] position=${pos ? `(${pos.x.toFixed(0)},${pos.y.toFixed(0)},${pos.z.toFixed(0)})` : '?'} summary="${summary || '(none)'}"`;
+    return `[subagent finished] role=${role} result=${result} elapsed=${elapsedSec}s inventory_delta=[${deltaStr}] position=${pos ? `(${pos.x.toFixed(0)},${pos.y.toFixed(0)},${pos.z.toFixed(0)})` : '?'} summary="${finalSummary.replace(/"/g, '\\"')}"`;
 }
 
 function snapshotInventory(agent) {

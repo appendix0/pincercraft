@@ -655,6 +655,52 @@ export const actionsList = [
         }
     },
     {
+        name: '!setSubagentSummary',
+        isConcurrencySafe: true,
+        description: '(subagent-only) Set the summary text that will appear in the [subagent finished] message when the current task is finished. Use right before !finishTask so the planner sees what you actually accomplished — e.g. "Got 5 diamonds at y=12, took 4 minutes, no casualties".',
+        params: {
+            'summary': { type: 'string', description: 'One-line summary of what the subagent did.' }
+        },
+        perform: async function (agent, summary) {
+            if (!agent.activeSubagent) return 'No subagent active — !setSubagentSummary only applies during a !dispatchAgent run.';
+            agent.activeSubagent.summary = String(summary || '').slice(0, 240);
+            return `Subagent summary set: "${agent.activeSubagent.summary}"`;
+        }
+    },
+    {
+        name: '!setSubagentResult',
+        isConcurrencySafe: true,
+        description: '(subagent-only) Mark the current subagent task as failed (only call this if you cannot complete the end_factor). The next [subagent finished] message will report result=failed and the planner can re-plan. Call !finishTask right after to release control.',
+        params: {
+            'result': { type: 'string', description: 'Either "success" or "failed". Default is "success" if !setSubagentResult is never called.' }
+        },
+        perform: async function (agent, result) {
+            if (!agent.activeSubagent) return 'No subagent active.';
+            const v = String(result || '').toLowerCase();
+            if (v !== 'success' && v !== 'failed') return `Invalid result "${result}" — use "success" or "failed".`;
+            agent.activeSubagent.result = v;
+            return `Subagent result will be reported as: ${v}.`;
+        }
+    },
+    {
+        name: '!sendMessage',
+        isConcurrencySafe: true,
+        description: 'Send a one-shot message to another bot on the same mindserver without starting a full conversation. Use for quick coordination signals between paired bots ("I have the iron, meet at coords X"). The receiving bot processes it as a normal bot-to-bot message.',
+        params: {
+            'target_bot': { type: 'string', description: 'Name of the bot to message.' },
+            'content': { type: 'string', description: 'The message to send.' }
+        },
+        perform: async function (agent, target_bot, content) {
+            if (!convoManager.isOtherAgent(target_bot)) return `${target_bot} is not a bot on this server.`;
+            try {
+                convoManager.sendToBot(target_bot, String(content), false, false);
+                return `Sent to ${target_bot}: ${String(content).slice(0, 120)}`;
+            } catch (e) {
+                return `Send failed: ${e?.message || e}`;
+            }
+        }
+    },
+    {
         name: '!exitPlanMode',
         isConcurrencySafe: true,
         description: 'Leave plan mode and start the queued plan. Call after the player has approved the plan you posted in chat. The first pending task auto-starts.',
