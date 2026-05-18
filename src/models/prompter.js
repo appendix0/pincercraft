@@ -194,7 +194,16 @@ export class Prompter {
         }
 
         if (prompt.includes('$MEMORY')) {
-            const mem = this.agent.memory_store ? this.agent.memory_store.serializeIndex() : '';
+            // Phase F4: $MEMORY now renders the layered hierarchy (server +
+            // bot + active-player). Falls back to the bot-only index if the
+            // layered builder isn't available for any reason.
+            let mem = '';
+            try {
+                const { buildLayeredMemoryIndex } = await import('../agent/memory_store.js');
+                mem = buildLayeredMemoryIndex(this.agent);
+            } catch (e) {
+                mem = this.agent.memory_store ? this.agent.memory_store.serializeIndex() : '';
+            }
             prompt = prompt.replaceAll('$MEMORY', mem);
         }
 
