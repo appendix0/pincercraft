@@ -604,7 +604,7 @@ export const actionsList = [
         description: 'Print your current task queue to chat so the player can see it. Use when asked "what are you doing" or "what\'s in your queue".',
         params: {},
         perform: async function (agent) {
-            const text = agent.task_queue.formatForChat();
+            const text = agent.task_queue.formatForChat({ planMode: agent.planMode === true });
             agent.openChat(text);
             return text;
         }
@@ -624,9 +624,10 @@ export const actionsList = [
         description: 'Enter plan mode: propose a multi-step plan via !addTask calls, post the plan in chat, and wait for player approval before executing. While in plan mode, body-touching commands (movement, mining, building, attacking, equipping, chest ops) are BLOCKED — only memory writes, queue mutations, observations, mode toggles, and chat run. Use when a player asks for a non-trivial task and you want to confirm the plan first. Exit with !exitPlanMode after approval.',
         params: {},
         perform: async function (agent) {
-            if (agent.planMode === true) return '[planning] Already in plan mode.';
-            agent.planMode = true;
-            return '[planning] Plan mode on. Add steps with !addTask(description, end_factor), post the plan to chat, then wait for the player to say "ok"/"yes"/"go". On approval, call !exitPlanMode (or the auto-trigger will).';
+            const entered = agent.enterPlanMode();
+            return entered
+                ? '[planning] Plan mode on. Add steps with !addTask(description, end_factor), post the plan to chat, then wait for the player to say "ok"/"yes"/"go". On approval, call !exitPlanMode (or the auto-trigger will).'
+                : '[planning] Already in plan mode.';
         }
     },
     {
@@ -635,8 +636,8 @@ export const actionsList = [
         description: 'Leave plan mode and start the queued plan. Call after the player has approved the plan you posted in chat. The first pending task auto-starts.',
         params: {},
         perform: async function (agent) {
-            if (agent.planMode !== true) return '[executing] Not in plan mode.';
-            agent.planMode = false;
+            const exited = agent.exitPlanMode();
+            if (!exited) return '[executing] Not in plan mode.';
             // Auto-start the next pending task so the player sees motion right
             // after approval — matches blueprint §C2/§C4 ("→ first task auto-starts").
             if (agent.task_queue) {

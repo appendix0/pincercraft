@@ -160,7 +160,9 @@ export class Prompter {
         prompt = prompt.replaceAll('$NAME', this.agent.name);
 
         if (prompt.includes('$TASKQUEUE')) {
-            const tq = this.agent.task_queue ? this.agent.task_queue.serialize() : '';
+            const tq = this.agent.task_queue
+                ? this.agent.task_queue.serialize({ planMode: this.agent.planMode === true })
+                : '';
             prompt = prompt.replaceAll('$TASKQUEUE', tq);
         }
 

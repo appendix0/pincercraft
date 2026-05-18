@@ -169,25 +169,36 @@ export class TaskQueue {
     // list stays focused on what's left to do; cleared via !clearDone. Each
     // line carries its end factor so the model self-checks against the same
     // criterion it set at add-time.
-    serialize() {
+    serialize({ planMode = false } = {}) {
         const live = this.tasks.filter(t => t.status !== STATUS.DONE);
-        if (live.length === 0) return 'Your task queue is empty.';
+        if (live.length === 0) {
+            return planMode
+                ? 'Your task queue is empty — propose a plan via !addTask, then post it to chat for approval.'
+                : 'Your task queue is empty.';
+        }
+        const header = planMode
+            ? 'Your task queue (PLAN MODE — awaiting player approval):'
+            : 'Your task queue:';
         const lines = live.map(t => {
             const tag = t.status === STATUS.IN_PROGRESS ? 'IN PROGRESS' : 'pending';
             const end = t.endFactor ? `  (done when: ${t.endFactor})` : '';
             return `  #${t.id} [${tag}] ${t.description}${end}`;
         });
-        return 'Your task queue:\n' + lines.join('\n');
+        return header + '\n' + lines.join('\n');
     }
 
     // Human-facing chat dump for !showQueue.
-    formatForChat() {
+    formatForChat({ planMode = false } = {}) {
         const live = this.tasks.filter(t => t.status !== STATUS.DONE);
-        if (live.length === 0) return 'No tasks queued.';
-        return live.map(t => {
+        if (live.length === 0) {
+            return planMode ? '[planning] no plan yet — add steps with !addTask' : 'No tasks queued.';
+        }
+        const prefix = planMode ? '[planning] Plan: ' : '[executing] ';
+        const body = live.map(t => {
             const tag = t.status === STATUS.IN_PROGRESS ? '▶' : '○';
             const end = t.endFactor ? ` (done: ${t.endFactor})` : '';
             return `${tag} #${t.id} ${t.description}${end}`;
         }).join(' | ');
+        return prefix + body + (planMode ? '  (say ok to start)' : '');
     }
 }

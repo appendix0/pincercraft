@@ -383,6 +383,41 @@ export class Agent {
         convoManager.endAllConversations();
     }
 
+    // Phase C1/C3: plan-mode lifecycle. Centralized here so the !enterPlanMode
+    // command, the Phase C2 auto-trigger on task-request, and the 10-min stale-
+    // plan timeout all share one source of truth.
+    enterPlanMode() {
+        if (this.planMode === true) return false;
+        this.planMode = true;
+        if (this._planModeTimer) clearTimeout(this._planModeTimer);
+        // Re-ping the player if the plan sits unapproved for 10 minutes. Don't
+        // auto-execute — the bot just nags so an unattended plan doesn't rot
+        // silently (per blueprint §8 open question, biased toward "abort + ping").
+        this._planModeTimer = setTimeout(() => {
+            if (this.planMode === true) {
+                try {
+                    this.routeResponse(
+                        this.last_sender,
+                        '[planning] Plan still on the table — say ok to start, or cancel / revise to scrap it.'
+                    );
+                } catch (e) {
+                    console.warn('plan-mode ping failed:', e?.message || e);
+                }
+            }
+        }, 10 * 60 * 1000);
+        return true;
+    }
+
+    exitPlanMode() {
+        if (this.planMode !== true) return false;
+        this.planMode = false;
+        if (this._planModeTimer) {
+            clearTimeout(this._planModeTimer);
+            this._planModeTimer = null;
+        }
+        return true;
+    }
+
     // Backwards-compat shim. Pre-Phase 1 code called handleMessage directly; now
     // everything flows through the queue.
     handleMessage(source, message, max_responses=null) {
@@ -589,7 +624,7 @@ export class Agent {
         if (!self_prompt && !from_other_bot) {
             if (this.planMode === true) {
                 if (detectPlanApproval(message)) {
-                    this.planMode = false;
+                    this.exitPlanMode();
                     let startMsg = '';
                     try {
                         const r = this.task_queue?.startTask(null);
@@ -599,11 +634,11 @@ export class Agent {
                     }
                     await this.history.add('system', PLAN_APPROVED_NUDGE + startMsg);
                 } else if (detectPlanRejection(message)) {
-                    this.planMode = false;
+                    this.exitPlanMode();
                     await this.history.add('system', PLAN_REJECTED_NUDGE);
                 }
             } else if (detectTaskRequest(message)) {
-                this.planMode = true;
+                this.enterPlanMode();
                 await this.history.add('system', PLAN_MODE_AUTO_NUDGE);
             }
         }
