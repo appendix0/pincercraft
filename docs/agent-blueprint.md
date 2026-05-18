@@ -1,8 +1,9 @@
 # PincerCraft — Agent Blueprint
 
-> Status: draft, 2026-05-17.
+> Status: **Phases A–I shipped 2026-05-18**. Initial draft 2026-05-17.
 > Scope: the Daedelus404 bot's evolution toward a Claude-Code-style agent.
 > Companion: [`queue-design.md`](./queue-design.md) covers the action-queue layer this builds on.
+> Wrap-up: see [CHANGELOG.md](./CHANGELOG.md) for the per-commit shipping log of the overnight build.
 
 ---
 
@@ -82,17 +83,17 @@ The bot needs the same shape. Our `!newAction(prompt)` command is the closest an
 **Decision (2026-05-17):** Phase 1 ships immediately as a small ROI-first patch because the bot is burning tokens *now* on per-step thrash. Once Phase 1 stops the bleeding, everything else is built foundations-first so each piece lands on the proper orchestrator contract instead of being retrofitted later.
 
 ```
-Phase 1  Stop the burn (today, ROI-first)              ← prompt + path-failure classifier
+Phase 1  Stop the burn (today, ROI-first)              ← prompt + path-failure classifier  ✅ shipped 2026-05-17
 ─────────────── switch to foundations-first ───────────────
-Phase A  Orchestrator contract                          ← multi-command parsing, retry, tracking
-Phase B  Tool metadata standardization                  ← isReadOnly, isConcurrencySafe, prompt()
-Phase C  Plan Mode (queue + planning live alive)        ← !enterPlanMode/!exitPlanMode
-Phase D  Smart tools (smartGoTo, smartGather)           ← built on B's contract
-Phase E  `stuck` meta-skill                             ← replaces Phase 1's Lever-2 classifier
-Phase F  Memory unification + layered hierarchy
-Phase G  Coordinator (subagents + SendMessage)
-Phase H  Skill registry (slash skills + meta-skills)
-Phase I  Permissions + MCP server mode
+Phase A  Orchestrator contract                          ← multi-command parsing, retry, tracking  ✅ shipped 2026-05-17
+Phase B  Tool metadata standardization                  ← isReadOnly, isConcurrencySafe, prompt() ✅ shipped 2026-05-18
+Phase C  Plan Mode (queue + planning live alive)        ← !enterPlanMode/!exitPlanMode            ✅ shipped 2026-05-18
+Phase D  Smart tools (smartGoTo, smartGather)           ← built on B's contract                   ✅ shipped 2026-05-18
+Phase E  `stuck` meta-skill                             ← replaces Phase 1's Lever-2 classifier   ✅ shipped 2026-05-18
+Phase F  Memory unification + layered hierarchy                                                   ✅ shipped 2026-05-18
+Phase G  Coordinator (subagents + SendMessage)                                                    ✅ shipped 2026-05-18
+Phase H  Skill registry (slash skills + meta-skills)                                              ✅ shipped 2026-05-18
+Phase I  Permissions + MCP server mode                                                            ✅ shipped 2026-05-18
 ```
 
 The Lever-2 path-failure classifier from Phase 1 is *deliberate throwaway code* — it gets deleted when Phase E lands the proper `stuck` meta-skill. ~30 lines, worth it to stop the burn today.

@@ -64,8 +64,22 @@ PincerCraft-specific notes:
 
 - ✅ Base Mindcraft functionality (inherited from upstream)
 - ✅ NVIDIA NIM endpoint support via OpenAI-compatible adapter
-- ⏳ Lectern-based COC (in progress)
-- ⏳ Session lane + queue modes (design phase)
+- ✅ Lectern-based CLAUDE.md (live-editable in-game rulebook)
+- ✅ Session lane + queue modes (Phase 1 + Phase A shipped)
+- ✅ Claude-Code-style agent orchestrator (Phases A–I, 2026-05-18)
+  - Tool metadata (isReadOnly / isConcurrencySafe / prompt / checkPermissions)
+  - Plan Mode (`!enterPlanMode`/`!exitPlanMode` + auto-trigger on task-request)
+  - Slash skills (`/init`, `/review`, `/explore`, `/sleep`, `/restock`)
+  - Meta-skills (`stuck`, `loop`, `verify`) self-invokable via `!invokeSkill`
+  - Role-based subagents (miner / builder / navigator / scout) via `!dispatchAgent`
+  - Per-subagent model routing (Sonnet for action, Haiku for chat)
+  - Inter-bot `!sendMessage`
+  - Smart pathfinding/gathering/building (`smartGoTo`, `smartGather`, `smartBuildAt`) with tiered escalation
+  - Layered memory (server / bot / per-player)
+  - Per-player permission rules
+  - MCP server mode (external agents can drive the bot)
+
+See [`docs/agent-blueprint.md`](docs/agent-blueprint.md) for the full design.
 
 ## License
 
