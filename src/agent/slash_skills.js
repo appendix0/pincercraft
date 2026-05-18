@@ -230,6 +230,75 @@ registerSlashSkill('sleep', {
 // Stuck state lives on the agent; switching tasks (or cancelling) resets.
 // ----------------------------------------------------------------------------
 
+// 'loop' — progress checker for "keep mining until N" style tasks. The skill
+// doesn't drive the bot itself (that would block the orchestrator); instead
+// it reads inventory and emits a system message that nudges the LLM toward
+// the next iteration or !finishTask.
+registerSlashSkill('loop', {
+    meta: true,
+    description: '(bot-self) Iterative progress check. Args: "<item_name> <target_count>". Use between iterations of a "keep mining/gathering until N" task.',
+    async run(agent, args, ctx) {
+        if (!agent.bot) return '[loop] not in-world.';
+        const tokens = String(args || '').trim().split(/\s+/).filter(Boolean);
+        if (tokens.length < 2) {
+            return '[loop] usage: !invokeSkill("loop", "<item> <target>") — e.g. "iron_ore 64". I need both an item name and a count.';
+        }
+        const item = tokens[0].toLowerCase().replace(/^minecraft:/, '');
+        const target = Math.max(1, Math.floor(Number(tokens[1])));
+        if (!Number.isFinite(target)) return `[loop] invalid target: ${tokens[1]}`;
+        const inv = agent.bot.inventory?.items?.() || [];
+        const have = inv.filter(i => i.name === item).reduce((s, i) => s + i.count, 0);
+        if (have >= target) {
+            return `[loop:complete ${have}/${target} ${item}] Target reached. Your next action MUST be !finishTask — the end_factor is met.`;
+        }
+        const need = target - have;
+        return `[loop:${have}/${target} ${item}] still need ${need}. Your next action MUST be another !newAction("mine ${need} more ${item}; equip the right pickaxe, dig stairs / bridge water if the path requires it"). Do NOT call !finishTask yet — inventory hasn't hit ${target}.`;
+    },
+});
+
+// 'verify' — re-checks the in-progress task's end_factor before !finishTask.
+// Closes the LLM-honor-system loophole where the model marks a task done
+// without actually meeting the criterion. Two deterministic patterns matched
+// (inventory count, coord arrival); everything else falls back to LLM
+// judgment via a "[verify:unknown]" message biased toward "don't finish".
+registerSlashSkill('verify', {
+    meta: true,
+    description: '(bot-self) Re-check the in-progress task end_factor before !finishTask. Returns [verify:pass] (safe to finish), [verify:fail] (keep going), or [verify:unknown] (use judgment).',
+    async run(agent, args, ctx) {
+        if (!agent.bot) return '[verify] not in-world.';
+        const active = agent.task_queue?.tasks?.find(t => t.status === 'in_progress');
+        if (!active) return '[verify] no task in progress.';
+        const end = active.endFactor || '';
+        if (!end) return `[verify] task #${active.id} has no end_factor — !finishTask is unguarded. Add an end_factor next time.`;
+        const lower = end.toLowerCase();
+        // Inventory-count match: "5 iron_ore in inventory" / "64 cobblestone in inventory"
+        const invMatch = lower.match(/(\d+)\s+([a-z_]+)\s+in\s+inventory/);
+        if (invMatch) {
+            const need = Number(invMatch[1]);
+            const item = invMatch[2];
+            const inv = agent.bot.inventory?.items?.() || [];
+            const have = inv.filter(i => i.name === item).reduce((s, i) => s + i.count, 0);
+            if (have >= need) return `[verify:pass] ${have}/${need} ${item} in inventory. End_factor met — !finishTask is safe.`;
+            return `[verify:fail] only ${have}/${need} ${item} in inventory. DO NOT !finishTask — keep working.`;
+        }
+        // Coord-arrival match: "bot at coords 100,64,-50" / "at coords (100, 64, -50)"
+        const coordMatch = lower.match(/at\s+coords?\s*\(?\s*(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)/);
+        if (coordMatch) {
+            const tx = Number(coordMatch[1]);
+            const ty = Number(coordMatch[2]);
+            const tz = Number(coordMatch[3]);
+            const p = agent.bot.entity?.position;
+            if (!p) return '[verify] bot position unavailable.';
+            const dist = Math.hypot(p.x - tx, p.y - ty, p.z - tz);
+            if (dist <= 4) return `[verify:pass] at (${p.x.toFixed(0)},${p.y.toFixed(0)},${p.z.toFixed(0)}), target (${tx},${ty},${tz}), distance ${dist.toFixed(1)}. End_factor met.`;
+            return `[verify:fail] at (${p.x.toFixed(0)},${p.y.toFixed(0)},${p.z.toFixed(0)}), target (${tx},${ty},${tz}), distance ${dist.toFixed(1)}. DO NOT !finishTask — keep moving.`;
+        }
+        // Player-pickup match: "player picked up the pickaxe" — can't deterministically check.
+        // Fall through to unknown so the LLM uses judgment.
+        return `[verify:unknown] end_factor "${end}" doesn't match a deterministic pattern (inventory-count or at-coords). Use !inventory / !stats to judge it yourself. If unsure, do NOT call !finishTask — leave it in progress and continue.`;
+    },
+});
+
 registerSlashSkill('stuck', {
     meta: true,
     description: '(bot-self) Recover from no-progress. 1st trip: rewrite the plan via !newAction. 2nd trip on the same task: !cancelTask + ask the player.',
