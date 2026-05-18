@@ -71,6 +71,14 @@ export class Prompter {
             this.code_model = this.chat_model;
         }
 
+        // Phase G3: per-subagent model cache. Lazy creates a model instance
+        // per role profile's `model` field so the planner turn during a
+        // subagent's lifetime uses the stronger action model (typically
+        // Sonnet) without having to swap chat_model. Keys are model-id
+        // strings; createModel results are cached for process lifetime.
+        this._modelCache = new Map();
+        this._modelCache.set(this.profile.model, this.chat_model);
+
         if (this.profile.vision_model) {
             let vision_model_profile = selectAPI(this.profile.vision_model);
             this.vision_model = createModel(vision_model_profile);
@@ -103,6 +111,25 @@ export class Prompter {
             }
             console.log("Copy profile saved.");
         });
+    }
+
+    // Phase G3: returns the model instance to use for the *current* planner
+    // turn. Defaults to chat_model; if a subagent is active and its role
+    // profile specified a model, lazy-creates + caches that instance and
+    // returns it so the subagent's turns get the stronger action model.
+    _modelForActiveTurn() {
+        const sub = this.agent?.activeSubagent;
+        if (!sub || !sub.model || sub.model === this.profile.model) return this.chat_model;
+        if (!this._modelCache.has(sub.model)) {
+            try {
+                const cfg = selectAPI(sub.model);
+                this._modelCache.set(sub.model, createModel(cfg));
+            } catch (e) {
+                console.warn(`[G3] failed to create subagent model ${sub.model}, falling back to chat_model:`, e?.message || e);
+                this._modelCache.set(sub.model, this.chat_model);
+            }
+        }
+        return this._modelCache.get(sub.model);
     }
 
     getName() {
@@ -270,8 +297,9 @@ export class Prompter {
             let generation;
 
             try {
-                generation = await this.chat_model.sendRequest(messages, prompt);
-                this._recordUsage('convo', this.chat_model);
+                const activeModel = this._modelForActiveTurn();
+                generation = await activeModel.sendRequest(messages, prompt);
+                this._recordUsage('convo', activeModel);
                 if (typeof generation !== 'string') {
                     console.error('Error: Generated response is not a string', generation);
                     throw new Error('Generated response is not a string');
