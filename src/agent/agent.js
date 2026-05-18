@@ -18,53 +18,19 @@ import { Task } from './tasks/tasks.js';
 import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
 import { RunQueue } from './run_queue.js';
-import { InputRouter } from './input_router.js';
 import { humanizeCommand } from './command_humanizer.js';
 import { TaskQueue } from './task_queue.js';
 import { MemoryStore } from './memory_store.js';
 import { RulebookLectern } from './rulebook_lectern.js';
-
-// Player messages containing any of these verbs are treated as actionable
-// requests and get a pre-prompt nudge reminding the LLM to plan via !addTask
-// before executing anything. Safety net for when the prompt rules aren't
-// enough on their own (Haiku drops the discipline under load). False
-// positives are cheap — the nudge just re-states a rule the model already has.
-const TASK_REQUEST_VERBS = /\b(mine|craft|build|make|get|bring|fetch|give|smelt|gather|find|collect|hand|deliver|cook|grab|harvest|chop|dig)\b/i;
-function detectTaskRequest(message) {
-    if (!message || message.length < 4) return false;
-    return TASK_REQUEST_VERBS.test(message);
-}
-
-// Player phrases that signal "save this to long-term memory". Same idea as
-// the task classifier — the prompt already tells the model to call !remember
-// on these cues, but Haiku drops the discipline. The nudge re-asserts the
-// rule right before the model's next response.
-const MEMORY_REQUEST_PATTERNS = /\b(remember|don'?t forget|note that|save (this|that)|from now on|always|never|keep in mind|my name is|i (like|prefer|hate|live|work))\b/i;
-function detectMemoryRequest(message) {
-    if (!message || message.length < 4) return false;
-    return MEMORY_REQUEST_PATTERNS.test(message);
-}
-
-// Patterns in execute_res that indicate a primitive command failed to make
-// progress on the physical world. After 2 in a row, the orchestrator nudges
-// the LLM to escalate to !newAction (Coder dispatch) or !cancelTask —
-// chaining more primitives just burns LLM turns without progress (the
-// 2026-05-17 task #10 diamond-hunt thrash that motivated this fix).
-const PATH_FAILURE_PATTERNS = /(Path not found|Unable to reach|Took to long to decide path|Pathfinding stopped|Cannot break .* with current tools|Don'?t have right tools to break|Could not find any .* in \d+ blocks|Dug down 0 blocks)/i;
-function isPathFailure(execute_res) {
-    if (!execute_res || typeof execute_res !== 'string') return false;
-    return PATH_FAILURE_PATTERNS.test(execute_res);
-}
-
-// Commands that don't touch the bot's body / current action. Safe to execute
-// in parallel with a running task when the player chats mid-task. Without
-// this whitelist, _handleSideChat strips all commands including !remember
-// and !addTask, so the bot silently drops them while busy.
-const SIDE_CHAT_SAFE_COMMANDS = new Set([
-    '!remember', '!rememberHere', '!forget', '!recall', '!listMemory',
-    '!addTask', '!cancelTask', '!showQueue', '!clearDoneTasks',
-    '!setMode', '!loadCOCFromLectern', '!designateRulebookLectern',
-]);
+// Phase A5: classifier + gating logic lives in one module. Previously scattered
+// at the top of this file + a small input_router module.
+import {
+    classifyInput,
+    nudgesForUserMessage,
+    isSafeSideChatCommand,
+    isPathFailure,
+    PATH_FAILURE_NUDGE,
+} from './classify_and_gate.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
@@ -76,7 +42,6 @@ export class Agent {
         // See docs/queue-design.md.
         this.alive = true;
         this.run_queue = new RunQueue();
-        this.input_router = new InputRouter();
 
         // Initialize components
         this.actions = new ActionManager(this);
@@ -425,7 +390,7 @@ export class Agent {
             console.warn('enqueue ignored empty input:', input);
             return;
         }
-        const mode = this.input_router.classify(input);
+        const mode = classifyInput(input);
         input.mode = mode;
         if (mode === 'interrupt') {
             if (this.run_queue.state === 'running') {
@@ -490,7 +455,7 @@ export class Agent {
             const deferred = [];
             for (const span of cmdSpans) {
                 const cmdName = span.commandName;
-                if (SIDE_CHAT_SAFE_COMMANDS.has(cmdName)) {
+                if (isSafeSideChatCommand(cmdName)) {
                     const cmdText = res.substring(span.startIndex, span.endIndex);
                     try {
                         const execRes = await executeCommand(this, cmdText);
@@ -596,11 +561,8 @@ export class Agent {
         }
 
         await this.history.add(source, message);
-        if (!self_prompt && !from_other_bot && detectTaskRequest(message)) {
-            await this.history.add('system', '[task request detected] Your first action this turn MUST be one or more !addTask(description, end_factor) calls — one per step, in execution order, including the final "tell the player" step. Only AFTER all !addTask calls may you execute the first task. Do not call any other command first.');
-        }
-        if (!self_prompt && !from_other_bot && detectMemoryRequest(message)) {
-            await this.history.add('system', '[memory cue detected] This message contains a fact worth keeping across sessions. Call !remember(topic, content) with a kebab-case topic slug — either now, or as the first step of your plan if you also have a task to do. Do not skip this. For exact coordinates use !rememberHere instead.');
+        for (const nudge of nudgesForUserMessage(message, { self_prompt, from_other_bot })) {
+            await this.history.add('system', nudge);
         }
         this.history.save();
 
@@ -690,7 +652,7 @@ export class Agent {
                         } else if (isPathFailure(execute_res)) {
                             this._consecutivePathFailures = (this._consecutivePathFailures || 0) + 1;
                             if (this._consecutivePathFailures >= 2) {
-                                this.history.add('system', `[pathfinding stuck — ${this._consecutivePathFailures} consecutive failures] Your next action MUST be !newAction(detailed_prompt) with a multi-step plan that handles the obstacle (dig stairs through stone, bridge water with cobblestone, tower up with dirt). Be specific about materials and target coords. If no such plan is possible, call !cancelTask and tell the player you're stuck. Chaining another primitive will not work.`);
+                                this.history.add('system', PATH_FAILURE_NUDGE(this._consecutivePathFailures));
                             }
                         } else {
                             this._consecutivePathFailures = 0;
