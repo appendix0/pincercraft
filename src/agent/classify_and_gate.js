@@ -115,3 +115,37 @@ export function isPathFailure(execute_res) {
     if (!execute_res || typeof execute_res !== 'string') return false;
     return PATH_FAILURE_PATTERNS.test(execute_res);
 }
+
+// ----------------------------------------------------------------------------
+// 5. !newAction tool-availability gate — runs on the prompt arg before the
+//    Coder is invoked. Catches the failure mode where the planner names a
+//    tool ("dig with iron_pickaxe") that isn't in the bot's inventory.
+//    Saves a wasted Coder turn + pathfinder timeout on a doomed plan.
+//    Phase D `smartGoTo`/`smartGather` will eventually subsume this by making
+//    tool selection internal to the tool, but until then the deterministic
+//    check is the cheapest belt to the planner prompt's suspenders.
+// ----------------------------------------------------------------------------
+
+const TOOL_KEYWORDS = [
+    'wooden_pickaxe', 'stone_pickaxe', 'iron_pickaxe', 'diamond_pickaxe', 'golden_pickaxe', 'netherite_pickaxe',
+    'wooden_axe', 'stone_axe', 'iron_axe', 'diamond_axe', 'golden_axe', 'netherite_axe',
+    'wooden_shovel', 'stone_shovel', 'iron_shovel', 'diamond_shovel', 'golden_shovel', 'netherite_shovel',
+    'wooden_sword', 'stone_sword', 'iron_sword', 'diamond_sword', 'golden_sword', 'netherite_sword',
+    'wooden_hoe', 'stone_hoe', 'iron_hoe', 'diamond_hoe', 'golden_hoe', 'netherite_hoe',
+    'shears', 'fishing_rod', 'flint_and_steel', 'shield',
+];
+
+export function findMissingToolsInPrompt(promptText, inventoryItems) {
+    if (!promptText || typeof promptText !== 'string') return [];
+    const lower = promptText.toLowerCase();
+    const have = new Set((inventoryItems || []).map(it => it?.name).filter(Boolean));
+    const missing = new Set();
+    for (const tool of TOOL_KEYWORDS) {
+        // Word-boundary match so "iron_ingot" doesn't trigger "iron_pickaxe" etc.
+        const re = new RegExp(`\\b${tool}\\b`, 'i');
+        if (re.test(lower) && !have.has(tool)) missing.add(tool);
+    }
+    return Array.from(missing);
+}
+
+export const MISSING_TOOL_REJECT = (missing) => `[tool check failed] Your !newAction prompt named ${missing.join(', ')} but $INVENTORY has none of these. The Coder cannot equip a tool you don't have, and pathfinder will time out trying to break blocks. DO NOT retry with the same plan. Choose ONE: (1) !cancelTask, then !addTask to craft ${missing[0]} (with any prerequisite tier — stone needs wooden_pickaxe, iron_ore needs stone_pickaxe, diamond_ore needs iron_pickaxe), then re-add the original mine task at the end. (2) Rewrite !newAction to only use tools currently in $INVENTORY.`;

@@ -1,6 +1,7 @@
 import * as skills from '../library/skills.js';
 import settings from '../settings.js';
 import convoManager from '../conversation.js';
+import { findMissingToolsInPrompt, MISSING_TOOL_REJECT } from '../classify_and_gate.js';
 
 
 function runAsAction (actionFn, resume = false, timeout = -1) {
@@ -34,9 +35,17 @@ export const actionsList = [
         },
         perform: async function(agent, prompt) {
             // just ignore prompt - it is now in context in chat history
-            if (!settings.allow_insecure_coding) { 
+            if (!settings.allow_insecure_coding) {
                 agent.openChat('newAction is disabled. Enable with allow_insecure_coding=true in settings.js');
                 return "newAction not allowed! Code writing is disabled in settings. Notify the user.";
+            }
+            // Tool-availability gate: reject prompts that name tools the bot
+            // doesn't have, before burning a Coder turn + pathfinder timeout.
+            const inv = agent.bot?.inventory?.items?.() || [];
+            const missing = findMissingToolsInPrompt(prompt, inv);
+            if (missing.length > 0) {
+                console.log('[tool-gate] rejecting !newAction, missing:', missing.join(', '));
+                return MISSING_TOOL_REJECT(missing);
             }
             let result = "";
             const actionFn = async () => {
