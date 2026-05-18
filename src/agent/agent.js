@@ -29,7 +29,6 @@ import {
     nudgesForUserMessage,
     isSafeSideChatCommand,
     isPathFailure,
-    PATH_FAILURE_NUDGE,
     detectTaskRequest,
     detectPlanApproval,
     detectPlanRejection,
@@ -40,7 +39,7 @@ import {
 // Phase H1: player slash-commands ( /init, /review, !!init ) dispatch through
 // a registry instead of going to the LLM. Skill bodies register themselves
 // against this module.
-import { dispatchSlashCommand, parseSlashCommand } from './slash_skills.js';
+import { dispatchSlashCommand, parseSlashCommand, invokeMetaSkill } from './slash_skills.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
@@ -422,6 +421,12 @@ export class Agent {
         return true;
     }
 
+    // Phase E/H7: bridge so commands (e.g. !invokeSkill) can hit the meta-skill
+    // registry without each command needing its own slash_skills.js import.
+    async invokeMetaSkill(name, args = '') {
+        return await invokeMetaSkill(this, name, args);
+    }
+
     // Backwards-compat shim. Pre-Phase 1 code called handleMessage directly; now
     // everything flows through the queue.
     handleMessage(source, message, max_responses=null) {
@@ -746,13 +751,24 @@ export class Agent {
 
                     if (execute_res) {
                         this.history.add('system', execute_res);
-                        // Per-command path-failure tracking (Phase 1 classifier; replaced by `stuck` skill in Phase E).
-                        if (cmdName === '!newAction' || cmdName === '!cancelTask') {
+                        // Phase E/H7: deterministic stuck-detection tripwire. On
+                        // the second consecutive primitive that returned a path/
+                        // tool failure pattern, auto-invoke the 'stuck' meta-skill.
+                        // The skill owns the escalation script (!newAction rewrite
+                        // → !cancelTask + ping player). The old PATH_FAILURE_NUDGE
+                        // injection is gone — `stuck` covers it more generally.
+                        if (cmdName === '!newAction' || cmdName === '!cancelTask' || cmdName === '!invokeSkill') {
                             this._consecutivePathFailures = 0;
                         } else if (isPathFailure(execute_res)) {
                             this._consecutivePathFailures = (this._consecutivePathFailures || 0) + 1;
                             if (this._consecutivePathFailures >= 2) {
-                                this.history.add('system', PATH_FAILURE_NUDGE(this._consecutivePathFailures));
+                                try {
+                                    const stuckOut = await this.invokeMetaSkill('stuck', `${this._consecutivePathFailures} consecutive primitive failures`);
+                                    if (stuckOut) this.history.add('system', stuckOut);
+                                } catch (e) {
+                                    console.warn('stuck auto-invoke failed:', e?.message || e);
+                                }
+                                this._consecutivePathFailures = 0;
                             }
                         } else {
                             this._consecutivePathFailures = 0;

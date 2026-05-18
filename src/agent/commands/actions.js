@@ -631,6 +631,17 @@ export const actionsList = [
         }
     },
     {
+        name: '!invokeSkill',
+        isConcurrencySafe: true,
+        description: 'Invoke a bot-side meta-skill (stuck, loop, verify) by name. Returns the skill\'s result as a system message so the next LLM turn can act on it. Use when you detect a meta-behavior is needed — e.g. !invokeSkill("stuck") when consecutive primitive failures mean a !newAction rewrite is the only way forward.',
+        params: {
+            'name': { type: 'string', description: 'Skill name to invoke (stuck, loop, verify).' }
+        },
+        perform: async function (agent, name) {
+            return await agent.invokeMetaSkill(name);
+        }
+    },
+    {
         name: '!exitPlanMode',
         isConcurrencySafe: true,
         description: 'Leave plan mode and start the queued plan. Call after the player has approved the plan you posted in chat. The first pending task auto-starts.',

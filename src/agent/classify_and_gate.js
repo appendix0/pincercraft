@@ -166,9 +166,12 @@ export function isSafeSideChatCommand(cmd, args = []) {
 //    !cancelTask. Phase E's `stuck` meta-skill replaces this.
 // ----------------------------------------------------------------------------
 
+// Phase E/H7: this stays as the tripwire detector. The *response* used to be
+// a direct PATH_FAILURE_NUDGE injection (Phase 1's Lever-2); now it triggers
+// the 'stuck' meta-skill, which owns the escalation script. The old NUDGE
+// export has been removed — every previous caller goes through invokeMetaSkill
+// instead.
 const PATH_FAILURE_PATTERNS = /(Path not found|Unable to reach|Took to long to decide path|Pathfinding stopped|Cannot break .* with current tools|Don'?t have right tools to break|Could not find any .* in \d+ blocks|Dug down 0 blocks)/i;
-
-export const PATH_FAILURE_NUDGE = (n) => `[pathfinding stuck — ${n} consecutive failures] Your next action MUST be !newAction(detailed_prompt) with a multi-step plan that handles the obstacle (dig stairs through stone, bridge water with cobblestone, tower up with dirt). Be specific about materials and target coords. If no such plan is possible, call !cancelTask and tell the player you're stuck. Chaining another primitive will not work.`;
 
 export function isPathFailure(execute_res) {
     if (!execute_res || typeof execute_res !== 'string') return false;

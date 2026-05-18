@@ -219,6 +219,53 @@ registerSlashSkill('sleep', {
     },
 });
 
+// ----------------------------------------------------------------------------
+// Phase E + H7: 'stuck' meta-skill. Self-invokable by the bot via
+// !invokeSkill("stuck") or auto-invoked by the orchestrator when the
+// path-failure tripwire fires. Replaces the old PATH_FAILURE_NUDGE pattern
+// with a stateful two-step escalation:
+//   1st trip on the same task: nudge the LLM to use !newAction with a
+//     concrete obstacle-handling plan instead of chaining primitives.
+//   2nd trip on the same task: cancel the task and ask the player for help.
+// Stuck state lives on the agent; switching tasks (or cancelling) resets.
+// ----------------------------------------------------------------------------
+
+registerSlashSkill('stuck', {
+    meta: true,
+    description: '(bot-self) Recover from no-progress. 1st trip: rewrite the plan via !newAction. 2nd trip on the same task: !cancelTask + ask the player.',
+    async run(agent, args, ctx) {
+        const active = agent.task_queue?.tasks?.find(t => t.status === 'in_progress');
+        const activeId = active?.id ?? 0;
+        agent._stuckState = agent._stuckState || { taskId: 0, count: 0 };
+        if (agent._stuckState.taskId !== activeId) {
+            agent._stuckState = { taskId: activeId, count: 0 };
+        }
+        agent._stuckState.count++;
+        const trip = agent._stuckState.count;
+        const reason = String(args || '').trim() || 'repeated path/tool failures';
+        if (trip === 1) {
+            return `[stuck:1] ${reason}. Your next action MUST be !newAction(detailed_prompt) with a concrete multi-step plan that addresses the obstacle: dig stairs through stone, bridge water with cobblestone, tower up with dirt. Be specific about materials and target coords. Chaining another primitive will not work.`;
+        }
+        // 2nd+ trip: cancel + ping player.
+        let cancelDetail = '';
+        if (active) {
+            try {
+                const r = agent.task_queue.cancelTask(active.id);
+                cancelDetail = r?.message || '';
+            } catch (e) {
+                cancelDetail = `cancel failed: ${e?.message || e}`;
+            }
+        }
+        try {
+            const desc = active?.description ? `"${active.description}"` : 'the current task';
+            agent.openChat?.(`I'm stuck on ${desc} (${reason}). Want me to skip it or try a different approach?`);
+        } catch {}
+        // Reset state so a fresh attempt starts at trip 1.
+        agent._stuckState = { taskId: 0, count: 0 };
+        return `[stuck:${trip}] Stuck on task #${active?.id ?? '?'} (${reason}). Cancelled (${cancelDetail}) and pinged the player. Don't retry the same plan — wait for direction.`;
+    },
+});
+
 // /restock <item> [target_qty=64] — top up an item to a target quantity.
 registerSlashSkill('restock', {
     description: 'Top up an item to a target quantity (default 64). Usage: /restock <item> [quantity].',
