@@ -345,3 +345,11 @@ export const queryList = [
         }
     },
 ];
+
+// Phase B1+B2: every query is a pure observation — readOnly and concurrency-safe
+// by definition. Marking the whole list at once keeps the per-command entries
+// uncluttered and gives any future addition the right defaults automatically.
+for (const q of queryList) {
+    if (q.isReadOnly === undefined) q.isReadOnly = true;
+    if (q.isConcurrencySafe === undefined) q.isConcurrencySafe = true;
+}

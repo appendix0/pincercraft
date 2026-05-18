@@ -61,6 +61,7 @@ export const actionsList = [
     },
     {
         name: '!stop',
+        isConcurrencySafe: true,
         description: 'Force stop the current action AND clear every pending task. Use whenever the player says stop/halt/abort.',
         perform: async function (agent) {
             await agent.actions.stop();
@@ -82,6 +83,7 @@ export const actionsList = [
     },
     {
         name: '!stfu',
+        isConcurrencySafe: true,
         description: 'Stop all chatting and self prompting, but continue current action.',
         perform: async function (agent) {
             agent.openChat('Shutting up.');
@@ -98,6 +100,7 @@ export const actionsList = [
     },
     {
         name: '!clearChat',
+        isConcurrencySafe: true,
         description: 'Clear the chat history.',
         perform: async function (agent) {
             agent.history.clear();
@@ -175,6 +178,7 @@ export const actionsList = [
     },
     {
         name: '!rememberHere',
+        isConcurrencySafe: true,
         description: 'Save the current location with a given name.',
         params: {'name': { type: 'string', description: 'The name to remember the location as.' }},
         perform: async function (agent, name) {
@@ -389,6 +393,7 @@ export const actionsList = [
     },
     {
         name: '!setMode',
+        isConcurrencySafe: true,
         description: 'Set a mode to on or off. A mode is an automatic behavior that constantly checks and responds to the environment.',
         params: {
             'mode_name': { type: 'string', description: 'The name of the mode to enable.' },
@@ -406,6 +411,7 @@ export const actionsList = [
     },
     {
         name: '!goal',
+        isConcurrencySafe: true,
         description: 'Set a goal prompt to endlessly work towards with continuous self-prompting.',
         params: {
             'selfPrompt': { type: 'string', description: 'The goal prompt.' },
@@ -421,6 +427,7 @@ export const actionsList = [
     },
     {
         name: '!endGoal',
+        isConcurrencySafe: true,
         description: 'Call when you have accomplished your goal. It will stop self-prompting and the current action. ',
         perform: async function (agent) {
             agent.self_prompter.stop();
@@ -449,6 +456,7 @@ export const actionsList = [
     },
     {
         name: '!startConversation',
+        isConcurrencySafe: true,
         description: 'Start a conversation with a bot. (FOR OTHER BOTS ONLY)',
         params: {
             'player_name': { type: 'string', description: 'The name of the player to send the message to.' },
@@ -466,6 +474,7 @@ export const actionsList = [
     },
     {
         name: '!endConversation',
+        isConcurrencySafe: true,
         description: 'End the conversation with the given bot. (FOR OTHER BOTS ONLY)',
         params: {
             'player_name': { type: 'string', description: 'The name of the player to end the conversation with.' }
@@ -545,6 +554,7 @@ export const actionsList = [
     },
     {
         name: '!addTask',
+        isConcurrencySafe: true,
         description: 'Add a task to your own queue. Every task REQUIRES an end_factor — the observable condition that means the task is complete. Without an end factor the task is rejected. The task queue (with end factors) is shown to you at the top of every prompt.',
         params: {
             'description': { type: 'string', description: 'Short description of the task (e.g. "mine 5 iron_ore", "build a 3x3 oak_planks wall").' },
@@ -556,6 +566,7 @@ export const actionsList = [
     },
     {
         name: '!startTask',
+        isConcurrencySafe: true,
         description: 'Mark a task as in-progress so you and the player know what you\'re working on. Omit id to start the next pending task.',
         params: {
             'id': { type: 'int', description: 'Task id to start, or -1 to start the next pending task.', domain: [-1, Number.MAX_SAFE_INTEGER] }
@@ -566,6 +577,7 @@ export const actionsList = [
     },
     {
         name: '!finishTask',
+        isConcurrencySafe: true,
         description: 'Mark the current in-progress task done. Call this when you\'ve completed what was asked. Omit id to finish the in-progress task.',
         params: {
             'id': { type: 'int', description: 'Task id to finish, or -1 to finish whatever is in progress.', domain: [-1, Number.MAX_SAFE_INTEGER] }
@@ -576,6 +588,7 @@ export const actionsList = [
     },
     {
         name: '!cancelTask',
+        isConcurrencySafe: true,
         description: 'Remove a task from your queue (e.g. when the player tells you to skip it).',
         params: {
             'id': { type: 'int', description: 'Task id to cancel.', domain: [1, Number.MAX_SAFE_INTEGER] }
@@ -586,6 +599,8 @@ export const actionsList = [
     },
     {
         name: '!showQueue',
+        isReadOnly: true,
+        isConcurrencySafe: true,
         description: 'Print your current task queue to chat so the player can see it. Use when asked "what are you doing" or "what\'s in your queue".',
         params: {},
         perform: async function (agent) {
@@ -596,6 +611,7 @@ export const actionsList = [
     },
     {
         name: '!clearDoneTasks',
+        isConcurrencySafe: true,
         description: 'Remove all completed tasks from your queue to keep it tidy.',
         params: {},
         perform: async function (agent) {
@@ -604,6 +620,7 @@ export const actionsList = [
     },
     {
         name: '!remember',
+        isConcurrencySafe: true,
         description: 'Save a persistent fact to your memory directory (survives reboots). Use for player preferences, world locations (non-coord), strategies, anything you should still know next session. For exact coordinates use !rememberHere instead. The MEMORY.md index is in every prompt; topic details load via !recall.',
         params: {
             'topic': { type: 'string', description: 'Short kebab-case slug (e.g. "lospollos929-prefs", "village-trading-tips", "lava-near-mining-tunnel"). Reused topic name = update.' },
@@ -615,6 +632,8 @@ export const actionsList = [
     },
     {
         name: '!recall',
+        isReadOnly: true,
+        isConcurrencySafe: true,
         description: 'Read the full content of a saved memory topic. Use when MEMORY.md shows a topic relevant to what you\'re doing and you need details. Returns the topic file body.',
         params: {
             'topic': { type: 'string', description: 'Topic slug from MEMORY.md (e.g. "lospollos929-prefs").' }
@@ -625,6 +644,7 @@ export const actionsList = [
     },
     {
         name: '!forget',
+        isConcurrencySafe: true,
         description: 'Delete a saved memory topic. Use when a memory is wrong, outdated, or the player asks you to forget it.',
         params: {
             'topic': { type: 'string', description: 'Topic slug to delete.' }
@@ -635,6 +655,8 @@ export const actionsList = [
     },
     {
         name: '!listMemory',
+        isReadOnly: true,
+        isConcurrencySafe: true,
         description: 'Chat the list of saved memory topics to the player. Use when asked what you remember.',
         params: {},
         perform: async function (agent) {
@@ -645,6 +667,7 @@ export const actionsList = [
     },
     {
         name: '!loadCOCFromLectern',
+        isConcurrencySafe: true,
         description: 'Read the written_book on the nearest lectern and replace your Code of Conduct (CLAUDE.md) with its contents. The new rules apply from the next turn onward. Use when a player tells you to "read the rulebook", "update the rules", or "load the lectern". You must be within 8 blocks of the lectern; if not, !goToPlayer or !goToPosition first.',
         params: {},
         perform: runAsAction(async (agent) => {
@@ -653,6 +676,7 @@ export const actionsList = [
     },
     {
         name: '!designateRulebookLectern',
+        isConcurrencySafe: true,
         description: 'Mark the nearest lectern (within 8 blocks) as the official rulebook. From then on, whenever a player edits the book on that lectern (takes it off, edits, places back), you automatically re-read it and update CLAUDE.md — no command needed. Use when a player says "this lectern is the rulebook" or "set the rulebook here". The lectern\'s chunk must stay loaded for auto-updates to work.',
         params: {},
         perform: async function (agent) {

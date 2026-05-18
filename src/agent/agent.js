@@ -4,7 +4,7 @@ import { VisionInterpreter } from './vision/vision_interpreter.js';
 import { Prompter } from '../models/prompter.js';
 import { initModes } from './modes.js';
 import { initBot } from '../utils/mcdata.js';
-import { containsCommand, commandExists, executeCommand, truncCommandMessage, isAction, blacklistCommands, findAllCommandSpans } from './commands/index.js';
+import { containsCommand, commandExists, executeCommand, truncCommandMessage, isAction, blacklistCommands, findAllCommandSpans, getCommand } from './commands/index.js';
 import { ActionManager } from './action_manager.js';
 import { NPCContoller } from './npc/controller.js';
 import { MemoryBank } from './memory_bank.js';
@@ -455,7 +455,7 @@ export class Agent {
             const deferred = [];
             for (const span of cmdSpans) {
                 const cmdName = span.commandName;
-                if (isSafeSideChatCommand(cmdName)) {
+                if (isSafeSideChatCommand(getCommand(cmdName))) {
                     const cmdText = res.substring(span.startIndex, span.endIndex);
                     try {
                         const execRes = await executeCommand(this, cmdText);

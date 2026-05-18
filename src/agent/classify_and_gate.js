@@ -83,21 +83,36 @@ export function nudgesForUserMessage(message, { self_prompt = false, from_other_
 // 3. Side-chat command gating — runs per parsed command in the mid-task chat
 //    path. Body-touching commands are deferred until the running task ends;
 //    non-body commands (memory, queue, mode) execute in parallel.
+//
+// Phase B1+B2: each command now carries its own `isConcurrencySafe` flag
+// (boolean or `(args) => boolean`) defined alongside the command itself in
+// actions.js / queries.js. We resolve that flag here. The old hardcoded
+// SIDE_CHAT_SAFE_COMMANDS Set is gone — adding a new safe command no longer
+// requires touching this file.
 // ----------------------------------------------------------------------------
 
-export const SIDE_CHAT_SAFE_COMMANDS = new Set([
-    '!remember', '!rememberHere', '!forget', '!recall', '!listMemory',
-    '!addTask', '!cancelTask', '!showQueue', '!clearDoneTasks',
-    '!setMode', '!loadCOCFromLectern', '!designateRulebookLectern',
-    // !stop is body-affecting BY DESIGN — its purpose is to halt the running
-    // body action. Allowed in side-chat so the LLM can act on ambiguous halt
-    // intent the regex classifier misses (e.g. "Hey stop what you are doing").
-    // Pairs with the HALT INTENT rule in the conversing prompt.
-    '!stop',
-]);
+// Resolve a per-command flag that may be a boolean or a function of args.
+function resolveFlag(flag, args) {
+    if (typeof flag === 'function') return !!flag(args ?? []);
+    return !!flag;
+}
 
-export function isSafeSideChatCommand(cmdName) {
-    return SIDE_CHAT_SAFE_COMMANDS.has(cmdName);
+// Phase B / C / I check: pure observation, can run in plan mode, never needs
+// a permission prompt. Pass the command object (from getCommand(name)).
+export function isReadOnlyCommand(cmd, args = []) {
+    if (!cmd) return false;
+    return resolveFlag(cmd.isReadOnly, args);
+}
+
+// Phase A/B check: command does not touch the bot's body and can be executed
+// in parallel with a running task. Used by the side-chat dispatch path.
+// !stop is body-affecting BY DESIGN — its purpose is to halt the running
+// body action. Marking it concurrency-safe in actions.js lets the LLM act on
+// ambiguous halt intent the regex classifier misses (e.g. "Hey stop what you
+// are doing"). Pairs with the HALT INTENT rule in the conversing prompt.
+export function isSafeSideChatCommand(cmd, args = []) {
+    if (!cmd) return false;
+    return resolveFlag(cmd.isConcurrencySafe, args);
 }
 
 // ----------------------------------------------------------------------------
