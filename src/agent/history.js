@@ -74,7 +74,13 @@ export class History {
             while (this.turns.length > 0 && this.turns[0].role === 'assistant')
                 chunk.push(this.turns.shift()); // remove until turns starts with system/user message
 
-            await this.summarizeMemories(chunk);
+            // Phase F1: legacy saving_memory summarizer is dormant. It used to
+            // call this.summarizeMemories(chunk) which round-tripped to the LLM
+            // to compress old turns into this.memory — but the new MemoryStore
+            // owns $MEMORY now, so summarizeMemories was producing text that
+            // never reached any prompt. Skipping the call saves an LLM round
+            // trip per max_messages rollover and stops the polluting "current
+            // task state" leak the blueprint flagged.
             await this.appendFullHistory(chunk);
         }
     }

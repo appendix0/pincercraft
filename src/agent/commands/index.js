@@ -120,6 +120,22 @@ export function parseCommandMessage(message) {
         let arg = args[i].trim();
         if ((arg.startsWith('"') && arg.endsWith('"')) || (arg.startsWith("'") && arg.endsWith("'"))) {
             arg = arg.substring(1, arg.length-1);
+            // Phase F2: interpret JSON-style escape sequences so multi-line
+            // content (especially !remember) isn't stored as literal "\n".
+            // Conservative — only the standard escapes; unknown escapes pass
+            // through as the literal char to avoid surprising the LLM.
+            arg = arg.replace(/\\([nrt"\\'/])/g, (_, ch) => {
+                switch (ch) {
+                    case 'n': return '\n';
+                    case 'r': return '\r';
+                    case 't': return '\t';
+                    case '\\': return '\\';
+                    case '"': return '"';
+                    case "'": return "'";
+                    case '/': return '/';
+                    default: return ch;
+                }
+            });
         }
         
         //Convert to the correct type

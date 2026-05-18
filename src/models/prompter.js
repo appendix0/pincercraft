@@ -235,8 +235,11 @@ export class Prompter {
         }
         if (prompt.includes('$EXAMPLES') && examples !== null)
             prompt = prompt.replaceAll('$EXAMPLES', await examples.createExampleMessage(messages));
-        if (prompt.includes('$MEMORY'))
-            prompt = prompt.replaceAll('$MEMORY', this.agent.history.memory);
+        // Phase F1: the legacy `$MEMORY → history.memory` replacement that
+        // used to live here is gone — the earlier replaceStrings($MEMORY ↔
+        // memory_store) wins for every prompt, and the saving_memory
+        // pipeline is dormant. Removed to avoid the appearance of two
+        // sources of truth for $MEMORY.
         if (prompt.includes('$TO_SUMMARIZE'))
             prompt = prompt.replaceAll('$TO_SUMMARIZE', stringifyTurns(to_summarize));
         if (prompt.includes('$CONVO'))
