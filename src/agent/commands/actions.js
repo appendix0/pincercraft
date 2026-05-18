@@ -131,15 +131,18 @@ export const actionsList = [
     },
     {
         name: '!goToCoordinates',
-        description: 'Go to the given x, y, z location.',
+        description: 'Go to the given x, y, z location. Tries default pathfinding, then escalates to digging through obstacles and bridging/towering with inventory blocks. Returns a terminal result — if it fails, escalate to !newAction with custom obstacle handling (or !invokeSkill("stuck")).',
         params: {
             'x': {type: 'float', description: 'The x coordinate.', domain: [-Infinity, Infinity]},
             'y': {type: 'float', description: 'The y coordinate.', domain: [-64, 320]},
             'z': {type: 'float', description: 'The z coordinate.', domain: [-Infinity, Infinity]},
             'closeness': {type: 'float', description: 'How close to get to the location.', domain: [0, Infinity]}
         },
+        // Phase D4: rebound to smartGoTo. Original skills.goToPosition kept as
+        // a low-level fallback for code paths that need the single-tier behavior.
         perform: runAsAction(async (agent, x, y, z, closeness) => {
-            await skills.goToPosition(agent.bot, x, y, z, closeness);
+            const res = await skills.smartGoTo(agent.bot, x, y, z, closeness);
+            if (res?.message) skills.log(agent.bot, res.message);
         })
     },
     {
@@ -301,13 +304,16 @@ export const actionsList = [
     },
     {
         name: '!collectBlocks',
-        description: 'Collect the nearest blocks of a given type.',
+        description: 'Collect the nearest blocks of a given type. Auto-equips the right tool tier, paths to each block, and retries up to 8 times. Returns a terminal result — if it fails (no blocks in range, can\'t reach), escalate to !newAction.',
         params: {
             'type': { type: 'BlockName', description: 'The block type to collect.' },
             'num': { type: 'int', description: 'The number of blocks to collect.', domain: [1, Number.MAX_SAFE_INTEGER] }
         },
+        // Phase D4: rebound to smartGather. The bare skills.collectBlock stays
+        // available as a primitive for code paths that already have a target.
         perform: runAsAction(async (agent, type, num) => {
-            await skills.collectBlock(agent.bot, type, num);
+            const res = await skills.smartGather(agent.bot, type, num);
+            if (res?.message) skills.log(agent.bot, res.message);
         }, false, 10) // 10 minute timeout
     },
     {

@@ -58,7 +58,14 @@ const settings = {
 
     "spawn_timeout": 300, // 5min — first-time MS device-code auth needs time
     "block_place_delay": 0, // delay between placing blocks (ms) if using newAction. helps avoid bot being kicked by anti-cheat mechanisms on servers.
-  
+
+    // Phase D5: Movements tuning. The smart primitives in src/agent/library/
+    // skills.js own their own Movements escalation now (tier 1 default →
+    // tier 2 canDig with auto-equipped pickaxe → tier 3 canDig+towers with
+    // inventory scaffold blocks). There is no global Movements config — each
+    // smart primitive constructs the right Movements for its tier. If you
+    // need stricter behavior (e.g. ban dig on a peaceful server), edit
+    // smartGoTo's tier1/tier2/tier3 directly.
     "log_all_prompts": false, // log ALL prompts to file
 };
 
