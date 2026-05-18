@@ -118,4 +118,48 @@ export class History {
         this.turns = [];
         this.memory = '';
     }
+
+    // Phase A4: token-based compaction. When this.turns exceeds the byte/token
+    // threshold, fold older turns into one [compacted] system message at the head.
+    // Independent of the legacy max_messages summarizer above (which writes to
+    // this.memory / $MEMORY); Phase F will retire that one. Until then they coexist.
+    //
+    // Token estimate is approximate (length/4 — Anthropic's rule of thumb). Trigger
+    // is conservative; the goal is to avoid runaway turn growth on long sessions, not
+    // to optimize every byte.
+    async compactIfNeeded(threshold_tokens, keep_recent) {
+        if (this.turns.length <= keep_recent) return false;
+        const estimated = Math.ceil(JSON.stringify(this.turns).length / 4);
+        if (estimated < threshold_tokens) return false;
+
+        let to_compact = this.turns.slice(0, this.turns.length - keep_recent);
+        let recent = this.turns.slice(this.turns.length - keep_recent);
+        // Anthropic expects the first message to be user/system. If our cut left an
+        // assistant turn at the head of `recent`, pull it into the compacted chunk.
+        while (recent.length > 0 && recent[0].role === 'assistant') {
+            to_compact.push(recent.shift());
+        }
+        if (to_compact.length === 0) return false;
+
+        console.log(`[compact] turns=${this.turns.length} tokens≈${estimated} threshold=${threshold_tokens} → compacting ${to_compact.length} older turns, keeping ${recent.length}`);
+        try {
+            const summary = await this.agent.prompter.promptCompact(to_compact);
+            if (!summary) {
+                console.warn('[compact] empty summary; dropping oldest turns as fallback');
+                this.turns = recent;
+            } else {
+                this.turns = [
+                    { role: 'system', content: `[compacted ${to_compact.length} older turns]\n${summary}` },
+                    ...recent
+                ];
+            }
+            // Persist the compacted-out turns to the full history file so nothing is lost.
+            await this.appendFullHistory(to_compact);
+            console.log(`[compact] done. new turn count=${this.turns.length}`);
+            return true;
+        } catch (err) {
+            console.error('[compact] failed:', err.message);
+            return false;
+        }
+    }
 }

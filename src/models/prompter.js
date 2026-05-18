@@ -335,6 +335,32 @@ export class Prompter {
         return resp;
     }
 
+    // Phase A4: compact older turns into one chronological summary string.
+    // Returns the summary text; caller is responsible for splicing it back into history.
+    // Uses a dedicated `compaction` prompt — different from `saving_memory` which
+    // produces a 500-char facts buffer for the legacy $MEMORY field (Phase F kills that).
+    async promptCompact(to_summarize) {
+        if (!to_summarize || to_summarize.length === 0) return '';
+        await this.checkCooldown();
+        let prompt = this.profile.compaction;
+        if (!prompt) {
+            console.warn('[compact] no compaction prompt in profile; skipping');
+            return '';
+        }
+        prompt = await this.replaceStrings(prompt, null, null, to_summarize);
+        let resp = await this.chat_model.sendRequest([], prompt);
+        this._recordUsage('compact', this.chat_model);
+        await this._saveLog(prompt, to_summarize, resp, 'compact');
+        if (resp?.includes('</think>')) {
+            const [_, afterThink] = resp.split('</think>');
+            resp = afterThink;
+        }
+        // Hard cap so a runaway summary can't re-bloat the context.
+        const MAX = 2000;
+        if (resp.length > MAX) resp = resp.slice(0, MAX) + '...(truncated)';
+        return resp.trim();
+    }
+
     async promptShouldRespondToBot(new_message) {
         await this.checkCooldown();
         let prompt = this.profile.bot_responder;

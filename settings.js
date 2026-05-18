@@ -47,7 +47,9 @@ const settings = {
     "code_timeout_mins": -1, // minutes code is allowed to run. -1 for no timeout
     "relevant_docs_count": 5, // number of relevant code function docs to select for prompting. -1 for all
 
-    "max_messages": 15, // max number of messages to keep in context
+    "max_messages": 15, // max number of messages to keep in context (legacy summarizer; slated for Phase F removal)
+    "compaction_threshold_tokens": 3000, // Phase A4: when turns array exceeds this many estimated tokens, compact older turns into one system message
+    "compaction_keep_recent": 8, // Phase A4: how many most-recent turns to preserve uncompacted
     "num_examples": 2, // number of examples to give to the model
     "max_commands": -1, // max number of commands that can be used in consecutive responses. -1 for no limit
     "show_command_syntax": "none", // chat shows only the LLM's prose, never the command syntax. The model speaks naturally about what it's doing.

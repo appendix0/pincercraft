@@ -608,6 +608,12 @@ export class Agent {
             max_responses = 1;
         for (let i=0; i<max_responses; i++) {
             if (checkInterrupt()) break;
+            // Phase A4: compact older turns before grabbing the snapshot so the next
+            // sendRequest pays for a smaller history. Runs at most once per turn.
+            await this.history.compactIfNeeded(
+                settings.compaction_threshold_tokens ?? 3000,
+                settings.compaction_keep_recent ?? 8
+            );
             let history = this.history.getHistory();
             let res = await this.prompter.promptConvo(history);
             if (checkInterrupt()) break;
