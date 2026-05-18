@@ -89,6 +89,11 @@ export const SIDE_CHAT_SAFE_COMMANDS = new Set([
     '!remember', '!rememberHere', '!forget', '!recall', '!listMemory',
     '!addTask', '!cancelTask', '!showQueue', '!clearDoneTasks',
     '!setMode', '!loadCOCFromLectern', '!designateRulebookLectern',
+    // !stop is body-affecting BY DESIGN — its purpose is to halt the running
+    // body action. Allowed in side-chat so the LLM can act on ambiguous halt
+    // intent the regex classifier misses (e.g. "Hey stop what you are doing").
+    // Pairs with the HALT INTENT rule in the conversing prompt.
+    '!stop',
 ]);
 
 export function isSafeSideChatCommand(cmdName) {
