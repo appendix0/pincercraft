@@ -37,6 +37,12 @@ export class Agent {
         this.last_sender = null;
         this.count_id = count_id;
         this._disconnectHandled = false;
+        // Phase C1: plan mode is OFF at boot. While on, body-touching commands
+        // are blocked by the gate in commands/index.js executeCommand; only
+        // readOnly + concurrency-safe commands (observations, memory, queue
+        // mutations, chat-only) run. Toggled via !enterPlanMode / !exitPlanMode
+        // — Phase C2 wires the auto-trigger on task-request classifier.
+        this.planMode = false;
 
         // Phase 1 action queue: one serial lane, no self-collisions.
         // See docs/queue-design.md.

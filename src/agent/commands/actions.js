@@ -619,6 +619,38 @@ export const actionsList = [
         }
     },
     {
+        name: '!enterPlanMode',
+        isConcurrencySafe: true,
+        description: 'Enter plan mode: propose a multi-step plan via !addTask calls, post the plan in chat, and wait for player approval before executing. While in plan mode, body-touching commands (movement, mining, building, attacking, equipping, chest ops) are BLOCKED — only memory writes, queue mutations, observations, mode toggles, and chat run. Use when a player asks for a non-trivial task and you want to confirm the plan first. Exit with !exitPlanMode after approval.',
+        params: {},
+        perform: async function (agent) {
+            if (agent.planMode === true) return '[planning] Already in plan mode.';
+            agent.planMode = true;
+            return '[planning] Plan mode on. Add steps with !addTask(description, end_factor), post the plan to chat, then wait for the player to say "ok"/"yes"/"go". On approval, call !exitPlanMode (or the auto-trigger will).';
+        }
+    },
+    {
+        name: '!exitPlanMode',
+        isConcurrencySafe: true,
+        description: 'Leave plan mode and start the queued plan. Call after the player has approved the plan you posted in chat. The first pending task auto-starts.',
+        params: {},
+        perform: async function (agent) {
+            if (agent.planMode !== true) return '[executing] Not in plan mode.';
+            agent.planMode = false;
+            // Auto-start the next pending task so the player sees motion right
+            // after approval — matches blueprint §C2/§C4 ("→ first task auto-starts").
+            if (agent.task_queue) {
+                try {
+                    const start = agent.task_queue.startTask(null);
+                    return `[executing] Plan mode off. ${start?.message || ''}`.trim();
+                } catch (e) {
+                    return `[executing] Plan mode off. (Queue auto-start failed: ${e?.message || e})`;
+                }
+            }
+            return '[executing] Plan mode off.';
+        }
+    },
+    {
         name: '!remember',
         isConcurrencySafe: true,
         description: 'Save a persistent fact to your memory directory (survives reboots). Use for player preferences, world locations (non-coord), strategies, anything you should still know next session. For exact coordinates use !rememberHere instead. The MEMORY.md index is in every prompt; topic details load via !recall.',

@@ -242,6 +242,17 @@ export async function executeCommand(agent, message) {
         }
         if (numArgs !== numParams(command))
             return `Command ${command.name} was given ${numArgs} args, but requires ${numParams(command)} args.`;
+        // Phase C1: plan-mode gate. While agent.planMode is on, body-touching
+        // commands are blocked. Read-only and concurrency-safe (non-body)
+        // commands pass through. !exitPlanMode is always allowed regardless
+        // of its flags so the LLM can leave plan mode.
+        if (agent.planMode === true && command.name !== '!exitPlanMode') {
+            const resolve = (v) => typeof v === 'function' ? !!v(parsed.args) : !!v;
+            const planSafe = resolve(command.isReadOnly) || resolve(command.isConcurrencySafe);
+            if (!planSafe) {
+                return `[plan mode] Execute blocked for ${command.name}. You're in plan mode — only memory, queue, observation, and chat commands run. Post the plan to chat via !addTask, wait for player approval, then call !exitPlanMode (or the player saying "ok"/"yes"/"go" auto-exits).`;
+            }
+        }
         // Phase B4: per-tool permission gate. The hook receives the parsed
         // args + a runtime ctx and returns `{ allow: boolean, message?: string }`
         // (or undefined for allow-by-default). Phase I will populate per-command
