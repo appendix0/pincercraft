@@ -1237,6 +1237,194 @@ export async function goToPosition(bot, x, y, z, min_distance=2) {
     }
 }
 
+// ----------------------------------------------------------------------------
+// Phase D: smart pathfinding/gathering/building primitives. Each one is the
+// agent-shaped equivalent of Claude Code's `Bash` — it completes a unit of
+// work, retries internally with progressively aggressive Movements, and
+// returns a terminal { success, message } the LLM can reason about instead
+// of having to chain primitives.
+// ----------------------------------------------------------------------------
+
+const PICKAXE_TIERS = ['netherite_pickaxe', 'diamond_pickaxe', 'iron_pickaxe', 'stone_pickaxe', 'wooden_pickaxe', 'golden_pickaxe'];
+
+function _countInventory(bot, item) {
+    return (bot.inventory?.items?.() || []).filter(i => i.name === item).reduce((s, i) => s + i.count, 0);
+}
+
+function _autoEquipBestPickaxe(bot) {
+    for (const t of PICKAXE_TIERS) {
+        const item = bot.inventory?.items?.().find(i => i.name === t);
+        if (item) {
+            try { bot.equip(item, 'hand'); } catch {}
+            return t;
+        }
+    }
+    return null;
+}
+
+// Map common block names to the tool family that mines them. Underscore-
+// prefix means "any tier of that family"; otherwise it's the minimum
+// pickaxe tier required.
+const _TOOL_HINT = {
+    stone: 'wooden_pickaxe', cobblestone: 'wooden_pickaxe',
+    andesite: 'wooden_pickaxe', diorite: 'wooden_pickaxe', granite: 'wooden_pickaxe',
+    deepslate: 'wooden_pickaxe', cobbled_deepslate: 'wooden_pickaxe',
+    coal_ore: 'wooden_pickaxe', deepslate_coal_ore: 'wooden_pickaxe',
+    iron_ore: 'stone_pickaxe', deepslate_iron_ore: 'stone_pickaxe',
+    copper_ore: 'stone_pickaxe', deepslate_copper_ore: 'stone_pickaxe',
+    lapis_ore: 'stone_pickaxe', deepslate_lapis_ore: 'stone_pickaxe',
+    gold_ore: 'iron_pickaxe', deepslate_gold_ore: 'iron_pickaxe',
+    diamond_ore: 'iron_pickaxe', deepslate_diamond_ore: 'iron_pickaxe',
+    redstone_ore: 'iron_pickaxe', deepslate_redstone_ore: 'iron_pickaxe',
+    emerald_ore: 'iron_pickaxe', deepslate_emerald_ore: 'iron_pickaxe',
+    ancient_debris: 'diamond_pickaxe',
+    obsidian: 'diamond_pickaxe',
+    oak_log: '_axe', birch_log: '_axe', spruce_log: '_axe', jungle_log: '_axe',
+    acacia_log: '_axe', dark_oak_log: '_axe', cherry_log: '_axe', mangrove_log: '_axe',
+    dirt: '_shovel', grass_block: '_shovel', sand: '_shovel', gravel: '_shovel',
+    snow_block: '_shovel', snow: '_shovel', clay: '_shovel',
+};
+
+function _autoEquipForBlock(bot, blockName) {
+    const need = _TOOL_HINT[blockName];
+    if (!need) return null;
+    if (need.startsWith('_')) {
+        const family = need.slice(1);
+        const tiers = ['netherite', 'diamond', 'iron', 'stone', 'wooden', 'golden'];
+        for (const t of tiers) {
+            const tool = bot.inventory?.items?.().find(i => i.name === `${t}_${family}`);
+            if (tool) { try { bot.equip(tool, 'hand'); } catch {} return tool.name; }
+        }
+        return null;
+    }
+    return _autoEquipBestPickaxe(bot);
+}
+
+async function _tryGoTo(bot, movements, x, y, z, min_distance) {
+    bot.pathfinder.setMovements(movements);
+    try {
+        await goToGoal(bot, new pf.goals.GoalNear(x, y, z, min_distance));
+    } catch {}
+    const d = bot.entity.position.distanceTo(new Vec3(x, y, z));
+    return d <= min_distance + 1;
+}
+
+// Phase D1: smartGoTo — progressive Movements escalation.
+//   tier 1: default (no dig, no place)
+//   tier 2: canDig=true (with the best pickaxe equipped)
+//   tier 3: canDig+canPlace (towers, bridges with dirt/cobblestone)
+// Returns terminal { success, tier, message }. Pure failure means !newAction
+// is the next step — the stuck meta-skill handles that escalation.
+export async function smartGoTo(bot, x, y, z, min_distance=2) {
+    if (x == null || y == null || z == null) {
+        return { success: false, tier: 0, message: `smartGoTo: missing coordinates x:${x} y:${y} z:${z}` };
+    }
+    if (bot.modes.isOn('cheat')) {
+        bot.chat('/tp @s ' + x + ' ' + y + ' ' + z);
+        log(bot, `Teleported to ${x}, ${y}, ${z}.`);
+        return { success: true, tier: 0, message: 'teleported (cheat mode)' };
+    }
+    const tier1 = new pf.Movements(bot);
+    tier1.canDig = false;
+    tier1.allow1by1towers = false;
+    if (await _tryGoTo(bot, tier1, x, y, z, min_distance)) {
+        log(bot, `[smartGoTo:1] reached (${x},${y},${z}) via default Movements.`);
+        return { success: true, tier: 1, message: 'reached via default Movements' };
+    }
+    _autoEquipBestPickaxe(bot);
+    const tier2 = new pf.Movements(bot);
+    tier2.canDig = true;
+    tier2.allow1by1towers = false;
+    if (await _tryGoTo(bot, tier2, x, y, z, min_distance)) {
+        log(bot, `[smartGoTo:2] reached (${x},${y},${z}) via canDig.`);
+        return { success: true, tier: 2, message: 'reached via canDig (broke obstacles)' };
+    }
+    const tier3 = new pf.Movements(bot);
+    tier3.canDig = true;
+    tier3.allow1by1towers = true;
+    // canPlace is implicitly on when scaffoldingBlocks are in inventory; the
+    // pathfinder reads bot.inventory automatically. Just make sure we have
+    // something to bridge/tower with.
+    if (await _tryGoTo(bot, tier3, x, y, z, min_distance)) {
+        log(bot, `[smartGoTo:3] reached (${x},${y},${z}) via canDig+towers.`);
+        return { success: true, tier: 3, message: 'reached via canDig+towers (bridged/towered)' };
+    }
+    log(bot, `[smartGoTo] all tiers failed for (${x},${y},${z}). Escalate to !newAction.`);
+    return { success: false, tier: 3, message: 'all tiers failed — escalate to !newAction or !invokeSkill("stuck")' };
+}
+
+// Phase D2: smartGather — find+goto+collect, retries with tool tier
+// escalation. Returns terminal { success, message }.
+export async function smartGather(bot, item, count) {
+    const startCount = _countInventory(bot, item);
+    const target = startCount + count;
+    const MAX_ATTEMPTS = 8;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        const haveNow = _countInventory(bot, item);
+        if (haveNow >= target) {
+            log(bot, `[smartGather] done: ${count} ${item} gathered (have ${haveNow}).`);
+            return { success: true, message: `Gathered ${count} ${item}, inventory now ${haveNow}.` };
+        }
+        _autoEquipForBlock(bot, item);
+        const id = mc.getBlockId ? mc.getBlockId(item) : null;
+        const positions = id != null ? bot.findBlocks({ matching: id, maxDistance: 64, count: 4 }) : [];
+        if (!positions || positions.length === 0) {
+            return { success: false, message: `No ${item} within 64 blocks (have ${haveNow}/${target}, attempt ${attempt}).` };
+        }
+        // Pick the nearest still-reachable position; smartGoTo handles tiers.
+        const nav = await smartGoTo(bot, positions[0].x, positions[0].y, positions[0].z, 2);
+        if (!nav.success) {
+            return { success: false, message: `Couldn't reach the nearest ${item}: ${nav.message}. Have ${haveNow}/${target}.` };
+        }
+        try {
+            await collectBlock(bot, item, 1);
+        } catch (e) {
+            return { success: false, message: `Mining ${item} failed mid-gather: ${e?.message || e}. Have ${_countInventory(bot, item)}/${target}.` };
+        }
+    }
+    return { success: false, message: `Hit MAX_ATTEMPTS (${MAX_ATTEMPTS}); have ${_countInventory(bot, item)}/${target} ${item}.` };
+}
+
+// Phase D3: smartBuildAt — place a list of blocks relative to a base
+// position. Auto-gathers any missing materials (one recursion level) before
+// placing. Template is an array of { dx, dy, dz, block }. Returns terminal
+// { success, message }.
+export async function smartBuildAt(bot, basePos, template) {
+    if (!Array.isArray(template) || template.length === 0) {
+        return { success: false, message: 'smartBuildAt: template must be a non-empty array of {dx,dy,dz,block}.' };
+    }
+    const needed = {};
+    for (const t of template) {
+        if (!t || !t.block) continue;
+        needed[t.block] = (needed[t.block] || 0) + 1;
+    }
+    for (const [block, qty] of Object.entries(needed)) {
+        const have = _countInventory(bot, block);
+        if (have < qty) {
+            const g = await smartGather(bot, block, qty - have);
+            if (!g.success) {
+                return { success: false, message: `smartBuildAt: gather for ${block} failed: ${g.message}` };
+            }
+        }
+    }
+    let placed = 0;
+    for (const t of template) {
+        const x = basePos.x + (t.dx || 0);
+        const y = basePos.y + (t.dy || 0);
+        const z = basePos.z + (t.dz || 0);
+        try {
+            await placeBlock(bot, t.block, x, y, z);
+            placed++;
+        } catch (e) {
+            log(bot, `[smartBuildAt] place ${t.block}@(${x},${y},${z}) failed: ${e?.message || e}`);
+        }
+    }
+    if (placed === template.length) {
+        return { success: true, message: `Placed all ${placed} blocks.` };
+    }
+    return { success: false, message: `Placed ${placed}/${template.length} blocks (some failures).` };
+}
+
 export async function goToNearestBlock(bot, blockType,  min_distance=2, range=64) {
     /**
      * Navigate to the nearest block of the given type.
