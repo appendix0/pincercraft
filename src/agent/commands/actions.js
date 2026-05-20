@@ -2,6 +2,7 @@ import * as skills from '../library/skills.js';
 import settings from '../settings.js';
 import convoManager from '../conversation.js';
 import { findMissingToolsInPrompt, MISSING_TOOL_REJECT } from '../classify_and_gate.js';
+import { verifyEndFactor } from '../verify.js';
 
 
 function runAsAction (actionFn, resume = false, timeout = -1) {
@@ -212,10 +213,16 @@ export const actionsList = [
             'num': { type: 'int', description: 'The number of items to give.', domain: [1, Number.MAX_SAFE_INTEGER] }
         },
         perform: async function (agent, player_name, item_name, num) {
-            const inner = runAsAction(async (agent, player_name, item_name, num) => {
-                await skills.giveToPlayer(agent.bot, item_name, player_name, num);
-            });
-            const result = await inner(agent, player_name, item_name, num);
+            // Don't wrap via runAsAction() — it self-looks-up in actionsList by
+            // perform-identity, and the inner wrapper is never registered, so
+            // the lookup returned undefined and crashed with TypeError. Call
+            // the action manager directly with an explicit label instead.
+            const code_return = await agent.actions.runAction(
+                'action:givePlayer',
+                async () => { await skills.giveToPlayer(agent.bot, item_name, player_name, num); },
+                { timeout: -1, resume: false },
+            );
+            const result = code_return.interrupted && !code_return.timedout ? undefined : code_return.message;
             // skills.giveToPlayer only logs "<player> received <item>" after the
             // mineflayer `playerCollect` event fires — so we know the player
             // physically picked it up. Use that as the auto-finish gate. If
@@ -584,12 +591,31 @@ export const actionsList = [
     {
         name: '!finishTask',
         isConcurrencySafe: true,
-        description: 'Mark the current in-progress task done. Call this when you\'ve completed what was asked. Omit id to finish the in-progress task.',
+        description: 'Mark the current in-progress task done. Call this when you\'ve completed what was asked. Omit id to finish the in-progress task. Measurable end_factors (e.g. "5 iron_ingot in inventory") are verified against the current bot state; the call is blocked if the criterion isn\'t actually met.',
         params: {
             'id': { type: 'int', description: 'Task id to finish, or -1 to finish whatever is in progress.', domain: [-1, Number.MAX_SAFE_INTEGER] }
         },
         perform: async function (agent, id) {
-            return agent.task_queue.finishTask(id === -1 ? null : id).message;
+            const queue = agent.task_queue;
+            if (!queue) return 'No task queue available.';
+            const taskId = id === -1 ? null : id;
+            // Find the same task the queue would finish, then run the verifier
+            // against the live bot state. Only block when the end_factor is
+            // measurable AND demonstrably unmet — fuzzy criteria pass through.
+            const target = taskId != null
+                ? queue.tasks.find(t => t.id === Number(taskId))
+                : queue.tasks.find(t => t.status === 'in_progress');
+            if (target && target.status !== 'done') {
+                try {
+                    const v = verifyEndFactor(agent, target);
+                    if (v && v.programmatic && v.verified === false) {
+                        return `[verify] Task #${target.id} not finished — ${v.reason} Keep working, or use !cancelTask if the criterion no longer applies.`;
+                    }
+                } catch (e) {
+                    console.warn('verifyEndFactor threw:', e?.message || e);
+                }
+            }
+            return queue.finishTask(taskId).message;
         }
     },
     {

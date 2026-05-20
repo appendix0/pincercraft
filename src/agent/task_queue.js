@@ -11,14 +11,38 @@ import path from 'path';
 const STATUS = {PENDING: 'pending', IN_PROGRESS: 'in_progress', DONE: 'done'};
 const LOG_PATH = path.resolve('./queue.log');
 
+// End-factor phrases that aren't verifiable. Rejecting them at add-time forces
+// the LLM to write a concrete criterion, which is what Phase H's verify gate
+// needs in order to catch honor-system finishes. The exact words come from
+// observed failures (queue.log, diamond-armor session 2026-05-19) where the
+// LLM declared tasks done because "enough X for Y" is unfalsifiable.
+const VAGUE_END_FACTOR_PATTERNS = [
+    /\benough\b/i,
+    /\b(?:if|as|when)\s+(?:needed|necessary|possible|appropriate)\b/i,
+    /\bsufficient\b/i,
+    /\bsome\s+(?:more|of)\b/i,
+];
+
 export class TaskQueue {
-    constructor(agentName, onChange = null) {
+    constructor(agentName, onChange = null, isPaused = null) {
         this.agentName = agentName;
         this.path = path.resolve(`./bots/${agentName}/tasks.json`);
         this.tasks = [];
         this._nextId = 1;
         this.onChange = onChange; // (kind, task) => void; kind in {add, start, finish, cancel, clearDone, auto-start}
+        // () => boolean. When truthy, addTask + finishTask skip auto-promotion
+        // so plan-mode honors "no work until the player approves." The queue
+        // can still add/cancel/finish; only the implicit start is gated.
+        this.isPaused = isPaused;
         this._load();
+    }
+
+    _paused() {
+        if (typeof this.isPaused !== 'function') return false;
+        try { return !!this.isPaused(); } catch (e) {
+            console.warn('TaskQueue.isPaused threw:', e?.message || e);
+            return false;
+        }
     }
 
     _fire(kind, task) {
@@ -65,6 +89,11 @@ export class TaskQueue {
         if (!description) return {ok: false, message: 'Task description was empty — rejected.'};
         if (description.length < 4) return {ok: false, message: `Task description "${description}" too short (need at least 4 chars). Be specific — rejected.`};
         if (!endFactor) return {ok: false, message: `Task "${description}" missing end_factor — rejected. Every task needs an explicit completion criterion (e.g. "3 iron_ore in inventory", "player picked up the pickaxe", "bot at coords 100,64,-50").`};
+        const vague = VAGUE_END_FACTOR_PATTERNS.find(re => re.test(endFactor));
+        if (vague) {
+            const hit = endFactor.match(vague)[0];
+            return {ok: false, message: `Task "${description}" has a vague end_factor ("${endFactor}") — rejected. The phrase "${hit}" is not verifiable. Use a concrete, measurable criterion (e.g. "3 iron_ingot in inventory", "iron_pickaxe in inventory", "bot at coords 100,64,-50"). Pick a specific number and item.`};
+        }
         // Reject duplicates among live (non-done) tasks. Compare case-insensitive
         // exact match — fuzzy match would risk false rejects on similar-but-
         // distinct tasks (e.g. "mine 3 iron_ore" vs "mine 5 iron_ore").
@@ -74,9 +103,11 @@ export class TaskQueue {
         this.tasks.push(task);
         // Auto-advance: if nothing is in progress, promote this one immediately
         // so the model never has to chain !addTask + !startTask manually.
+        // Plan-mode pause suppresses this — the LLM is supposed to lay out the
+        // full plan and wait for player approval before any task starts.
         const hasActive = this.tasks.some(x => x.status === STATUS.IN_PROGRESS);
         const endHint = ` Done when: ${endFactor}.`;
-        if (!hasActive) {
+        if (!hasActive && !this._paused()) {
             task.status = STATUS.IN_PROGRESS;
             this._persist();
             this._log('add+start', task);
@@ -111,7 +142,10 @@ export class TaskQueue {
         t.status = STATUS.DONE;
         t.finishedAt = Date.now();
         this._log('finish', t);
-        const next = this.tasks.find(x => x.status === STATUS.PENDING);
+        // Plan-mode pause skips the implicit advance — if a task somehow ran
+        // into plan mode, finishing it shouldn't slide the next pending into
+        // in_progress behind the player's back.
+        const next = this._paused() ? null : this.tasks.find(x => x.status === STATUS.PENDING);
         if (next) {
             next.status = STATUS.IN_PROGRESS;
             this._persist();

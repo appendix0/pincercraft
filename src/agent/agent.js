@@ -57,6 +57,16 @@ export class Agent {
         // — Phase C2 wires the auto-trigger on task-request classifier.
         this.planMode = false;
 
+        // Side-chat deferral tracker. When a player message arrives mid-task
+        // and the bot replies with a canned "let me finish" because all the
+        // commands it picked were body-touching (deferred), we record the
+        // pending follow-up here. On the next task finish, _onQueueChange
+        // injects a synthetic system input so the LLM addresses the question
+        // instead of leaving the player hanging silently.
+        // Dedup'd by target so repeated chats from the same player coalesce
+        // to one follow-up (we answer the latest, not every line).
+        this._pendingFollowups = [];
+
         // Phase 1 action queue: one serial lane, no self-collisions.
         // See docs/queue-design.md.
         this.alive = true;
@@ -82,7 +92,11 @@ export class Agent {
         this.npc = new NPCContoller(this);
         this.memory_bank = new MemoryBank();
         this.self_prompter = new SelfPrompter(this);
-        this.task_queue = new TaskQueue(this.name, (kind, task) => this._onQueueChange(kind, task));
+        this.task_queue = new TaskQueue(
+            this.name,
+            (kind, task) => this._onQueueChange(kind, task),
+            () => this.planMode === true,
+        );
         this.memory_store = new MemoryStore(this.name);
         convoManager.initAgent(this);
         await this.prompter.initExamples();
@@ -195,6 +209,7 @@ export class Agent {
                 this.startEvents();
                 this._runWorker(); // single consumer loop for the action queue
                 this._startQueueHeartbeat();
+                this._startStuckWatcher();
                 this.rulebook_lectern = new RulebookLectern(this);
                 this.rulebook_lectern.installListener();
               
@@ -308,6 +323,109 @@ export class Agent {
     // phrases with the current task description plugged in. Triggers on the
     // *task* being active, not the run_queue (which goes idle between LLM
     // turns even while mineflayer is still busy).
+    // Position-based stuck detector. Polls bot.entity.position once a second
+    // and watches for a 5-sample window with <0.6 block max drift while a
+    // *motion-class* action is running (whitelist below). On stuck: /tp the
+    // bot to the player who last spoke to it. Requires op on the server —
+    // without op the /tp is silently dropped and this becomes a no-op.
+    //
+    // Designed to be high-precision: skips !newAction (Sonnet code-gen
+    // freezes the bot for 5-15s legitimately), skips actions where standing
+    // still is normal (crafting, smelting, chest ops), and kills itself if
+    // it fires 3 times in 5 min — that pattern means something deeper is
+    // wrong and further TPs would just bleed tokens via the system messages.
+    _startStuckWatcher() {
+        const WINDOW = 5;                 // samples (= 5s at 1Hz)
+        const MIN_DRIFT = 0.6;            // blocks
+        const COOLDOWN_MS = 30000;        // per-event throttle
+        const KILL_THRESHOLD = 3;         // max TPs ...
+        const KILL_WINDOW_MS = 5 * 60000; //   ... per this rolling window
+        // Only TP when one of these actions is supposedly moving the bot
+        // and the position hasn't drifted. Conservative whitelist —
+        // anything else (newAction, craftRecipe, lookAt*, …) is left alone.
+        const MOTION_ACTIONS = new Set([
+            'action:goToCoordinates',
+            'action:goToPlayer',
+            'action:goToRememberedPlace',
+            'action:goToBedrock',
+            'action:searchForBlock',
+            'action:searchForEntity',
+            'action:collectBlocks',
+            'action:attack',
+            'action:attackPlayer',
+            'action:moveAway',
+            'action:followPlayer',
+            'action:givePlayer',
+        ]);
+        let samples = [];
+        let lastTpAt = 0;
+        let tpHistory = []; // timestamps; kill-switch trips if length ≥ KILL_THRESHOLD
+        let killed = false;
+        let lastSkipLogAt = 0; // throttle the no-last_sender skip log to 1/min
+        this._stuckWatcher = setInterval(() => {
+            if (killed || !this.alive || !this.bot || !this.bot.entity || !this.bot.entity.position) return;
+            const p = this.bot.entity.position;
+            samples.push({ x: p.x, y: p.y, z: p.z });
+            if (samples.length > WINDOW) samples.shift();
+            if (samples.length < WINDOW) return;
+
+            const label = this.actions?.currentActionLabel || '';
+            if (!MOTION_ACTIONS.has(label)) return;
+
+            const first = samples[0];
+            let maxDrift = 0;
+            for (const s of samples) {
+                const dx = s.x - first.x, dy = s.y - first.y, dz = s.z - first.z;
+                const d = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                if (d > maxDrift) maxDrift = d;
+            }
+            if (maxDrift >= MIN_DRIFT) return;
+
+            // No player to TP to → log and skip. Don't ~ ~10 ~ vertical-hop:
+            // if the bot is stuck without anyone to follow, random TPs make
+            // things worse (lose location context, possibly land in lava).
+            const target = this.last_sender;
+            if (!target) {
+                const now2 = Date.now();
+                if (now2 - lastSkipLogAt > 60000) {
+                    console.warn(`[stuck] frozen during ${label} but no last_sender — skip TP (throttled)`);
+                    lastSkipLogAt = now2;
+                }
+                return;
+            }
+
+            const now = Date.now();
+            if (now - lastTpAt < COOLDOWN_MS) return;
+            tpHistory = tpHistory.filter(t => now - t < KILL_WINDOW_MS);
+            if (tpHistory.length >= KILL_THRESHOLD) {
+                killed = true;
+                console.warn(`[stuck] kill-switch: ${KILL_THRESHOLD} TPs in ${KILL_WINDOW_MS/60000}m — disabling watcher to avoid loop`);
+                try {
+                    this.history.add(
+                        'system',
+                        `[stuck recovery DISABLED] Auto-teleport fired ${KILL_THRESHOLD} times in ${KILL_WINDOW_MS/60000} minutes. Something is wrong beyond pathfinding. Please !cancelTask and ask the player for direction.`,
+                    );
+                } catch (e) { /* ignore */ }
+                return;
+            }
+            lastTpAt = now;
+            tpHistory.push(now);
+            samples = [];
+
+            const cmd = `/tp ${this.name} ${target}`;
+            console.warn(`[stuck] no drift for ${WINDOW}s during ${label} → ${cmd}`);
+            try {
+                this.bot.chat(cmd);
+                this.history.add(
+                    'system',
+                    `[stuck recovery] You were physically frozen for ${WINDOW}s during ${label}. Auto-teleported to ${target}. Re-orient with !nearbyBlocks if needed, then continue or !cancelTask if the goal isn't reachable.`,
+                );
+            } catch (e) {
+                console.warn('[stuck] tp failed:', e?.message || e);
+            }
+        }, 1000);
+    }
+
     _startQueueHeartbeat() {
         const PHRASES = [
             'Still on it — ',
@@ -352,6 +470,25 @@ export class Agent {
                 if (msg) this.history.add('system', msg);
             } catch (e) {
                 console.warn('finalizeSubagent (cancel) failed:', e?.message || e);
+            }
+        }
+        // Side-chat follow-up: when a task finishes, address any player
+        // messages we deferred earlier. Synthetic system input drives the
+        // worker to run one planner turn focused on the deferred question.
+        // Fires on the FIRST finish so the player isn't waiting through the
+        // whole queue; cleared after enqueuing.
+        if (kind === 'finish' && this._pendingFollowups && this._pendingFollowups.length > 0) {
+            const followups = this._pendingFollowups;
+            this._pendingFollowups = [];
+            const lines = followups.map(f => `${f.target} said "${f.message}"`).join('; ');
+            try {
+                this.enqueue({
+                    source: 'system',
+                    message: `[task #${task?.id ?? '?'} just finished — pending player follow-up] You earlier deferred: ${lines}. Address ${followups[0].target} directly now (chat reply, then continue the queue if it isn't empty).`,
+                    kind: 'system',
+                });
+            } catch (e) {
+                console.warn('followup enqueue failed:', e?.message || e);
             }
         }
         if (kind !== 'add') return; // only briefing on adds for now
@@ -506,6 +643,14 @@ export class Agent {
             this.run_queue.push(input);
             return;
         }
+        if (input.kind === 'player_chat') {
+            // Track the last human who chatted so the stuck-watcher and other
+            // recovery paths have a TP target. Mindcraft's stock last_sender
+            // only updates on bot-to-bot messages; player input was leaving
+            // it null, which meant the watcher would detect stuck but have
+            // no one to TP to.
+            this.last_sender = input.source;
+        }
         if (input.kind === 'player_chat' && this.run_queue.state === 'running') {
             // Don't enqueue — the running task keeps going. Just answer the player.
             this._handleSideChat(input).catch(e => console.error('_handleSideChat:', e));
@@ -521,6 +666,15 @@ export class Agent {
     // only emits commands.
     async _handleSideChat(input) {
         const {source, message} = input;
+        // Any time we bail out without a real answer (LLM failure, empty
+        // reply, or all-commands-deferred), queue a follow-up so the player
+        // gets addressed once the current work finishes. _onQueueChange
+        // drains this list on the next task finish.
+        const recordFollowup = () => {
+            if (!source || source === 'system') return;
+            this._pendingFollowups = (this._pendingFollowups || []).filter(f => f.target !== source);
+            this._pendingFollowups.push({ target: source, message });
+        };
         try {
             await this.history.add(source, `(mid-task) ${message}`);
             const history = this.history.getHistory();
@@ -529,10 +683,12 @@ export class Agent {
                 res = await this.prompter.promptConvo(history);
             } catch (e) {
                 console.warn('side-chat LLM call failed:', e?.message || e);
+                recordFollowup();
                 this.routeResponse(source, `Kinda busy right now, sorry — I'll get back to you.`);
                 return;
             }
             if (!res || res.trim().length === 0) {
+                recordFollowup();
                 this.routeResponse(source, `Heard you — give me a sec.`);
                 return;
             }
@@ -576,8 +732,10 @@ export class Agent {
 
             if (deferred.length > 0 && executedCount === 0 && !preMessage) {
                 // Nothing got through and no prose — give the player a heads-up.
+                recordFollowup();
                 this.routeResponse(source, `Got it — let me finish what I'm on first.`);
             } else if (deferred.length > 0) {
+                recordFollowup();
                 this.routeResponse(source, `(Deferring ${deferred.join(', ')} until I'm done with my current task.)`);
             } else if (trailingProse) {
                 this.routeResponse(source, trailingProse);

@@ -1,0 +1,11 @@
+{
+    "name": "Daedelus404",
+
+    "model": "claude-haiku-4-5-20251001",
+
+    "code_model": "claude-sonnet-4-6",
+
+    "max_tokens": 2000,
+
+    "cooldown": 500
+}

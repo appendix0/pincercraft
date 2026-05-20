@@ -562,7 +562,10 @@ export async function pickupNearbyItems(bot) {
 
 export async function breakBlockAt(bot, x, y, z) {
     /**
-     * Break the block at the given position. Will use the bot's equipped item.
+     * Break the block at the given position WITHOUT picking up its drop.
+     * Use only for clearing paths, demolishing builds, or any case where the
+     * drop is disposable. To gather a resource (ore, logs, crops) call
+     * skills.mineBlockAt instead — that one collects the drop.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
      * @param {number} x, the x coordinate of the block to break.
      * @param {number} y, the y coordinate of the block to break.
@@ -607,6 +610,62 @@ export async function breakBlockAt(bot, x, y, z) {
         return false;
     }
     return true;
+}
+
+
+export async function mineBlockAt(bot, x, y, z) {
+    /**
+     * Mine the block at the given coordinates AND pick up the dropped item.
+     * Use this — not breakBlockAt — whenever you need the drop in inventory
+     * (ore, logs, crops, any resource gather). breakBlockAt only digs; its
+     * drop falls on the ground and is usually lost. Returns true if mined.
+     * @param {MinecraftBot} bot, reference to the minecraft bot.
+     * @param {number} x, the x coordinate of the block.
+     * @param {number} y, the y coordinate of the block.
+     * @param {number} z, the z coordinate of the block.
+     * @returns {Promise<boolean>} true if mined and collected; false on missing tools or no block.
+     * @example
+     * let ore = world.getNearestBlock(bot, 'diamond_ore', 16);
+     * if (ore) await skills.mineBlockAt(bot, ore.position.x, ore.position.y, ore.position.z);
+     **/
+    if (x == null || y == null || z == null) throw new Error('Invalid position to mine block at.');
+    const block = bot.blockAt(Vec3(x, y, z));
+    if (!block || block.name === 'air' || block.name === 'water' || block.name === 'lava') {
+        log(bot, `No solid block at x:${Math.floor(x)}, y:${Math.floor(y)}, z:${Math.floor(z)}.`);
+        return false;
+    }
+    if (bot.entity.position.distanceTo(block.position) > 4.5) {
+        const movements = new pf.Movements(bot);
+        movements.canPlaceOn = false;
+        movements.allow1by1towers = false;
+        bot.pathfinder.setMovements(movements);
+        await goToGoal(bot, new pf.goals.GoalNear(block.position.x, block.position.y, block.position.z, 4));
+    }
+    if (bot.game.gameMode !== 'creative') {
+        await bot.tool.equipForBlock(block);
+        const itemId = bot.heldItem ? bot.heldItem.type : null;
+        if (!block.canHarvest(itemId)) {
+            log(bot, `Don't have right tools to mine ${block.name}.`);
+            return false;
+        }
+    }
+    try {
+        await bot.collectBlock.collect(block);
+        log(bot, `Mined ${block.name} at x:${x.toFixed(1)}, y:${y.toFixed(1)}, z:${z.toFixed(1)} and collected drop.`);
+        return true;
+    } catch (e) {
+        // Plugin fails on certain blocks (e.g. obsidian, falling blocks).
+        // Fall back to manual dig + scan-and-walk pickup.
+        try {
+            await bot.dig(block, true);
+            await pickupNearbyItems(bot);
+            log(bot, `Mined ${block.name} at x:${x.toFixed(1)}, y:${y.toFixed(1)}, z:${z.toFixed(1)} (fallback path).`);
+            return true;
+        } catch (inner) {
+            log(bot, `Failed to mine ${block.name}: ${inner.message || inner}.`);
+            return false;
+        }
+    }
 }
 
 

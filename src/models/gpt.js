@@ -16,7 +16,11 @@ export class GPT {
         if (hasKey('OPENAI_ORG_ID'))
             config.organization = getKey('OPENAI_ORG_ID');
 
-        config.apiKey = getKey('OPENAI_API_KEY');
+        // NVIDIA Build is OpenAI-compatible but needs its own key so it doesn't collide with real OpenAI usage.
+        if (url && url.includes('integrate.api.nvidia.com') && hasKey('NVIDIA_API_KEY'))
+            config.apiKey = getKey('NVIDIA_API_KEY');
+        else
+            config.apiKey = getKey('OPENAI_API_KEY');
 
         this.openai = new OpenAIApi(config);
     }

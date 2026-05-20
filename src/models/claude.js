@@ -11,7 +11,11 @@ export class Claude {
         // (prompter.js:250 type-checks it); telemetry callers read this after each call.
         this.last_usage = null;
 
-        let config = {};
+        // SDK default is 2 retries with ~0.5s/1s exponential backoff. Bump to
+        // 4 so a transient blip (chunk-loading WAN hiccup, brief 5xx) doesn't
+        // instantly flash "brain disconnected" to the player. With backoff
+        // the SDK will spend ~7-8s retrying before giving up.
+        let config = { maxRetries: 4 };
         if (url)
             config.baseURL = url;
 
@@ -56,6 +60,10 @@ export class Claude {
             if (err.message.includes("does not support image input")) {
                 res = "Vision is only supported by certain models.";
             } else {
+                // SDK already exhausted maxRetries. Add a 2s pause so the
+                // player sees the bot is offline rather than getting a
+                // sub-second flash from "Awaiting..." to "disconnected".
+                await new Promise(r => setTimeout(r, 2000));
                 res = "My brain disconnected, try again.";
             }
             console.log(err);
