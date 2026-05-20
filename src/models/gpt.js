@@ -2,6 +2,7 @@ import OpenAIApi from 'openai';
 import { getKey, hasKey } from '../utils/keys.js';
 import { strictFormat } from '../utils/text.js';
 import { makeRateLimitedClient } from './rate_limited_client.js';
+import { toOpenAITools, fromOpenAIResponse, buildRetryMessage } from './tool_protocol.js';
 
 export class GPT {
     static prefix = 'openai';
@@ -98,6 +99,46 @@ export class GPT {
             }
         }
         return res;
+    }
+
+    // v2 Step 3: structured tool-use path for OpenAI-compatible providers.
+    // Returns the neutral tool-protocol shape. Tolerant of NVIDIA llama
+    // emitting malformed JSON in tool_calls.arguments: ONE structured
+    // re-prompt with the parse error in context, then surface.
+    // See docs/agent-blueprint.md §3 Step 3 rev-2.
+    async sendRequestWithTools(turns, systemMessage, toolDescriptors) {
+        const model = this.model_name || "gpt-5.4-mini";
+        const tools = toOpenAITools(toolDescriptors || []);
+        const baseMessages = [{ role: 'system', content: systemMessage }, ...strictFormat(turns)];
+
+        const callWith = (msgs) => this.openai.chat.completions.create({
+            model,
+            messages: msgs,
+            tools,
+            tool_choice: 'auto',
+            ...(this.params || {}),
+        });
+
+        try {
+            const resp1 = this.rate_limiter
+                ? await this.rate_limiter.send(() => callWith(baseMessages))
+                : await callWith(baseMessages);
+            let parsed = fromOpenAIResponse(resp1);
+            if (parsed.parseErrors.length === 0) return parsed;
+
+            // One retry budget. Inject a system explanation of what failed,
+            // ask the model to re-emit. Surface whatever comes back next.
+            console.warn(`[gpt:tool_use] ${parsed.parseErrors.length} parse error(s); retrying once`);
+            const retryMsg = buildRetryMessage(parsed.parseErrors);
+            const retryMessages = [...baseMessages, { role: 'assistant', content: parsed.text || '' }, retryMsg];
+            const resp2 = this.rate_limiter
+                ? await this.rate_limiter.send(() => callWith(retryMessages))
+                : await callWith(retryMessages);
+            return fromOpenAIResponse(resp2);
+        } catch (err) {
+            console.log('[gpt:tool_use] error:', err?.message || err);
+            return { text: 'My brain disconnected, try again.', toolCalls: [], stopReason: 'error', parseErrors: [], raw: null };
+        }
     }
 
     async sendVisionRequest(messages, systemMessage, imageBuffer) {

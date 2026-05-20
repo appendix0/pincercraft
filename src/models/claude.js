@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { strictFormat } from '../utils/text.js';
 import { getKey } from '../utils/keys.js';
 import { makeRateLimitedClient } from './rate_limited_client.js';
+import { toAnthropicTools, fromAnthropicResponse, buildRetryMessage } from './tool_protocol.js';
 
 export class Claude {
     static prefix = 'anthropic';
@@ -72,6 +73,35 @@ export class Claude {
             console.log(err);
         }
         return res;
+    }
+
+    // v2 Step 3: structured tool-use path. Returns the neutral
+    // tool-protocol shape (see src/models/tool_protocol.js).
+    // Anthropic supports tool_use natively — no tolerant-parse retry needed
+    // here (the SDK delivers `input` as a parsed object).
+    async sendRequestWithTools(turns, systemMessage, toolDescriptors) {
+        const messages = strictFormat(turns);
+        this.last_usage = null;
+        if (!this.params.max_tokens) {
+            this.params.max_tokens = this.params.thinking?.budget_tokens
+                ? this.params.thinking.budget_tokens + 1000
+                : 4096;
+        }
+        const call = () => this.anthropic.messages.create({
+            model: this.model_name || "claude-sonnet-4-6",
+            system: systemMessage,
+            messages,
+            tools: toAnthropicTools(toolDescriptors || []),
+            ...(this.params || {}),
+        });
+        try {
+            const resp = this.rate_limiter ? await this.rate_limiter.send(call) : await call();
+            this.last_usage = resp.usage || null;
+            return fromAnthropicResponse(resp);
+        } catch (err) {
+            console.log('[claude:tool_use] error:', err?.message || err);
+            return { text: 'My brain disconnected, try again.', toolCalls: [], stopReason: 'error', parseErrors: [], raw: null };
+        }
     }
 
     async sendVisionRequest(turns, systemMessage, imageBuffer) {

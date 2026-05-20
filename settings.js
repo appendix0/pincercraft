@@ -105,6 +105,13 @@ const settings = {
         "retry_max_attempts": 3,
         "backoff_max_seconds": 30
     },
+
+    // v2 Step 3: Tool-use protocol. When ON, planner turns route through
+    // sendRequestWithTools (structured tools[] + tool_use/tool_result blocks)
+    // instead of the legacy text-parsing path. Default OFF — Step 4's
+    // orchestrator depends on this; flip ON once orchestrator_v2 lands.
+    // See docs/agent-blueprint.md §3 Step 3.
+    "use_tool_use_protocol": false,
 };
 
 export default settings;
