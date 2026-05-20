@@ -24,7 +24,7 @@ const VAGUE_END_FACTOR_PATTERNS = [
 ];
 
 export class TaskQueue {
-    constructor(agentName, onChange = null, isPaused = null) {
+    constructor(agentName, onChange = null, isPaused = null, options = {}) {
         this.agentName = agentName;
         this.path = path.resolve(`./bots/${agentName}/tasks.json`);
         this.tasks = [];
@@ -34,7 +34,13 @@ export class TaskQueue {
         // so plan-mode honors "no work until the player approves." The queue
         // can still add/cancel/finish; only the implicit start is gated.
         this.isPaused = isPaused;
-        this._load();
+        // v2 Step 6: child task queues (subagent context isolation) are
+        // ephemeral — no disk persistence, no queue.log appends. When
+        // {persist: false} is set, _load skips disk read and _persist /
+        // _log become no-ops. Used by src/agent/subagent_v2.js per
+        // dispatch.
+        this.persist = options?.persist !== false;
+        if (this.persist) this._load();
     }
 
     _paused() {
@@ -52,6 +58,7 @@ export class TaskQueue {
     }
 
     _log(action, task) {
+        if (!this.persist) return;  // ephemeral child queues skip queue.log
         try {
             const ts = new Date().toISOString();
             const line = task
@@ -75,6 +82,7 @@ export class TaskQueue {
     }
 
     _persist() {
+        if (!this.persist) return;  // ephemeral child queues skip disk
         try {
             fs.mkdirSync(path.dirname(this.path), {recursive: true});
             fs.writeFileSync(this.path, JSON.stringify({nextId: this._nextId, tasks: this.tasks}, null, 2));
