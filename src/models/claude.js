@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { strictFormat } from '../utils/text.js';
 import { getKey } from '../utils/keys.js';
+import { makeRateLimitedClient } from './rate_limited_client.js';
 
 export class Claude {
     static prefix = 'anthropic';
@@ -11,11 +12,12 @@ export class Claude {
         // (prompter.js:250 type-checks it); telemetry callers read this after each call.
         this.last_usage = null;
 
-        // SDK default is 2 retries with ~0.5s/1s exponential backoff. Bump to
-        // 4 so a transient blip (chunk-loading WAN hiccup, brief 5xx) doesn't
-        // instantly flash "brain disconnected" to the player. With backoff
-        // the SDK will spend ~7-8s retrying before giving up.
-        let config = { maxRetries: 4 };
+        // v2 Step 1: our RateLimitedClient owns retry+throttle. Set SDK
+        // maxRetries to 0 when the wrapper is active so the two layers
+        // don't compound and inflate latency on a 429 burst. When the
+        // wrapper is disabled, fall back to a generous SDK retry budget.
+        this.rate_limiter = makeRateLimitedClient('anthropic');
+        let config = { maxRetries: this.rate_limiter ? 0 : 4 };
         if (url)
             config.baseURL = url;
 
@@ -38,12 +40,13 @@ export class Claude {
                     this.params.max_tokens = 4096;
                 }
             }
-            const resp = await this.anthropic.messages.create({
+            const call = () => this.anthropic.messages.create({
                 model: this.model_name || "claude-sonnet-4-6",
                 system: systemMessage,
                 messages: messages,
                 ...(this.params || {})
             });
+            const resp = this.rate_limiter ? await this.rate_limiter.send(call) : await call();
 
             console.log('Received.')
             this.last_usage = resp.usage || null;

@@ -1,6 +1,7 @@
 import OpenAIApi from 'openai';
 import { getKey, hasKey } from '../utils/keys.js';
 import { strictFormat } from '../utils/text.js';
+import { makeRateLimitedClient } from './rate_limited_client.js';
 
 export class GPT {
     static prefix = 'openai';
@@ -8,6 +9,12 @@ export class GPT {
         this.model_name = model_name;
         this.params = params;
         this.url = url; // store so that we know whether a custom URL has been set
+
+        // v2 Step 1: NVIDIA Build is the burst-prone provider (40 RPM, today's
+        // 12 × 429s). Pick provider by base URL so the throttle/retry budget
+        // matches the real API.
+        const provider = (url && url.includes('integrate.api.nvidia.com')) ? 'nvidia' : 'openai';
+        this.rate_limiter = makeRateLimitedClient(provider);
 
         let config = {};
         if (url)
@@ -51,12 +58,13 @@ export class GPT {
                 if (model.includes('o1') || model.includes('o3') || model.includes('5')) {
                     delete pack.stop;
                 }
-                let completion = await this.openai.chat.completions.create(pack);
+                const chatCall = () => this.openai.chat.completions.create(pack);
+                let completion = this.rate_limiter ? await this.rate_limiter.send(chatCall) : await chatCall();
                 if (completion.choices[0].finish_reason == 'length')
-                    throw new Error('Context length exceeded'); 
+                    throw new Error('Context length exceeded');
                 console.log('Received.');
                 res = completion.choices[0].message.content;
-            } 
+            }
             // otherwise, use responses
             else {
                 let messages = strictFormat(turns);
@@ -64,12 +72,13 @@ export class GPT {
                     message.content += stop_seq;
                     return message;
                 });
-                const response = await this.openai.responses.create({
+                const respCall = () => this.openai.responses.create({
                     model: model,
                     instructions: systemMessage,
                     input: messages,
                     ...(this.params || {})
                 });
+                const response = this.rate_limiter ? await this.rate_limiter.send(respCall) : await respCall();
                 console.log('Received.');
                 res = response.output_text;
                 let stop_seq_index = res.indexOf(stop_seq);

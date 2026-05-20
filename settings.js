@@ -92,6 +92,19 @@ const settings = {
     // need stricter behavior (e.g. ban dig on a peaceful server), edit
     // smartGoTo's tier1/tier2/tier3 directly.
     "log_all_prompts": false, // log ALL prompts to file
+
+    // v2 Step 1: Resilience wrapper. Provider-neutral sliding-window RPM
+    // throttle + 429 retry-with-backoff (honors Retry-After). When ON,
+    // each src/models/<provider>.js routes API calls through
+    // src/models/rate_limited_client.js. See docs/agent-blueprint.md §3 Step 1.
+    "use_rate_limit_wrapper": true,
+    "rate_limit": {
+        "anthropic": { "rpm": 50 },  // Sonnet 4.6 paid tier baseline
+        "nvidia":    { "rpm": 40 },  // NVIDIA Build documented limit
+        "openai":    { "rpm": 60 },
+        "retry_max_attempts": 3,
+        "backoff_max_seconds": 30
+    },
 };
 
 export default settings;
