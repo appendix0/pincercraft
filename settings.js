@@ -56,7 +56,7 @@ const settings = {
 
     "allow_insecure_coding": true, // enabled 2026-05-11 — Claude can write/run JS via !newAction. Required for any complex non-trivial task (building structures, custom multi-step logic). Bot runs as user `ubuntu` so cannot touch root-owned YOON files; iptables not modifiable without sudo.
     "allow_vision": false, // allows vision model to interpret screenshots as inputs
-    "blocked_actions" : ["!checkBlueprint", "!checkBlueprintLevel", "!getBlueprint", "!getBlueprintLevel", "!restart"] , // !restart removed: prevents bot from self-killing on transient errors (systemd handles real restarts; user can `systemctl restart daedelus404.service` manually)
+    "blocked_actions" : [] , // Step 2 prune removed the 5 commands previously listed here (blueprint quartet + !restart) — they no longer exist to block. Re-add command names here to block them at runtime.
     "code_timeout_mins": -1, // minutes code is allowed to run. -1 for no timeout
     "relevant_docs_count": 5, // number of relevant code function docs to select for prompting. -1 for all
 

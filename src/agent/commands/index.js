@@ -5,7 +5,12 @@ import { checkPlayerPermission } from '../permissions.js';
 
 let suppressNoDomainWarning = true;
 
-const commandList = queryList.concat(actionsList);
+// Exported so src/agent/tool_registry.js can import the merged list without
+// pulling queries.js / actions.js directly (which would trigger a
+// queries ↔ index circular import — queries.js imports getCommandDocs
+// from this file). Routing through here forces the index→queries load
+// order that keeps the cycle innocuous.
+export const commandList = queryList.concat(actionsList);
 const commandMap = {};
 for (let command of commandList) {
     commandMap[command.name] = command;
@@ -323,6 +328,13 @@ export function getCommandDocs(agent) {
     const ctx = { agent };
     for (let command of commandList) {
         if (agent.blocked_actions.includes(command.name)) {
+            continue;
+        }
+        // Step 2 prune: commands flagged `internal: true` are callable but
+        // not advertised to the LLM (e.g. setup verbs invoked programmatically
+        // by other modules). Distinct from blocked_actions, which forbids
+        // execution entirely.
+        if (command.internal === true) {
             continue;
         }
         let description = command.description;

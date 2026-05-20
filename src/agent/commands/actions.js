@@ -7,7 +7,7 @@ import { verifyEndFactor } from '../verify.js';
 
 function runAsAction (actionFn, resume = false, timeout = -1) {
     let actionLabel = null;  // Will be set on first use
-    
+
     const wrappedAction = async function (agent, ...args) {
         // Set actionLabel only once, when the action is first created
         if (!actionLabel) {
@@ -23,6 +23,11 @@ function runAsAction (actionFn, resume = false, timeout = -1) {
             return;
         return code_return.message;
     }
+    // Step 2: mark so the tool_registry can derive isLongRunning without
+    // each command entry having to declare it. Anything wrapped via
+    // runAsAction blocks the worker on physical motion — Step 5 will
+    // route those through background handles.
+    wrappedAction.isLongRunning = true;
 
     return wrappedAction;
 }
@@ -83,32 +88,6 @@ export const actionsList = [
         }
     },
     {
-        name: '!stfu',
-        isConcurrencySafe: true,
-        description: 'Stop all chatting and self prompting, but continue current action.',
-        perform: async function (agent) {
-            agent.openChat('Shutting up.');
-            agent.shutUp();
-            return;
-        }
-    },
-    {
-        name: '!restart',
-        description: 'Restart the agent process.',
-        perform: async function (agent) {
-            agent.cleanKill();
-        }
-    },
-    {
-        name: '!clearChat',
-        isConcurrencySafe: true,
-        description: 'Clear the chat history.',
-        perform: async function (agent) {
-            agent.history.clear();
-            return agent.name + "'s chat history was cleared, starting new conversation from scratch.";
-        }
-    },
-    {
         name: '!goToPlayer',
         description: 'Go to the given player.',
         params: {
@@ -148,7 +127,7 @@ export const actionsList = [
     },
     {
         name: '!searchForBlock',
-        description: 'Find and go to the nearest block of a given type in a given range.',
+        description: 'Find and go to the nearest block of a given type in a given range. PREFER !collectBlocks for mining — it does the search internally and auto-equips the right tool. Use !searchForBlock only when you want to GO to a block without breaking it (e.g. find a crafting_table, find a chest).',
         params: {
             'type': { type: 'BlockName', description: 'The block type to go to.' },
             'search_range': { type: 'float', description: 'The range to search for the block. Minimum 32.', domain: [10, 512] }
@@ -423,31 +402,6 @@ export const actionsList = [
         }
     },
     {
-        name: '!goal',
-        isConcurrencySafe: true,
-        description: 'Set a goal prompt to endlessly work towards with continuous self-prompting.',
-        params: {
-            'selfPrompt': { type: 'string', description: 'The goal prompt.' },
-        },
-        perform: async function (agent, prompt) {
-            if (convoManager.inConversation()) {
-                agent.self_prompter.setPromptPaused(prompt);
-            }
-            else {
-                agent.self_prompter.start(prompt);
-            }
-        }
-    },
-    {
-        name: '!endGoal',
-        isConcurrencySafe: true,
-        description: 'Call when you have accomplished your goal. It will stop self-prompting and the current action. ',
-        perform: async function (agent) {
-            agent.self_prompter.stop();
-            return 'Self-prompting stopped.';
-        }
-    },
-    {
         name: '!showVillagerTrades',
         description: 'Show trades of a specified villager.',
         params: {'id': { type: 'int', description: 'The id number of the villager that you want to trade with.' }},
@@ -518,23 +472,6 @@ export const actionsList = [
                 result = await agent.vision_interpreter.lookAtPlayer(player_name, direction);
             };
             await agent.actions.runAction('action:lookAtPlayer', actionFn);
-            return result;
-        }
-    },
-    {
-        name: '!lookAtPosition',
-        description: 'Look at specified coordinates.',
-        params: {
-            'x': { type: 'int', description: 'x coordinate' },
-            'y': { type: 'int', description: 'y coordinate' },
-            'z': { type: 'int', description: 'z coordinate' }
-        },
-        perform: async function(agent, x, y, z) {
-            let result = "";
-            const actionFn = async () => {
-                result = await agent.vision_interpreter.lookAtPosition(x, y, z);
-            };
-            await agent.actions.runAction('action:lookAtPosition', actionFn);
             return result;
         }
     },
