@@ -179,8 +179,10 @@ export function neutralToAnthropic(history) {
             for (const tc of turn.toolCalls || []) {
                 content.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.args || {} });
             }
-            // Anthropic requires non-empty content array
-            if (content.length === 0) content.push({ type: 'text', text: '' });
+            // Skip a no-op assistant turn entirely. Anthropic rejects both
+            // empty content arrays AND text blocks with empty strings, so a
+            // parking turn (text='', no toolCalls) MUST not be replayed.
+            if (content.length === 0) continue;
             out.push({ role: 'assistant', content });
         } else if (turn.role === 'tool_result') {
             const content = (turn.toolResults || []).map(tr => {

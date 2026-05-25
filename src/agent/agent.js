@@ -30,8 +30,12 @@ import {
     isSafeSideChatCommand,
     isPathFailure,
     detectTaskRequest,
+    detectPlanRequest,
     detectPlanApproval,
     detectPlanRejection,
+    estimateTaskSize,
+    SIZE_DECOMP_THRESHOLD,
+    THIN_DECOMPOSITION_NUDGE,
     PLAN_MODE_AUTO_NUDGE,
     PLAN_APPROVED_NUDGE,
     PLAN_REJECTED_NUDGE,
@@ -50,6 +54,7 @@ import { startMcpServer } from '../mcp_server.js';
 import { OrchestratorV2 } from './orchestrator_v2.js';
 import { BackgroundTasks } from './background_tasks.js';
 import { neutralToAnthropic, neutralToOpenAI } from '../models/tool_protocol.js';
+import { rateLimitEvents } from '../models/rate_limited_client.js';
 import { getRegistry } from './tool_registry.js';
 
 export class Agent {
@@ -335,6 +340,38 @@ export class Agent {
         // Always greet players based on queue state. Then, if there's an
         // in-progress task, prompt the LLM to keep going so a reboot
         // mid-task resumes instead of stalling.
+        // Rate-limit chat banter: when the bot stalls under a 429 burst,
+        // post one chat message so the player knows what's happening; post
+        // another when it resumes. Per-session debounce so multiple 429s
+        // in a row don't spam chat.
+        this._rateLimitInThrottle = false;
+        this._rateLimitLastChatTs = 0;
+        rateLimitEvents.on('throttle', ({ provider, waitMs }) => {
+            if (!this.alive || !this.bot) return;
+            const now = Date.now();
+            // Suppress duplicate chats if we already posted one within 60s
+            if (this._rateLimitInThrottle) return;
+            if (now - this._rateLimitLastChatTs < 60_000) {
+                this._rateLimitInThrottle = true;
+                return;
+            }
+            this._rateLimitInThrottle = true;
+            this._rateLimitLastChatTs = now;
+            try {
+                this.openChat("I need to rest for a moment. It'll take less than a minute!");
+                console.log(`[rate_limit:${provider}] posted throttle chat (waitMs=${waitMs})`);
+            } catch (e) { console.warn('[rate_limit] throttle chat failed:', e?.message || e); }
+        });
+        rateLimitEvents.on('resume', ({ provider }) => {
+            if (!this.alive || !this.bot) return;
+            if (!this._rateLimitInThrottle) return;
+            this._rateLimitInThrottle = false;
+            try {
+                this.openChat("Back on it.");
+                console.log(`[rate_limit:${provider}] posted resume chat`);
+            } catch (e) { console.warn('[rate_limit] resume chat failed:', e?.message || e); }
+        });
+
         const {greeting, hasActive, activeDesc, activeId} = this._rebootContext();
         this.openChat(greeting);
         if (hasActive && !save_data?.self_prompt && !init_message) {
@@ -960,12 +997,11 @@ export class Agent {
                     await this.history.add('system', PLAN_REJECTED_NUDGE);
                 } else if (detectTaskRequest(message)) {
                     // Supersede: player issued a NEW complex request while a
-                    // prior plan was awaiting approval. The old plan is dead;
-                    // exit plan mode and re-enter for the new request so the
-                    // model rebuilds the queue from scratch.
+                    // prior plan was waiting for its decomposition. Old plan
+                    // is dead — exit + re-enter for the new request.
                     console.log('[plan mode] superseded by new task request');
                     this.exitPlanMode();
-                    await this.history.add('system', '[plan superseded] Player issued a new task request before approving the prior plan. The old plan is abandoned. Rebuild the queue for what they just asked.');
+                    await this.history.add('system', '[plan superseded] Player issued a new task request before the prior plan committed. The old plan is abandoned. Rebuild the queue for what they just asked.');
                     this.enterPlanMode();
                     await this.history.add('system', PLAN_MODE_AUTO_NUDGE);
                 }
@@ -983,6 +1019,8 @@ export class Agent {
         // appended for archival (debug logs); the LLM-facing history is
         // orchestrator-owned. Skip the legacy for-loop entirely.
         if (this.orchestrator) {
+            const pendingBefore = this.task_queue?.tasks?.filter(t => t.status === 'pending').length ?? 0;
+            const planModeBefore = this.planMode === true;
             try {
                 await this.orchestrator.handleEvent({
                     type: 'user_message',
@@ -991,6 +1029,67 @@ export class Agent {
                 });
             } catch (e) {
                 console.error('[v2 orch] handleEvent failed:', e?.message || e);
+            }
+
+            // Plan-mode auto-commit: if we entered plan mode this turn (or
+            // were already in it) AND the planner produced at least one new
+            // !addTask, auto-exit + auto-start task #1 immediately. No
+            // approval ceremony — the bot keeps moving. The 90s hard-cap
+            // in enterPlanMode() stays as a safety net for the rare case
+            // the LLM enters plan mode but emits no tasks.
+            if (planModeBefore && this.planMode === true) {
+                const pendingTasks = this.task_queue?.tasks?.filter(t => t.status === 'pending') || [];
+                const pendingNow = pendingTasks.length;
+                if (pendingNow > pendingBefore) {
+                    const added = pendingNow - pendingBefore;
+
+                    // Thin-decomposition gate. If the player's request had a
+                    // big size signal (≥200 blocks) AND the planner queued
+                    // only 1 task, reject the plan and force a replan. The
+                    // single bad task is auto-cancelled so the queue is
+                    // clean before the planner retries.
+                    const sizeEst = estimateTaskSize(message);
+                    if (added === 1 && sizeEst.blocks >= SIZE_DECOMP_THRESHOLD) {
+                        const badTask = pendingTasks[pendingTasks.length - 1];
+                        const badId = badTask?.id;
+                        console.log(`[plan mode] thin decomposition rejected (1 task for ~${sizeEst.blocks} blocks); cancelling task #${badId} + replanning`);
+                        try {
+                            if (badId != null) this.task_queue.cancelTask(badId);
+                        } catch (e) { console.warn('thin-decomp cancel failed:', e?.message || e); }
+                        await this.history.add('system', THIN_DECOMPOSITION_NUDGE(sizeEst, badId ?? '?'));
+                        try {
+                            await this.orchestrator.handleEvent({
+                                type: 'checkpoint',
+                                content: '[replan] Your prior plan was a single bloated task — rejected. Emit multiple smaller !addTask calls now. Plan mode is still on.',
+                            });
+                        } catch (e) {
+                            console.error('[v2 orch] thin-decomp replan failed:', e?.message || e);
+                        }
+                        return true;
+                    }
+
+                    console.log(`[plan mode] auto-commit (${added} task(s) queued)`);
+                    this.exitPlanMode();
+                    try {
+                        const r = this.task_queue.startTask(null);
+                        if (r?.message) {
+                            await this.history.add('system', `[plan committed] ${added} task(s) queued. ${r.message}`);
+                        }
+                    } catch (e) {
+                        console.warn('plan auto-start failed:', e?.message || e);
+                    }
+                    // Kick the orchestrator immediately so task #1 begins
+                    // executing on this same chat turn rather than waiting
+                    // for the next drive tick.
+                    try {
+                        await this.orchestrator.handleEvent({
+                            type: 'checkpoint',
+                            content: `Plan committed: ${added} tasks queued. Task #1 is now in_progress — execute it now using the body-touching commands available outside plan mode.`,
+                        });
+                    } catch (e) {
+                        console.error('[v2 orch] post-plan-commit handleEvent failed:', e?.message || e);
+                    }
+                }
             }
             return true;
         }

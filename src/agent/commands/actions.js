@@ -520,12 +520,23 @@ export const actionsList = [
     {
         name: '!addTask',
         isConcurrencySafe: true,
-        description: 'Add task to own queue. end_factor required (observable completion criterion).',
+        description: 'Add task to own queue. end_factor required (observable completion criterion). REJECTED if description implies >200 blocks/items of work — split into smaller chunks first.',
         params: {
-            'description': { type: 'string', description: 'Short description of the task (e.g. "mine 5 iron_ore", "build a 3x3 oak_planks wall").' },
+            'description': { type: 'string', description: 'Short description of the task (e.g. "mine 5 iron_ore", "build a 3x3 oak_planks wall"). Must be <=200 blocks/items of work per task.' },
             'end_factor': { type: 'string', description: 'Observable completion criterion (e.g. "5 iron_ore in inventory", "iron_pickaxe in inventory", "player picked up the pickaxe", "bot at coords 100,64,-50"). Required — be specific.' }
         },
         perform: async function (agent, description, end_factor) {
+            // Structural gate. Any task description implying >200 blocks /
+            // items of work is rejected at the command layer — no matter
+            // the source (planner, slash skill, reboot resume, manual op).
+            // This is the last line of defense against the cramming pattern
+            // that motivated this whole decomposition push.
+            const { estimateTaskSize, SIZE_DECOMP_THRESHOLD } = await import('../classify_and_gate.js');
+            const est = estimateTaskSize(description);
+            if (est.blocks >= SIZE_DECOMP_THRESHOLD) {
+                const chunks = Math.max(2, Math.ceil(est.blocks / SIZE_DECOMP_THRESHOLD));
+                return `[task rejected] Description implies ~${est.blocks} blocks/items of work (signal: ${est.signal}). HARD LIMIT: ${SIZE_DECOMP_THRESHOLD} per task. Split into ≥${chunks} smaller !addTask calls (e.g. "rows 1-10 of floor", "rows 11-20 of floor", ...). Each must have its own observable end_factor.`;
+            }
             return agent.task_queue.addTask(description, end_factor).message;
         }
     },

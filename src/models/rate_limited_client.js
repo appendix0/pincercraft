@@ -18,6 +18,26 @@ import settings from '../../settings.js';
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+// Lightweight pub/sub so agent.js can react to rate-limit events (e.g.
+// emit a chat message when the bot stalls under a 429 burst, and another
+// when it resumes). Module-level so every RateLimitedClient instance
+// shares one emitter — listeners subscribe once and hear all providers.
+class TinyEmitter {
+    constructor() { this.listeners = {}; }
+    on(event, fn) {
+        (this.listeners[event] ||= []).push(fn);
+        return () => { this.listeners[event] = (this.listeners[event] || []).filter(f => f !== fn); };
+    }
+    emit(event, payload) {
+        for (const fn of this.listeners[event] || []) {
+            try { fn(payload); }
+            catch (e) { console.warn('[rate_limit emitter] listener threw:', e?.message || e); }
+        }
+    }
+}
+
+export const rateLimitEvents = new TinyEmitter();
+
 // Sliding 60s window: tracks acquire timestamps; blocks new acquires until
 // the window has < rpm entries. acquire() is serialized through a promise
 // chain so concurrent callers see a consistent window.
@@ -64,16 +84,28 @@ export class RateLimitedClient {
 
     async send(fn) {
         await this.bucket.acquire();
+        let wasThrottled = false;
         for (let attempt = 0; ; attempt++) {
             try {
-                return await fn();
+                const result = await fn();
+                if (wasThrottled) {
+                    rateLimitEvents.emit('resume', { provider: this.provider });
+                }
+                return result;
             } catch (e) {
                 const status = this._status(e);
                 if (status !== 429 || attempt >= this.retryMaxAttempts) {
+                    if (wasThrottled) {
+                        rateLimitEvents.emit('resume', { provider: this.provider });
+                    }
                     throw e;
                 }
                 const wait = this._backoffMs(e, attempt);
                 this.log(`[rate_limit:${this.provider}] 429 on attempt ${attempt + 1}/${this.retryMaxAttempts + 1}, sleeping ${wait}ms`);
+                if (!wasThrottled) {
+                    rateLimitEvents.emit('throttle', { provider: this.provider, waitMs: wait, attempt });
+                    wasThrottled = true;
+                }
                 await sleep(wait);
             }
         }

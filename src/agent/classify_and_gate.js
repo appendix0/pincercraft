@@ -80,15 +80,29 @@ export const MEMORY_REQUEST_NUDGE = '[memory cue detected] This message contains
 // a plan all by themselves — no additional complexity signal needed.
 const MULTI_STEP_VERBS = /\b(build|construct|set up|setup|automate|farm)\b/i;
 
-// Plan mode is for genuinely complex multi-step work. A one-verb request
-// like "give me logs" or "come here" doesn't need a written plan + player
-// approval cycle — it stalls the bot and creates dead time. We require
-// EITHER a strong multi-step verb OR (any task verb + a complexity signal).
+// detectTaskRequest still gates the !addTask nudge (encourages queue use even
+// for "go get iron"). It does NOT gate plan-mode auto-entry anymore — use
+// detectPlanRequest for that. The split is intentional per
+// feedback_pincercraft_no_plan_mode_for_simple: routine multi-step requests
+// should just execute, only EXPLICITLY plan-flavored language enters plan
+// mode.
 export function detectTaskRequest(message) {
     if (!message || message.length < 4) return false;
     if (MULTI_STEP_VERBS.test(message)) return true;
     if (!TASK_REQUEST_VERBS.test(message)) return false;
     return COMPLEXITY_PATTERNS.some(re => re.test(message));
+}
+
+// Plan-mode auto-entry is gated separately. The bar is HIGH — the player has
+// to explicitly invoke planning language. Build/gather/craft requests (even
+// multi-step ones like "build a watch tower") just execute via the queue.
+// Per feedback_pincercraft_no_plan_mode_for_simple: "do not plan(well this
+// is ok if the task iss simple and planning is not neccessary)".
+const PLAN_REQUEST_PATTERNS = /\b(make a plan|plan it out|plan this out|step by step|step-by-step|list the steps|list out the steps|outline the steps|outline a plan|propose a plan|enter plan mode|first .+ then)\b/i;
+
+export function detectPlanRequest(message) {
+    if (!message || message.length < 4) return false;
+    return PLAN_REQUEST_PATTERNS.test(message);
 }
 
 export function detectMemoryRequest(message) {
@@ -136,9 +150,77 @@ export function detectPlanRejection(message) {
     return matchesShortReply(PLAN_REJECTION_WORDS, message);
 }
 
-export const PLAN_MODE_AUTO_NUDGE = '[plan mode auto-entered] The player asked for a multi-step task and you are now in plan mode. Your job this turn: (1) !addTask(description, end_factor) for every step including the final "tell the player" step, in execution order. (2) Post the full plan to chat as a numbered list so the player can review. (3) Stop. Do NOT execute any body-touching command — the gate will reject it. Wait for the player to say "ok"/"yes"/"go" — that auto-exits plan mode and starts task #1. If the player asks for changes, !cancelTask the bad steps and !addTask the new ones.';
-export const PLAN_APPROVED_NUDGE = '[plan approved] The player approved your plan. Plan mode is now off and the first pending task has been auto-started. Execute it.';
+export const PLAN_MODE_AUTO_NUDGE = '[plan mode auto-entered] The player asked for a multi-step task. Your ONLY job this turn: !addTask(description, end_factor) for every step in execution order — break the work into small, independently verifiable subtasks (gather mats → navigate → foundation → walls layer-by-layer → roof → furnishings → tell player). Each end_factor must be observable (e.g. "100 cobblestone in inventory", "bot at coords 643,72,324", "5 wall blocks placed at z=324"). Keep each !newAction tight — one verb per task. HARD RULE: max ~200 blocks/items per task. A 20×50=1000-block floor MUST be at least 5 tasks (e.g. 10-row chunks). Post the plan to chat as a numbered list. DO NOT call !newAction or any body-touching command this turn — your turn ends after the queue is built. The first task will auto-start; the player can interrupt anytime with chat.';
+export const PLAN_APPROVED_NUDGE = '[plan approved] The first pending task has been auto-started. Execute it now.';
 export const PLAN_REJECTED_NUDGE = '[plan rejected] The player wants changes. Plan mode is now off. Listen to what they want, then either revise the queue (!cancelTask the bad steps, !addTask the new ones, !enterPlanMode again to confirm) or just respond and wait for direction.';
+
+// ─── Size detection (hardwired inbound rule) ────────────────────────
+//
+// Pre-plan deterministic detector. Scans the player's message for size
+// signals (NxM dimensions, NxMxK volumes, large numeric quantities) and
+// returns a block/item count estimate. Used to (a) inject a sized-up
+// decomposition nudge before the planner runs, and (b) reject thin
+// decompositions where only 1 task was queued for ≥200 blocks of work.
+//
+// Why hardwired: Haiku's prompt-following on quantified rules is much
+// better than on vague "small subtasks" language. Giving it a concrete
+// "1000 blocks → ≥5 tasks" instruction makes decomposition reliable.
+
+const DIMENSION_PATTERN = /\b(\d+)\s*[x×*]\s*(\d+)(?:\s*[x×*]\s*(\d+))?\b/g;
+// Big-numeric quantity followed by what looks like a material/block name
+// (3+ letter word). Threshold of \d{2,} avoids matching coords like "x=64".
+const QUANTITY_PATTERN = /\b(\d{2,})\s+([a-z_]{3,})/gi;
+
+export const SIZE_DECOMP_THRESHOLD = 200;
+
+// Subtask markers indicate the description is a chunk of a larger task.
+// When present, skip the size gate — the planner already decomposed; the
+// numeric "20×50" mentioned in "rows 1-10 of 20×50 floor" is parent-context
+// reference, not work-for-this-task.
+const SUBTASK_MARKERS = /\b(rows?\s+\d+\s*[-–]\s*\d+|chunk\s+\d+|section\s+\d+|part\s+\d+|step\s+\d+|layer\s+\d+|wall\s+\d+|side\s+\d+|tier\s+\d+|phase\s+\d+|quadrant\s+\d+|sector\s+\d+)\b/i;
+
+export function estimateTaskSize(message) {
+    if (!message || typeof message !== 'string') return { blocks: 0, signal: null };
+    if (SUBTASK_MARKERS.test(message)) return { blocks: 0, signal: null };
+    let max = 0;
+    let signal = null;
+
+    DIMENSION_PATTERN.lastIndex = 0;
+    let m;
+    while ((m = DIMENSION_PATTERN.exec(message)) !== null) {
+        const a = parseInt(m[1], 10);
+        const b = parseInt(m[2], 10);
+        const c = m[3] ? parseInt(m[3], 10) : 1;
+        if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+        const product = a * b * c;
+        if (product > max) {
+            max = product;
+            signal = `${m[0]} = ${product} blocks`;
+        }
+    }
+
+    QUANTITY_PATTERN.lastIndex = 0;
+    while ((m = QUANTITY_PATTERN.exec(message)) !== null) {
+        const n = parseInt(m[1], 10);
+        if (!Number.isFinite(n)) continue;
+        if (n > max) {
+            max = n;
+            signal = `${n} ${m[2]}`;
+        }
+    }
+
+    return { blocks: max, signal };
+}
+
+export const SIZE_DECOMP_NUDGE = (estimate) => {
+    const chunks = Math.max(2, Math.ceil(estimate.blocks / SIZE_DECOMP_THRESHOLD));
+    return `[size detected] Your request implies ~${estimate.blocks} blocks/items of work (signal: ${estimate.signal}). HARD RULE: max ${SIZE_DECOMP_THRESHOLD} blocks/items per !addTask. You MUST emit ≥${chunks} !addTask calls for this. Example for a 20×50=1000-block floor: 5 row-chunk tasks of 10 rows × 50 blocks each. Cramming the whole job into one !newAction is a rule violation.`;
+};
+
+export const THIN_DECOMPOSITION_NUDGE = (estimate, queuedTaskId) => {
+    const chunks = Math.max(2, Math.ceil(estimate.blocks / SIZE_DECOMP_THRESHOLD));
+    return `[thin plan rejected] You queued only 1 task for ~${estimate.blocks} blocks of work. That violates the ${SIZE_DECOMP_THRESHOLD}-block/task limit. REQUIRED: !cancelTask(${queuedTaskId}), then !addTask × ≥${chunks} with smaller chunks. ${SIZE_DECOMP_NUDGE(estimate)}`;
+};
 
 // Convenience: returns the list of nudge strings to inject as system messages
 // before the next LLM turn. Skip when from a self-prompt or another bot —
@@ -148,6 +230,8 @@ export function nudgesForUserMessage(message, { self_prompt = false, from_other_
     const out = [];
     if (detectTaskRequest(message)) out.push(TASK_REQUEST_NUDGE);
     if (detectMemoryRequest(message)) out.push(MEMORY_REQUEST_NUDGE);
+    const sizeEst = estimateTaskSize(message);
+    if (sizeEst.blocks >= SIZE_DECOMP_THRESHOLD) out.push(SIZE_DECOMP_NUDGE(sizeEst));
     return out;
 }
 

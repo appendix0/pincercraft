@@ -1,7 +1,7 @@
 const settings = {
     "minecraft_version": "1.21.11", // YOON runs Paper 1.21.11 (set 1.21.6 when flipping to PincerCraft TS)
     "host": "127.0.0.1",
-    "port": 25565, // YOON Java port (was 25566 = PincerCraft TS; flip back to 25566 for bot dev)
+    "port": 25565, // YOON Java port. v2 orchestrator validated end-to-end 2026-05-25 on Claude (Haiku planner + Sonnet coder) — tool-use protocol, decomposition gates, prompt caching all green.
     "auth": "microsoft", // device-code flow with PinBench1502 MS account (owns Java)
 
     // the mindserver manages all agents and hosts the UI
@@ -111,7 +111,7 @@ const settings = {
     // instead of the legacy text-parsing path. Default OFF — Step 4's
     // orchestrator depends on this; flip ON once orchestrator_v2 lands.
     // See docs/agent-blueprint.md §3 Step 3.
-    "use_tool_use_protocol": false,
+    "use_tool_use_protocol": true,
 
     // v2 Step 4: Event-driven orchestrator. When ON (and
     // use_tool_use_protocol is also ON), agent._processInput delegates to
@@ -120,7 +120,7 @@ const settings = {
     // isConcurrencySafe tools; plan mode = single-channel tools[] filter.
     // To enable: set BOTH use_orchestrator_v2 AND use_tool_use_protocol to
     // true, then restart the bot. See docs/agent-blueprint.md §3 Step 4.
-    "use_orchestrator_v2": false,
+    "use_orchestrator_v2": true,
 
     // v2 Step 5: Background tool handles. When ON (and use_orchestrator_v2
     // is on), isLongRunning tools spawn via BackgroundTasks and return a

@@ -139,11 +139,18 @@ export class OrchestratorV2 {
             const system = typeof this.getSystemPrompt === 'function' ? await this.getSystemPrompt() : '';
             const resp = await this.promptWithTools(this.history, system, tools);
 
-            this.history.push({
-                role: 'assistant',
-                text: resp.text || null,
-                toolCalls: resp.toolCalls || [],
-            });
+            // Skip recording a no-op assistant turn (no text + no toolCalls).
+            // Anthropic 400s on replays that contain empty content; OpenAI is
+            // tolerant but recording garbage helps no one.
+            const hasText = !!(resp.text && resp.text.trim().length > 0);
+            const hasTools = !!(resp.toolCalls && resp.toolCalls.length > 0);
+            if (hasText || hasTools) {
+                this.history.push({
+                    role: 'assistant',
+                    text: hasText ? resp.text : null,
+                    toolCalls: resp.toolCalls || [],
+                });
+            }
 
             if (!resp.toolCalls || resp.toolCalls.length === 0) {
                 // Park. Route any prose to chat.

@@ -92,11 +92,22 @@ export class Claude {
                 ? this.params.thinking.budget_tokens + 1000
                 : 4096;
         }
+        // Prompt caching. The system prompt (~11K tokens of conversing
+        // template + role + examples) and the tools[] surface (~3K) are
+        // both stable across turns — mark them ephemeral so Anthropic
+        // hashes and reuses the prefix instead of re-billing each turn.
+        // 5-minute TTL. Two breakpoints (system + last tool) keep us well
+        // under the 4-breakpoint limit.
+        const tools = toAnthropicTools(toolDescriptors || []);
+        const cachedTools = tools.length > 0
+            ? [...tools.slice(0, -1), { ...tools[tools.length - 1], cache_control: { type: 'ephemeral' } }]
+            : tools;
+        const cachedSystem = [{ type: 'text', text: systemMessage, cache_control: { type: 'ephemeral' } }];
         const call = () => this.anthropic.messages.create({
             model: this.model_name || "claude-sonnet-4-6",
-            system: systemMessage,
+            system: cachedSystem,
             messages: turns,
-            tools: toAnthropicTools(toolDescriptors || []),
+            tools: cachedTools,
             ...(this.params || {}),
         });
         try {
