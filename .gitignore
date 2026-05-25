@@ -29,3 +29,13 @@ tasks/construction_tasks/train/**
 server_data*
 **/.DS_Store
 src/mindcraft-py/__pycache__/
+
+# eval harness local data
+pincercraft_evals.db
+eval/.pending_gate.json
+eval/diagnoses/
+eval/metrics.jsonl
+__pycache__/
+.venv/
+eval/cycle*.log
+*.prototype.bak

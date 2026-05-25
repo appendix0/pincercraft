@@ -41,7 +41,11 @@ const settings = {
     // Missing player + missing '*' fallback → default deny. Set "*" with
     // a permissive allow list if you want strangers to drive the bot.
     "permissions": {
-        "LosPollos929": { "allow": ["!*"] }
+        "LosPollos929": { "allow": ["!*"] },
+        // 2026-05-25: the eval loop drives the bot as synthetic player 'mcp'.
+        // Scoped to task-injection + read-only grounding; queued tasks then
+        // execute under the agent's own authority, not mcp's.
+        "mcp": { "allow": ["!addTask", "!showQueue", "!stats", "!inventory", "!nearbyBlocks", "!cancelTask", "!finishTask", "!dispatchAgent", "!invokeSkill"] }
     },
 
     "speak": false,
@@ -78,7 +82,7 @@ const settings = {
     // The synthetic player name 'mcp' is the source for external invocations,
     // so add an entry to `permissions` (above) if you want to gate them.
     "mcp": {
-        "enabled": false,
+        "enabled": true, // 2026-05-25: enabled so the eval/ self-improvement loop can inject tasks. Token lives in keys.json (mcp_token).
         "host": "127.0.0.1",
         "port": 8765,
         "token": null
