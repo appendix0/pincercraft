@@ -87,3 +87,227 @@ session driven by a `/loop` task list (21 tasks, see commit log).
   classifier itself wasn't taken — the deterministic detector now
   acts as the safety-net trigger for `stuck` instead of being a
   duplicate of the LLM's prompt rules.
+
+## 2026-05-25 — v2 integration shipped + production tuning
+
+Single-session push that took v2 steps 1–6 (standalone modules from
+2026-05-20) all the way to live operation on YOON, plus production
+tuning discovered during the live smoke. Five commits on `develop`:
+`943766e` (integration), `a9a86c0` (chores), `e50544a` (production
+tuning), `549ca3d` (UX feedback), and this changelog entry.
+
+### Engine fleet narrowed to Claude
+
+- **DeepSeek-v4-flash via NVIDIA Build dropped as default.** Live smoke
+  on 2026-05-25 found that NVIDIA's OpenAI-compat endpoint forwards the
+  `tools[]` field but DeepSeek's serving stack ignores it — the model
+  returns empty content with no `tool_calls`. The orchestrator parks
+  silently and the bot doesn't respond. Verifying this took flipping
+  the engine to Claude (which supports `tool_use` natively as an
+  Anthropic concept) and watching the orchestrator immediately work.
+- **Groq + Cerebras profiles deleted** — fleet is now Claude (default)
+  + NVIDIA (fallback, non-tool-use code paths only). Updated
+  `bot-engine` script and `settings.js` rate_limit entries accordingly.
+- `profiles/daedelus404.json` symlink → `daedelus404.claude.json`
+  (Haiku chat + Sonnet code_model).
+
+### v2 orchestrator wired live (`use_tool_use_protocol`,
+`use_orchestrator_v2` flipped ON in `settings.js`)
+
+**`agent.js`**
+- `_initOrchestratorV2()` constructs `OrchestratorV2` + `BackgroundTasks`
+  when both flags are on; warns when only one is set.
+- `handleMessage` delegates to `orchestrator.handleEvent({type:
+  'user_message'})` when the orchestrator is initialized; legacy
+  `for(i<max_responses)` loop stays as the fallback path.
+- `_buildSystemPromptForTools()` strips `$COMMAND_DOCS` from the
+  conversing template (tools advertised via `tools[]`, not prose).
+- `_promptViaModel()` bridges neutral history → provider native shape
+  via `neutralToAnthropic` / `neutralToOpenAI`, then calls
+  `sendRequestWithTools`.
+- Plan-mode 90s hard-cap; plan-mode released on death so recovery
+  isn't gated; drive loop nudges the bot when run_queue is idle but a
+  task is in_progress; empty-response reissue safety net.
+
+**`models/claude.js` + `gpt.js` + `tool_protocol.js`**
+- `sendRequestWithTools` per provider returns normalized
+  `{text, toolCalls, stopReason}`.
+- `neutralToAnthropic` / `neutralToOpenAI` converters for orchestrator
+  history → provider shape.
+
+**`process/init_agent.js`**
+- `unhandledRejection` / `uncaughtException` handlers so pathfinder
+  async throws stop dying silently; `bot.log` now ends with the stack.
+
+### Bug fixes uncovered during smoke
+
+- **bg_complete event shape**: Anthropic rejects `tool_result` blocks
+  whose `tool_use_id` doesn't match a prior `tool_use` in the same
+  turn sequence. `bg_complete` arrives long after the originating
+  `tool_use` already returned a started-handle response. Reshaped to
+  emit a synthetic user-role text turn carrying the bg outcome instead
+  of a tool_result block.
+- **No-op assistant turn**: when the LLM emits no text AND no
+  toolCalls (a parking signal), the orchestrator was still recording an
+  assistant turn with empty content. `neutralToAnthropic` then pushed
+  an empty text block — Anthropic 400s on replays. Fix: skip recording
+  no-op assistant turns entirely in the orchestrator, AND defensively
+  skip them in the converter.
+- **bg_complete loopback**: `_executeOne` now passes `onComplete` to
+  `backgroundTasks.spawn` that re-enters the dispatcher with a
+  `bg_complete` event.
+
+### Prompt caching (Anthropic ephemeral)
+
+- `sendRequestWithTools` marks the system prompt + the last tool
+  descriptor with `cache_control: { type: 'ephemeral' }`. Two
+  breakpoints (well under the 4-breakpoint limit).
+- Observed savings: ~70% on system prompt across multi-turn builds.
+  Turn 2 `cache_read=13859`; sustained `cache_read=6240–28435` across
+  30+ turns within a session. 5-minute TTL.
+- **Known not-yet-cached**: `kind=coding` (Sonnet `!newAction`
+  generator) still goes through legacy `sendRequest`. Each `!newAction`
+  invocation pays ~2.5–3.5K input tokens uncached. Worth fixing
+  but lower-impact than the convo_tools path.
+
+### Plan-mode auto-commit (no approval ceremony)
+
+- After `orchestrator.handleEvent`, check if plan-mode was entered
+  this turn AND tasks were queued. If so, auto-exit plan-mode and
+  auto-start task #1 immediately. Player can interrupt anytime with
+  chat; no approval gating.
+- 90s hard-cap stays as a safety net for the rare case the LLM enters
+  plan mode but emits no tasks.
+- Plan-mode supersede path retained: if a player issues a new task
+  request mid-plan, the old plan is abandoned and the LLM rebuilds
+  from scratch.
+
+### Task-size decomposition gate (3 layers, defense in depth)
+
+Problem: Haiku planner was cramming entire builds ("20×50 floor =
+1000 blocks") into single `!newAction` JS double-loops. Fragile
+recovery; ignored incremental progress.
+
+**Rule 1 — Pre-plan inbound nudge** (`classify_and_gate.js`):
+- `estimateTaskSize(message)` regex-scans for size signals:
+  - Dimensions: `NxM`, `N×M`, `N*M`, `NxMxK` (handles `x`, `×`, `*`)
+  - Big numerics + material: `\d{2,}\s+\w+` (e.g. "991 cobblestone")
+- When ≥ `SIZE_DECOMP_THRESHOLD` (200), `SIZE_DECOMP_NUDGE` injects
+  sizing math via `nudgesForUserMessage` before the planner LLM runs:
+  *"~1000 blocks (signal: 20×50 = 1000). HARD RULE: max 200 per
+  !addTask. Emit ≥5 !addTask calls. Example: 5 row-chunk tasks of 10
+  rows × 50 blocks each."*
+
+**Rule 2 — Post-plan thin-decomposition gate** (`agent.js`):
+- If exactly 1 task was queued AND the message had a size signal
+  ≥ threshold, auto-cancel via `task_queue.cancelTask(badId)` and
+  re-prompt the planner with `THIN_DECOMPOSITION_NUDGE`. Stays in
+  plan mode so body-touching commands stay blocked during the
+  re-decompose turn.
+
+**Rule 3 — `!addTask` structural gate** (`commands/actions.js`):
+- The `!addTask` command's `perform` runs `estimateTaskSize` on the
+  description itself. Any description ≥ 200 blocks is rejected at the
+  command layer, regardless of source (planner, slash skill, reboot
+  resume, manual op).
+- This caught task #173 ("Mine 991 stone blocks") and task #175
+  ("Build 20×50 cobblestone floor") that were already in tasks.json
+  from before the fix — both got `cancelled` manually since they
+  couldn't be re-queued after the gate.
+
+**Subtask exemption** (`SUBTASK_MARKERS` regex):
+- Descriptions containing chunk/row/section/layer/tier/phase markers
+  (e.g. *"rows 1-10 of 20×50 floor"*, *"layer 2 of watchtower"*,
+  *"chunk 3 of 5"*) pass through. The numeric mentioned is
+  parent-context reference, not work-for-this-task.
+
+### Plan-mode classifier split
+
+- `detectTaskRequest` (broad: `MULTI_STEP_VERBS` + `COMPLEXITY_PATTERNS`)
+  gates the `!addTask` nudge to encourage queue use even on routine
+  multi-step requests.
+- `detectPlanRequest` (NEW, explicit `"plan it out" / "step by step" /
+  "first … then"` language) is reserved for future use; plan-mode
+  auto-entry stays on `detectTaskRequest` because the auto-commit
+  ceremony is now lightweight.
+- `PLAN_MODE_AUTO_NUDGE` strengthened with quantified rule + worked
+  example: *"max ~200 blocks/items per task. A 20×50=1000-block floor
+  MUST be at least 5 tasks (e.g. 10-row chunks)."*
+
+### UX feedback features
+
+- **Throttle chat** (`rate_limited_client.js` + `agent.js`):
+  module-level `rateLimitEvents` (TinyEmitter) fires `throttle`/`resume`
+  events on 429-backoff lifecycle. Agent subscribes once during
+  `start()`; posts *"I need to rest for a moment. It'll take less than
+  a minute!"* on first throttle of a session, *"Back on it."* on
+  resume. 60s debounce so a 429 cluster doesn't spam chat.
+- **Task-start chat** (`task_queue.js` + `agent.js`): `task_queue`
+  fires a new `'start'` event when a task transitions to in_progress
+  (from `addTask` auto-promote, explicit `startTask`, or `finishTask`
+  auto-advance). `_onQueueChange` chats *"Starting task #N:
+  <description>"* with a 5s debounce. Fixes the "bot looks frozen
+  between chunks" UX where a 10–25s gap (Sonnet code-gen + planner
+  re-invoke) was silent.
+
+### Memory authority nudge
+
+- `MEMORY_AUTHORITY_NUDGE` fires whenever the player's message
+  contains an explicit parameter (size signal != null). Tells the
+  planner: *"player message wins over saved memory; if dimensions /
+  material / coords conflict, use the new value and !remember to
+  overwrite the stale entry."*
+- Addresses observed regression where the bot pulled *"20×50 floor"*
+  from prior memory while the player had just said *"30×30"*.
+
+### Production smoke results (YOON, 30×30 deepslate floor)
+
+- `[plan mode] auto-commit (5 task(s) queued)` — clean decomposition
+  into row chunks of 180 blocks each (well under the 200 threshold).
+- Cache: `total_cache_read = 364K tokens` across 60+ turns. Strong
+  savings vs uncached baseline.
+- Rate limits: 2–3 anthropic 429s during heavy execution, all
+  self-recovered via backoff. Haiku 50 RPM ceiling is the limit;
+  drive loop + heartbeat + side-chat + planner re-invokes stack fast
+  during chunk transitions.
+- No `HARD_CAP=12` hits in the production smoke session after the
+  fixes (one earlier hit before the bg_complete + empty-turn fixes).
+- No `[v2 orch] handleEvent failed` errors after the bug fixes.
+
+### Settings flipped
+
+- `use_tool_use_protocol: true`
+- `use_orchestrator_v2: true`
+- `use_background_handles: false` (deferred — wiring in place, not
+  yet exercised; requires individual skill refits to honor
+  AbortSignal)
+- `use_subagent_isolation: false` (only tools-filter piece is wired;
+  full child-history isolation deferred)
+
+### Known follow-ups (not blocking)
+
+- `kind=coding` (Sonnet code_model) still uncached on
+  `claude.js.sendRequest`. Trivial to fix; just add the same
+  `cache_control` markers as `sendRequestWithTools`.
+- `wipe_memory_on_start: true` blows away every `!remember` call on
+  restart. User wants to flip to `false` so memory persists; deferred
+  until next planned restart.
+- Drive loop interval (10s) could be raised to 30s if 429s become
+  chronic; current rate is acceptable.
+- Side-chat `_handleSideChat` still uses legacy `promptConvo`
+  (`kind=convo input=~11K cache_read=0`). Low impact, but the
+  cleanest fix is routing through the orchestrator with a tools_filter
+  that strips body-touching commands.
+
+### Memory feedback saved (auto-memory `~/.claude/.../memory/`)
+
+- `feedback_pincercraft_claude_primary` — Claude is default; v2
+  orchestrator requires it (DeepSeek silently drops `tools[]`).
+- `feedback_pincercraft_no_plan_mode_for_simple` — routine
+  gather/craft tasks should just execute; reserve plan-mode for
+  genuinely complex builds. (Superseded in practice by the auto-commit
+  flow — plan-mode now lightweight enough to fire on any multi-step.)
+- `feedback_pincercraft_task_size_gate` — three-layer enforcement
+  (pre-plan, thin-decomp, !addTask gate). Subtask markers exempt.
+- `feedback_bot_dev_target_yoon` — bot dev/smoke runs against YOON
+  :25565, not PT. PT retired as dev target 2026-05-25.
