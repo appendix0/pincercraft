@@ -79,8 +79,13 @@ export class Claude {
     // tool-protocol shape (see src/models/tool_protocol.js).
     // Anthropic supports tool_use natively — no tolerant-parse retry needed
     // here (the SDK delivers `input` as a parsed object).
+    //
+    // `turns` is the Anthropic-native shape (objects with content arrays for
+    // tool_use/tool_result blocks). Callers (prompter.promptConvoWithTools)
+    // convert from the orchestrator's neutral shape via neutralToAnthropic()
+    // before calling. We deliberately skip strictFormat() here — it assumes
+    // string content and would mangle the tool_use blocks.
     async sendRequestWithTools(turns, systemMessage, toolDescriptors) {
-        const messages = strictFormat(turns);
         this.last_usage = null;
         if (!this.params.max_tokens) {
             this.params.max_tokens = this.params.thinking?.budget_tokens
@@ -90,7 +95,7 @@ export class Claude {
         const call = () => this.anthropic.messages.create({
             model: this.model_name || "claude-sonnet-4-6",
             system: systemMessage,
-            messages,
+            messages: turns,
             tools: toAnthropicTools(toolDescriptors || []),
             ...(this.params || {}),
         });

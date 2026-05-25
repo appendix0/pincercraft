@@ -18,6 +18,7 @@
 
 import { readFileSync, readdirSync } from 'fs';
 import path from 'path';
+import settings from '../../settings.js';
 
 const ROLE_DIR = path.resolve(process.cwd(), 'profiles/roles');
 const ROLE_CACHE = new Map();
@@ -76,6 +77,11 @@ export async function dispatchSubagent(agent, role, description, endFactor) {
         startedAt: Date.now(),
         inventorySnapshot: snapshotInventory(agent),
         positionSnapshot: snapshotPosition(agent),
+        // v2 Step 6: when use_subagent_isolation is on, the orchestrator's
+        // activeTools() narrows the tool surface to the role's tools_filter.
+        // Without the flag this field is ignored and the subagent sees the
+        // full registry (legacy behavior).
+        toolsFilter: settings.use_subagent_isolation ? (profile.tools_filter || null) : null,
     };
     // Inject the role prompt + dispatch marker as system messages so the
     // very next LLM turn enters the role's mindset.

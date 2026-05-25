@@ -157,3 +157,64 @@ function mapOpenAIFinishReason(fr) {
         default:           return fr || 'end_turn';
     }
 }
+
+// ─── Neutral history → provider native (for integration) ─────────────
+//
+// Orchestrator history shape:
+//   { role: 'user',          content: string }
+//   { role: 'assistant',     text: string|null, toolCalls: [{id, name, args}] }
+//   { role: 'tool_result',   toolResults: [{id, name, content, isError}] }
+//
+// Anthropic expects content blocks; OpenAI splits tool_results into
+// separate messages with role:'tool'.
+
+export function neutralToAnthropic(history) {
+    const out = [];
+    for (const turn of history || []) {
+        if (turn.role === 'user') {
+            out.push({ role: 'user', content: typeof turn.content === 'string' ? turn.content : '' });
+        } else if (turn.role === 'assistant') {
+            const content = [];
+            if (turn.text) content.push({ type: 'text', text: turn.text });
+            for (const tc of turn.toolCalls || []) {
+                content.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.args || {} });
+            }
+            // Anthropic requires non-empty content array
+            if (content.length === 0) content.push({ type: 'text', text: '' });
+            out.push({ role: 'assistant', content });
+        } else if (turn.role === 'tool_result') {
+            const content = (turn.toolResults || []).map(tr => {
+                const block = { type: 'tool_result', tool_use_id: tr.id, content: String(tr.content ?? '') };
+                if (tr.isError === true) block.is_error = true;
+                return block;
+            });
+            if (content.length > 0) out.push({ role: 'user', content });
+        }
+    }
+    return out;
+}
+
+export function neutralToOpenAI(history) {
+    const out = [];
+    for (const turn of history || []) {
+        if (turn.role === 'user') {
+            out.push({ role: 'user', content: typeof turn.content === 'string' ? turn.content : '' });
+        } else if (turn.role === 'assistant') {
+            const msg = { role: 'assistant', content: turn.text || null };
+            if (turn.toolCalls && turn.toolCalls.length > 0) {
+                msg.tool_calls = turn.toolCalls.map(tc => ({
+                    id: tc.id,
+                    type: 'function',
+                    function: { name: tc.name, arguments: JSON.stringify(tc.args || {}) },
+                }));
+            }
+            out.push(msg);
+        } else if (turn.role === 'tool_result') {
+            // OpenAI splits each tool_result into its own message with role:'tool'
+            for (const tr of turn.toolResults || []) {
+                out.push({ role: 'tool', tool_call_id: tr.id, content: String(tr.content ?? '') });
+            }
+        }
+    }
+    return out;
+}

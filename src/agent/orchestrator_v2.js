@@ -47,6 +47,7 @@
 
 import { getRegistry } from './tool_registry.js';
 import { checkPlayerPermission } from './permissions.js';
+import { matchesToolFilter } from './subagent_v2.js';
 
 export class OrchestratorV2 {
     // promptWithTools is injected so the orchestrator stays test-friendly
@@ -98,21 +99,19 @@ export class OrchestratorV2 {
                     content: event.source ? `${event.source}: ${event.content}` : event.content,
                 });
                 break;
-            case 'bg_complete':
-                // Step 5 will fill in toolUseId tracking. For now, surface
-                // as a synthetic tool_result so the LLM sees outcome.
-                this.history.push({
-                    role: 'tool_result',
-                    toolResults: [{
-                        id: event.handle,
-                        name: event.toolName,
-                        content: event.error
-                            ? `[bg ${event.toolName} failed] ${event.error}`
-                            : (event.result || `[bg ${event.toolName} complete]`),
-                        isError: !!event.error,
-                    }],
-                });
+            case 'bg_complete': {
+                // Surface bg-task outcome as a synthetic user turn (no
+                // matching tool_use id exists — the originating tool_use
+                // already returned a started-handle response on the prior
+                // turn). User-role text avoids dangling-tool_use_id errors
+                // on Anthropic.
+                let body;
+                if (event.cancelled) body = `[bg ${event.toolName} ${event.handle} cancelled]`;
+                else if (event.error) body = `[bg ${event.toolName} ${event.handle} failed] ${event.error}`;
+                else body = `[bg ${event.toolName} ${event.handle} complete]${event.result ? ` ${event.result}` : ''}`;
+                this.history.push({ role: 'user', content: body });
                 break;
+            }
             case 'mode_trigger':
                 this.history.push({
                     role: 'user',
@@ -169,8 +168,16 @@ export class OrchestratorV2 {
         const descs = this.agent?.planMode === true
             ? this.registry.forPlanMode(blocked)
             : this.registry.forLLM(blocked);
-        return this.registry.toolDescriptorsForLLM(blocked)
+        let out = this.registry.toolDescriptorsForLLM(blocked)
             .filter(d => descs.some(c => c.name === d._raw.name));
+        // v2 Step 6: when a subagent is active with a tools_filter, narrow
+        // the LLM surface to just the role's allowed tools. The dispatch
+        // path only sets this when use_subagent_isolation is on.
+        const roleFilter = this.agent?.activeSubagent?.toolsFilter;
+        if (Array.isArray(roleFilter) && roleFilter.length > 0) {
+            out = out.filter(d => matchesToolFilter(d.name, roleFilter));
+        }
+        return out;
     }
 
     // Partition tool calls by isConcurrencySafe; Promise.all the safe
@@ -240,6 +247,20 @@ export class OrchestratorV2 {
                     toolName: cmd.name,
                     args: toolCall.args,
                     run: (signal) => cmd.perform(this.agent, ...this._argsToPositional(cmd, toolCall.args)),
+                    onComplete: (payload) => {
+                        // Re-enter the dispatcher with a bg_complete event so
+                        // the LLM sees the outcome on the next invoke. The
+                        // re-entrancy guard (invoking + pendingEvents) handles
+                        // arrival during another in-flight turn.
+                        this.handleEvent({
+                            type: 'bg_complete',
+                            handle: payload.handle,
+                            toolName: payload.toolName,
+                            result: payload.result,
+                            error: payload.error,
+                            cancelled: payload.cancelled,
+                        }).catch(e => console.warn('[orch] bg_complete dispatch failed:', e?.message || e));
+                    },
                 });
                 return { id: toolCall.id, name: toolCall.name, isError: false, content: `[started bg ${handle.handle}] ${cmd.name} dispatched. You'll be notified on completion.` };
             } catch (e) {

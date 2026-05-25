@@ -100,10 +100,10 @@ const settings = {
     "use_rate_limit_wrapper": true,
     "rate_limit": {
         "anthropic": { "rpm": 50 },  // Sonnet 4.6 paid tier baseline
-        "nvidia":    { "rpm": 40 },  // NVIDIA Build documented limit
+        "nvidia":    { "rpm": 30 },  // NVIDIA Build docs say 40 but real-world bursts trip 429 at 35+; conservative
         "openai":    { "rpm": 60 },
-        "retry_max_attempts": 3,
-        "backoff_max_seconds": 30
+        "retry_max_attempts": 5,     // bumped from 3 — observed nvidia 429 storms exceed 4 attempts
+        "backoff_max_seconds": 60    // bumped from 30 — Retry-After headers up to 45s seen in wild
     },
 
     // v2 Step 3: Tool-use protocol. When ON, planner turns route through
@@ -112,6 +112,30 @@ const settings = {
     // orchestrator depends on this; flip ON once orchestrator_v2 lands.
     // See docs/agent-blueprint.md §3 Step 3.
     "use_tool_use_protocol": false,
+
+    // v2 Step 4: Event-driven orchestrator. When ON (and
+    // use_tool_use_protocol is also ON), agent._processInput delegates to
+    // OrchestratorV2.handleEvent instead of the legacy for(i<max_responses)
+    // loop. The orchestrator parks on no-toolCalls; runs Promise.all on
+    // isConcurrencySafe tools; plan mode = single-channel tools[] filter.
+    // To enable: set BOTH use_orchestrator_v2 AND use_tool_use_protocol to
+    // true, then restart the bot. See docs/agent-blueprint.md §3 Step 4.
+    "use_orchestrator_v2": false,
+
+    // v2 Step 5: Background tool handles. When ON (and use_orchestrator_v2
+    // is on), isLongRunning tools spawn via BackgroundTasks and return a
+    // handle immediately; orchestrator threads completion back as a
+    // bg_complete event. Required for mode interrupts to cancel without
+    // crashing. See docs/agent-blueprint.md §3 Step 5.
+    "use_background_handles": false,
+
+    // v2 Step 6: Subagent context isolation. When ON, !dispatchAgent stores
+    // the role's tools_filter on agent.activeSubagent; the orchestrator's
+    // activeTools() then narrows the tool surface to the role's lane. Full
+    // child-history isolation (createChildSubagentContext) is deferred —
+    // the tools-filter alone is the load-bearing piece for confabulation
+    // reduction. See docs/agent-blueprint.md §3 Step 6.
+    "use_subagent_isolation": false,
 };
 
 export default settings;

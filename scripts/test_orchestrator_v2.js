@@ -184,7 +184,10 @@ console.log('test_plan_mode_filter');
     assert(advertised === 2, `plan mode advertises 2 tools (read+safe), got ${advertised}`);
 }
 
-// 7. bg_complete event injects a tool_result and triggers invoke
+// 7. bg_complete event injects a synthetic user turn (NOT a tool_result —
+//    Anthropic rejects tool_result blocks whose tool_use_id doesn't match
+//    a prior tool_use, and bg completions arrive long after the originating
+//    tool_use already returned a started-handle result) and triggers invoke
 console.log('test_bg_complete_event');
 {
     const agent = makeMockAgent();
@@ -194,9 +197,30 @@ console.log('test_bg_complete_event');
     ]);
     const orch = new OrchestratorV2(agent, { promptWithTools: prompter, getSystemPrompt: () => '', registry: reg });
     await orch.handleEvent({ type: 'bg_complete', handle: 'bg-7', toolName: 'collectBlocks', result: 'got 5 iron_ore' });
-    assert(orch.history[0].role === 'tool_result', 'first history entry is tool_result');
-    assert(orch.history[0].toolResults[0].content.includes('got 5 iron_ore'), 'bg result content propagated');
+    assert(orch.history[0].role === 'user', 'first history entry is user turn (synthetic bg notice)');
+    assert(orch.history[0].content.includes('got 5 iron_ore'), 'bg result content propagated');
+    assert(orch.history[0].content.includes('collectBlocks'), 'tool name surfaced');
+    assert(orch.history[0].content.includes('bg-7'), 'handle surfaced');
     assert(prompter._log.length === 1, 'one LLM invocation after bg complete');
+}
+
+// 7b. bg_complete with error and cancelled flavors
+console.log('test_bg_complete_event_error_and_cancelled');
+{
+    const agent = makeMockAgent();
+    const reg = makeMockRegistry([]);
+    const prompter = scriptedPrompter([
+        { text: 'noted', toolCalls: [], stopReason: 'end_turn' },
+        { text: 'noted', toolCalls: [], stopReason: 'end_turn' },
+    ]);
+    const orch = new OrchestratorV2(agent, { promptWithTools: prompter, getSystemPrompt: () => '', registry: reg });
+    await orch.handleEvent({ type: 'bg_complete', handle: 'bg-8', toolName: 'goToCoord', error: 'no path' });
+    assert(orch.history[0].content.includes('failed'), 'error variant says failed');
+    assert(orch.history[0].content.includes('no path'), 'error message surfaced');
+    await orch.handleEvent({ type: 'bg_complete', handle: 'bg-9', toolName: 'attack', cancelled: true });
+    // bg_complete with cancelled appended to history[2] (assistant from 1st invoke is history[1])
+    const lastUser = orch.history.findLast(t => t.role === 'user');
+    assert(lastUser.content.includes('cancelled'), 'cancelled variant says cancelled');
 }
 
 // 8. Mid-invoke user_message queues to pendingEvents and runs after
@@ -221,6 +245,33 @@ console.log('test_pending_events');
     await Promise.all([p1, p2]);
     assert(prompter._log.length === 3, `three LLM invocations (initial→tool, park, followup); got ${prompter._log.length}`);
     assert(agent._calls.length === 2, 'two chat responses (one per parked invoke)');
+}
+
+// 9. activeTools() narrows by activeSubagent.toolsFilter when set
+console.log('test_subagent_tool_filter');
+{
+    const agent = makeMockAgent();
+    const reg = makeMockRegistry([
+        { name: '!mineBlock', isConcurrencySafe: false, params: {}, perform: async () => 'ok' },
+        { name: '!attack',    isConcurrencySafe: false, params: {}, perform: async () => 'ok' },
+        { name: '!finishTask', isConcurrencySafe: true, params: {}, perform: async () => 'ok' },
+    ]);
+    const orch = new OrchestratorV2(agent, { promptWithTools: scriptedPrompter([]), getSystemPrompt: () => '', registry: reg });
+    // No filter — all advertised
+    assert(orch.activeTools().length === 3, 'no filter → all tools');
+    // Miner role: only mine* and finishTask
+    agent.activeSubagent = { role: 'miner', toolsFilter: ['mine*', 'finishTask'] };
+    const names = orch.activeTools().map(d => d.name).sort();
+    assert(names.length === 2, `miner filter → 2 tools, got ${names.length}`);
+    assert(names.includes('mineBlock'), 'mineBlock survived');
+    assert(names.includes('finishTask'), 'finishTask survived');
+    assert(!names.includes('attack'), 'attack filtered out');
+    // Empty filter → still all
+    agent.activeSubagent = { role: 'whoever', toolsFilter: [] };
+    assert(orch.activeTools().length === 3, 'empty filter → all tools');
+    // null filter (legacy path, flag off) → all
+    agent.activeSubagent = { role: 'whoever', toolsFilter: null };
+    assert(orch.activeTools().length === 3, 'null filter → all tools');
 }
 
 if (failures > 0) {

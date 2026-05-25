@@ -64,8 +64,21 @@ export class SelfPrompter {
         const MAX_NO_COMMAND = 3;
         while (!this.interrupt) {
             const msg = `You are self-prompting with the goal: '${this.prompt}'. Your next response MUST contain a command with this syntax: !commandName. Respond:`;
-            
-            let used_command = await this.agent.handleMessage('system', msg, -1);
+
+            // v2 path: when the orchestrator owns the LLM loop, fire a
+            // self_prompt_tick event and let it park naturally. The
+            // dispatcher tracks toolCalls to infer "used a command" so the
+            // no-command counter still works without coupling to
+            // handleMessage's return value.
+            let used_command;
+            if (this.agent.orchestrator) {
+                const beforeAssistant = this._lastAssistantToolCallCount();
+                await this.agent.orchestrator.handleEvent({ type: 'self_prompt_tick', content: msg });
+                const afterAssistant = this._lastAssistantToolCallCount();
+                used_command = afterAssistant > beforeAssistant;
+            } else {
+                used_command = await this.agent.handleMessage('system', msg, -1);
+            }
             if (!used_command) {
                 no_command_count++;
                 if (no_command_count >= MAX_NO_COMMAND) {
@@ -84,6 +97,19 @@ export class SelfPrompter {
         console.log('self prompt loop stopped')
         this.loop_active = false;
         this.interrupt = false;
+    }
+
+    // v2 helper: count toolCalls across all assistant turns in the
+    // orchestrator history. Used to detect whether the latest tick
+    // produced any commands without coupling to handleMessage internals.
+    _lastAssistantToolCallCount() {
+        const hist = this.agent.orchestrator?.history;
+        if (!Array.isArray(hist)) return 0;
+        let n = 0;
+        for (const t of hist) {
+            if (t.role === 'assistant' && Array.isArray(t.toolCalls)) n += t.toolCalls.length;
+        }
+        return n;
     }
 
     update(delta) {

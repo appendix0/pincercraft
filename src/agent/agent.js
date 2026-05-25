@@ -44,6 +44,13 @@ import { dispatchSlashCommand, parseSlashCommand, invokeMetaSkill } from './slas
 import { dispatchSubagent, finalizeSubagent, listRoles } from './subagent.js';
 // Phase I2: optional MCP server mode. Disabled by default — toggle via settings.mcp.enabled.
 import { startMcpServer } from '../mcp_server.js';
+// v2 Step 4-6 integration. Standalone modules become live when the
+// use_orchestrator_v2 flag is on. Default OFF — legacy for-loop path
+// in _processInput stays the production path until the flag flips.
+import { OrchestratorV2 } from './orchestrator_v2.js';
+import { BackgroundTasks } from './background_tasks.js';
+import { neutralToAnthropic, neutralToOpenAI } from '../models/tool_protocol.js';
+import { getRegistry } from './tool_registry.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
@@ -101,6 +108,19 @@ export class Agent {
         convoManager.initAgent(this);
         await this.prompter.initExamples();
 
+        // v2 Step 4-6 integration. Orchestrator owns the LLM invocation loop
+        // when use_orchestrator_v2 is on AND use_tool_use_protocol is on.
+        // Background handles + subagent isolation gate on their own flags
+        // (which require orchestrator_v2 to be useful).
+        this.backgroundTasks = null;
+        this.orchestrator = null;
+        this.use_background_handles = false;
+        if (settings.use_orchestrator_v2 && settings.use_tool_use_protocol) {
+            this._initOrchestratorV2();
+        } else if (settings.use_orchestrator_v2) {
+            console.warn('[v2] use_orchestrator_v2=true but use_tool_use_protocol=false; orchestrator NOT initialized. Set both flags.');
+        }
+
         // Optionally wipe the summary memory before loading so stale task
         // context from a previous session doesn't leak into the new prompt.
         // Doesn't touch tasks.json (the queue) or histories/ (full chat logs).
@@ -140,10 +160,18 @@ export class Agent {
             if (this._disconnectHandled) return;
             this._disconnectHandled = true;
 
-            // Log and Analyze
-            // handleDisconnection handles logging to console and server
+            // Log loudly so bot.log shows the cause — previously a null
+            // `reason` produced near-empty [LoginGuard] output, which made
+            // the exit look like a silent crash.
+            const rawDump = (() => {
+                if (reason == null) return '(null)';
+                try { return typeof reason === 'string' ? reason : JSON.stringify(reason); }
+                catch { return String(reason); }
+            })();
+            console.error(`[disconnect] event=${event} reason=${rawDump}`);
             const { type } = handleDisconnection(this.name, reason);
-     
+            console.error(`[disconnect] classified type=${type}, exiting with code 1 (parent will auto-restart after 10s)`);
+
             process.exit(1);
         };
         
@@ -445,6 +473,47 @@ export class Agent {
                 console.log(`[heartbeat] tick → task #${active.id}: ${active.description}`);
             } catch (e) { console.warn('[heartbeat] openChat failed:', e?.message || e); }
         }, 60000);
+        // Active-task drive loop. The chat heartbeat above tells the player
+        // the bot is working; this one tells the BOT to keep working. Runs
+        // every 10s. Fires a system input when:
+        //   - run_queue is idle (worker is parked between turns)
+        //   - task_queue has a task in_progress
+        //   - no player input in the last 15s (give the player a chance to talk)
+        //   - we haven't already nudged this same task in the last 30s
+        // Without this the bot answers a chat question then sits silent
+        // forever even though a task is "in_progress" — exactly what we saw
+        // with task #145.
+        this._lastDriveNudgeForTask = null;
+        this._lastDriveNudgeTs = 0;
+        this._driveLoop = setInterval(() => {
+            if (!this.alive || !this.task_queue) return;
+            if (this.planMode === true) return; // plan mode is "wait for player approval", don't auto-drive
+            if (this.run_queue?.state !== 'idle') return;
+            if (this.run_queue?.depth > 0) return;
+            const active = this.task_queue.tasks.find(t => t.status === 'in_progress');
+            if (!active) return;
+            const now = Date.now();
+            if (this._lastPlayerInputTs && (now - this._lastPlayerInputTs) < 15000) return;
+            if (this._lastDriveNudgeForTask === active.id && (now - this._lastDriveNudgeTs) < 30000) return;
+            // Dedupe: if a drive_tick for any task is already queued, don't
+            // stack another. Under rate-limiting the queue would otherwise
+            // pile up nudges that each cost ~8K tokens to process.
+            const queued = this.run_queue?.queuedInputs || [];
+            if (queued.some(q => q.kind === 'drive_tick')) {
+                console.log('[drive] skipping nudge — one already queued');
+                return;
+            }
+            this._lastDriveNudgeForTask = active.id;
+            this._lastDriveNudgeTs = now;
+            console.log(`[drive] queue idle, nudging task #${active.id}`);
+            try {
+                this.enqueue({
+                    source: 'system',
+                    message: `[drive] Task #${active.id} (${active.description}) is in_progress and the action queue is idle. Issue the next concrete command to advance it. If the end_factor (${active.endFactor || 'unset'}) has been observed, call !finishTask. If the task no longer makes sense, !cancelTask and explain to the player.`,
+                    kind: 'drive_tick',
+                });
+            } catch (e) { console.warn('[drive] enqueue failed:', e?.message || e); }
+        }, 10000);
     }
 
     // Fires whenever the queue mutates. Debounces a plan-brief chat so a
@@ -578,6 +647,7 @@ export class Agent {
         if (this.planMode === true) return false;
         this.planMode = true;
         if (this._planModeTimer) clearTimeout(this._planModeTimer);
+        if (this._planModeHardCap) clearTimeout(this._planModeHardCap);
         // Re-ping the player if the plan sits unapproved for 10 minutes. Don't
         // auto-execute — the bot just nags so an unattended plan doesn't rot
         // silently (per blueprint §8 open question, biased toward "abort + ping").
@@ -593,6 +663,18 @@ export class Agent {
                 }
             }
         }, 10 * 60 * 1000);
+        // Hard cap: after 90s with no approval, auto-fall-back to listening
+        // mode (plan stays in queue; just no longer gated). This stops the
+        // bot getting stuck in plan mode when the player walks away or fails
+        // to use the exact approval phrasing. Live tasks self-execute via the
+        // queue auto-advance + drive loop once gating is off.
+        this._planModeHardCap = setTimeout(() => {
+            if (this.planMode === true) {
+                console.log('[plan mode] hard-cap timeout, auto-releasing');
+                this.exitPlanMode();
+                this.history.add('system', '[plan mode timed out] No approval after 90s — plan mode released. The queue tasks (if any) will auto-execute. If the player wanted to revise, they can still say so.').catch(() => {});
+            }
+        }, 90 * 1000);
         return true;
     }
 
@@ -602,6 +684,10 @@ export class Agent {
         if (this._planModeTimer) {
             clearTimeout(this._planModeTimer);
             this._planModeTimer = null;
+        }
+        if (this._planModeHardCap) {
+            clearTimeout(this._planModeHardCap);
+            this._planModeHardCap = null;
         }
         return true;
     }
@@ -650,6 +736,9 @@ export class Agent {
             // it null, which meant the watcher would detect stuck but have
             // no one to TP to.
             this.last_sender = input.source;
+            // Drive-loop suppression window: don't auto-nudge the bot while
+            // the player is actively chatting — gives them ~15s to type.
+            this._lastPlayerInputTs = Date.now();
         }
         if (input.kind === 'player_chat' && this.run_queue.state === 'running') {
             // Don't enqueue — the running task keeps going. Just answer the player.
@@ -869,6 +958,16 @@ export class Agent {
                 } else if (detectPlanRejection(message)) {
                     this.exitPlanMode();
                     await this.history.add('system', PLAN_REJECTED_NUDGE);
+                } else if (detectTaskRequest(message)) {
+                    // Supersede: player issued a NEW complex request while a
+                    // prior plan was awaiting approval. The old plan is dead;
+                    // exit plan mode and re-enter for the new request so the
+                    // model rebuilds the queue from scratch.
+                    console.log('[plan mode] superseded by new task request');
+                    this.exitPlanMode();
+                    await this.history.add('system', '[plan superseded] Player issued a new task request before approving the prior plan. The old plan is abandoned. Rebuild the queue for what they just asked.');
+                    this.enterPlanMode();
+                    await this.history.add('system', PLAN_MODE_AUTO_NUDGE);
                 }
             } else if (detectTaskRequest(message)) {
                 this.enterPlanMode();
@@ -876,6 +975,25 @@ export class Agent {
             }
         }
         this.history.save();
+
+        // v2 integration: when orchestrator is live, delegate the LLM loop
+        // to it. The orchestrator maintains its own neutral-shape history,
+        // owns tool execution + parallelism + bg handles, and parks when
+        // the LLM emits no tool calls. agent.history above is still
+        // appended for archival (debug logs); the LLM-facing history is
+        // orchestrator-owned. Skip the legacy for-loop entirely.
+        if (this.orchestrator) {
+            try {
+                await this.orchestrator.handleEvent({
+                    type: 'user_message',
+                    source,
+                    content: message,
+                });
+            } catch (e) {
+                console.error('[v2 orch] handleEvent failed:', e?.message || e);
+            }
+            return true;
+        }
 
         if (!self_prompt && this.self_prompter.isActive())
             max_responses = 1;
@@ -894,7 +1012,27 @@ export class Agent {
             console.log(`${this.name} full response to ${source}: ""${res}""`);
 
             if (res.trim().length === 0) {
-                console.warn('no response')
+                console.warn('no response');
+                // Reissue safety net: a discarded-mid-generation system input
+                // (reboot resume, init message, game_event, etc.) gets lost
+                // forever — the input that drove this turn was consumed and
+                // empty came back. Re-enqueue it once so the model gets a
+                // second chance. Skips drive_tick (the drive loop will re-fire
+                // on its own) and system_reissue (avoid infinite reissue
+                // loops). Player-source inputs aren't reissued — the player
+                // typing again handles that.
+                const kind = input?.kind || 'system';
+                if (source === 'system' && !self_prompt
+                    && kind !== 'drive_tick' && kind !== 'system_reissue') {
+                    console.log(`[reissue] empty system response, re-enqueuing kind=${kind}`);
+                    try {
+                        this.enqueue({
+                            source: 'system',
+                            message,
+                            kind: 'system_reissue',
+                        });
+                    } catch (e) { console.warn('[reissue] enqueue failed:', e?.message || e); }
+                }
                 break;
             }
 
@@ -999,6 +1137,51 @@ export class Agent {
         return used_command;
     }
 
+    // v2 Step 4-6 integration helpers. _initOrchestratorV2 wires
+    // OrchestratorV2 against the prompter's existing model + plan-mode
+    // state. Called from start() after initExamples so convo_examples
+    // and the active model are ready.
+    _initOrchestratorV2() {
+        if (settings.use_background_handles) {
+            this.backgroundTasks = new BackgroundTasks();
+            this.use_background_handles = true;
+        }
+        this.orchestrator = new OrchestratorV2(this, {
+            getSystemPrompt: async () => await this._buildSystemPromptForTools(),
+            promptWithTools: async (history, system, tools) => await this._promptViaModel(history, system, tools),
+            registry: getRegistry(),
+        });
+        this.orchestrator.backgroundTasks = this.backgroundTasks;
+        console.log(`[v2] orchestrator live${this.backgroundTasks ? ' + background_handles' : ''}`);
+    }
+
+    // Build the system prompt the orchestrator sends each turn. Same as
+    // promptConvo's template but strips $COMMAND_DOCS — under tool_use
+    // protocol, the command surface comes from the tools[] param, not
+    // the prompt body.
+    async _buildSystemPromptForTools() {
+        let prompt = this.prompter.profile.conversing || '';
+        // Match $COMMAND_DOCS with any surrounding whitespace/newlines so
+        // we don't leave a gap in the formatted template.
+        prompt = prompt.replace(/\n*\$COMMAND_DOCS\n*/g, '\n');
+        return await this.prompter.replaceStrings(prompt, [], this.prompter.convo_examples);
+    }
+
+    // Bridge the orchestrator's promptWithTools callback to the model
+    // wrapper's sendRequestWithTools. Converts the neutral history to
+    // provider-native shape before sending.
+    async _promptViaModel(neutralHistory, systemMessage, toolDescriptors) {
+        await this.prompter.checkCooldown();
+        const activeModel = this.prompter._modelForActiveTurn();
+        const providerKey = activeModel.constructor?.prefix || 'openai';
+        const providerHistory = providerKey === 'anthropic'
+            ? neutralToAnthropic(neutralHistory)
+            : neutralToOpenAI(neutralHistory);
+        const resp = await activeModel.sendRequestWithTools(providerHistory, systemMessage, toolDescriptors);
+        try { this.prompter._recordUsage('convo_tools', activeModel); } catch {}
+        return resp;
+    }
+
     async routeResponse(to_player, message) {
         if (this.shut_up) return;
         let self_prompt = to_player === 'system' || to_player === this.name;
@@ -1078,6 +1261,14 @@ export class Agent {
         this.bot.on('death', () => {
             this.actions.cancelResume();
             this.actions.stop();
+            // Plan-mode release on death. Recovery (going to last_death_position,
+            // re-equipping, eating) cannot be gated behind plan approval — the
+            // player isn't going to type "go" for every respawn cycle.
+            if (this.planMode === true) {
+                console.log('[plan mode] released on death');
+                this.exitPlanMode();
+                this.history.add('system', '[plan mode released] You died — plan mode is off. Recover first (eat, re-equip, retrieve gear), then resume work.').catch(() => {});
+            }
         });
         this.bot.on('kicked', (reason) => {
             if (!this._disconnectHandled) {
@@ -1148,6 +1339,7 @@ export class Agent {
     cleanKill(msg='Killing agent process...', code=1) {
         this.alive = false;
         if (this._heartbeat) clearInterval(this._heartbeat);
+        if (this._driveLoop) clearInterval(this._driveLoop);
         this.history.add('system', msg);
         this.bot.chat(code > 1 ? 'Restarting.': 'Exiting.');
         this.history.save();

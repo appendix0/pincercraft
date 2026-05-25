@@ -93,6 +93,14 @@ export class GPT {
             } else if (err.message.includes('image_url')) {
                 console.log(err);
                 res = 'Vision is only supported by certain models.';
+            } else if (err?.status === 429) {
+                // Distinct from a true brain-disconnect — the rate limiter
+                // exhausted its retry budget. Don't say "disconnected": the
+                // bot is fine, just throttled. The phrasing here lands in
+                // history, so keep it factual to avoid the model adopting
+                // a panicked tone next turn.
+                console.warn('[gpt] 429 budget exhausted, falling through');
+                res = "(rate limited, give me a sec)";
             } else {
                 console.log(err);
                 res = 'My brain disconnected, try again.';
@@ -106,10 +114,16 @@ export class GPT {
     // emitting malformed JSON in tool_calls.arguments: ONE structured
     // re-prompt with the parse error in context, then surface.
     // See docs/agent-blueprint.md §3 Step 3 rev-2.
+    //
+    // `turns` is the OpenAI-native shape (assistant turns may carry
+    // tool_calls[]; tool_result turns are role:'tool' with tool_call_id).
+    // Callers convert from the orchestrator's neutral shape via
+    // neutralToOpenAI() before calling. strictFormat() is skipped here —
+    // it normalizes string content but mangles the tool_calls structure.
     async sendRequestWithTools(turns, systemMessage, toolDescriptors) {
         const model = this.model_name || "gpt-5.4-mini";
         const tools = toOpenAITools(toolDescriptors || []);
-        const baseMessages = [{ role: 'system', content: systemMessage }, ...strictFormat(turns)];
+        const baseMessages = [{ role: 'system', content: systemMessage }, ...(turns || [])];
 
         const callWith = (msgs) => this.openai.chat.completions.create({
             model,
