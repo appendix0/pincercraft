@@ -217,6 +217,20 @@ export class Prompter {
             prompt = prompt.replaceAll('$COC', coc);
         }
 
+        // Static Minecraft knowledge — recipe prerequisites, tool tiers, block
+        // family aliases, dimension hazards. Edit bots/knowledge.md to add
+        // facts the bot keeps re-discovering by trial and error. Loaded fresh
+        // every turn so a hot edit propagates without restart.
+        if (prompt.includes('$WORLD_KNOWLEDGE')) {
+            let knowledge = '';
+            try {
+                knowledge = readFileSync(path.join(__dirname, '../../bots/knowledge.md'), 'utf8').trim();
+            } catch (e) {
+                knowledge = '(no knowledge file)';
+            }
+            prompt = prompt.replaceAll('$WORLD_KNOWLEDGE', knowledge);
+        }
+
         if (prompt.includes('$STATS')) {
             let stats = await getCommand('!stats').perform(this.agent) + '\n';
             stats += await getCommand('!entities').perform(this.agent) + '\n';

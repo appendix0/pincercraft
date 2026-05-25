@@ -8,6 +8,8 @@ import {
     toOpenAITools,
     fromAnthropicResponse,
     fromOpenAIResponse,
+    neutralToAnthropic,
+    neutralToOpenAI,
 } from '../src/models/tool_protocol.js';
 
 let failures = 0;
@@ -152,6 +154,56 @@ assert(fr('content_filter') === 'stop_sequence', 'content_filter → stop_sequen
 console.log('test_openai_empty');
 const or3 = fromOpenAIResponse({});
 assert(or3.text === null && or3.toolCalls.length === 0, 'empty → empty shape');
+
+// 16. neutralToAnthropic — round-trip a multi-turn history
+console.log('test_neutral_to_anthropic');
+{
+    const history = [
+        { role: 'user', content: 'mine 3 iron' },
+        { role: 'assistant', text: 'starting', toolCalls: [{ id: 't1', name: 'collectBlocks', args: { type: 'iron_ore', num: 3 } }] },
+        { role: 'tool_result', toolResults: [{ id: 't1', name: 'collectBlocks', content: 'got 3 iron_ore', isError: false }] },
+        { role: 'assistant', text: 'done', toolCalls: [] },
+    ];
+    const anth = neutralToAnthropic(history);
+    assert(anth.length === 4, '4 messages');
+    assert(anth[0].role === 'user' && anth[0].content === 'mine 3 iron', 'user message preserved');
+    assert(anth[1].role === 'assistant' && Array.isArray(anth[1].content), 'assistant content is array');
+    assert(anth[1].content[0].type === 'text' && anth[1].content[0].text === 'starting', 'text block first');
+    assert(anth[1].content[1].type === 'tool_use' && anth[1].content[1].id === 't1', 'tool_use block second');
+    assert(anth[1].content[1].input?.num === 3, 'tool_use input preserved');
+    assert(anth[2].role === 'user' && anth[2].content[0].type === 'tool_result', 'tool_result wrapped in user message');
+    assert(anth[2].content[0].tool_use_id === 't1', 'tool_use_id linked');
+    assert(anth[3].content[0].text === 'done', 'final assistant text');
+    // Empty assistant content must get a stub
+    const anth2 = neutralToAnthropic([{ role: 'assistant', text: null, toolCalls: [] }]);
+    assert(anth2[0].content.length === 1, 'empty assistant gets stub content');
+}
+
+// 17. neutralToOpenAI — splits tool results into role:'tool' messages
+console.log('test_neutral_to_openai');
+{
+    const history = [
+        { role: 'user', content: 'mine 3 iron' },
+        { role: 'assistant', text: 'starting', toolCalls: [
+            { id: 't1', name: 'collectBlocks', args: { type: 'iron_ore', num: 3 } },
+            { id: 't2', name: 'inventory', args: {} },
+        ]},
+        { role: 'tool_result', toolResults: [
+            { id: 't1', name: 'collectBlocks', content: 'got 3 iron_ore' },
+            { id: 't2', name: 'inventory', content: 'iron_ore: 3' },
+        ]},
+    ];
+    const oai = neutralToOpenAI(history);
+    // 1 user + 1 assistant + 2 tool = 4 messages
+    assert(oai.length === 4, `4 messages (1 user + 1 assistant + 2 tool); got ${oai.length}`);
+    assert(oai[0].role === 'user', 'user');
+    assert(oai[1].role === 'assistant', 'assistant');
+    assert(oai[1].tool_calls?.length === 2, '2 tool_calls');
+    assert(typeof oai[1].tool_calls[0].function.arguments === 'string', 'arguments stringified');
+    assert(JSON.parse(oai[1].tool_calls[0].function.arguments).num === 3, 'arguments JSON correct');
+    assert(oai[2].role === 'tool' && oai[2].tool_call_id === 't1', 'first tool_result');
+    assert(oai[3].role === 'tool' && oai[3].tool_call_id === 't2', 'second tool_result');
+}
 
 if (failures > 0) {
     console.log(`\nFAIL — ${failures} assertion(s) failed`);

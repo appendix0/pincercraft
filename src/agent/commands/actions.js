@@ -111,7 +111,7 @@ export const actionsList = [
     },
     {
         name: '!goToCoordinates',
-        description: 'Go to the given x, y, z location. Tries default pathfinding, then escalates to digging through obstacles and bridging/towering with inventory blocks. Returns a terminal result — if it fails, escalate to !newAction with custom obstacle handling (or !invokeSkill("stuck")).',
+        description: 'Go to x,y,z. Auto-digs/bridges obstacles. On failure, escalate to !newAction.',
         params: {
             'x': {type: 'float', description: 'The x coordinate.', domain: [-Infinity, Infinity]},
             'y': {type: 'float', description: 'The y coordinate.', domain: [-64, 320]},
@@ -127,7 +127,7 @@ export const actionsList = [
     },
     {
         name: '!searchForBlock',
-        description: 'Find and go to the nearest block of a given type in a given range. PREFER !collectBlocks for mining — it does the search internally and auto-equips the right tool. Use !searchForBlock only when you want to GO to a block without breaking it (e.g. find a crafting_table, find a chest).',
+        description: 'Find + go to nearest block. For mining, prefer !collectBlocks (it searches internally).',
         params: {
             'type': { type: 'BlockName', description: 'The block type to go to.' },
             'search_range': { type: 'float', description: 'The range to search for the block. Minimum 32.', domain: [10, 512] }
@@ -155,6 +155,8 @@ export const actionsList = [
         name: '!moveAway',
         description: 'Move away from the current location in any direction by a given distance.',
         params: {'distance': { type: 'float', description: 'The distance to move away.', domain: [0, Infinity] }},
+        // Survival action — flee from danger cannot wait for plan approval.
+        isSurvival: true,
         perform: runAsAction(async (agent, distance) => {
             await skills.moveAway(agent.bot, distance);
         })
@@ -185,7 +187,7 @@ export const actionsList = [
     },
     {
         name: '!givePlayer',
-        description: 'Give the specified item to the given player. Drops the item near them. When this succeeds, delivery is COMPLETE from your end — the active delivery task auto-finishes.',
+        description: 'Give item to player by dropping near them. Success = delivery done.',
         params: {
             'player_name': { type: 'string', description: 'The name of the player to give the item to.' },
             'item_name': { type: 'ItemName', description: 'The name of the item to give.' },
@@ -232,6 +234,11 @@ export const actionsList = [
         name: '!consume',
         description: 'Eat/drink the given item.',
         params: {'item_name': { type: 'ItemName', description: 'The name of the item to consume.' }},
+        // Survival action — bypasses plan-mode gate. The bot must be able to
+        // eat even while a proposed plan is waiting for player approval.
+        // Death from 3 HP starvation while plan-mode-locked was the original
+        // motivating incident (2026-05-21).
+        isSurvival: true,
         perform: runAsAction(async (agent, item_name) => {
             await skills.consume(agent.bot, item_name);
         })
@@ -240,6 +247,9 @@ export const actionsList = [
         name: '!equip',
         description: 'Equip the given item.',
         params: {'item_name': { type: 'ItemName', description: 'The name of the item to equip.' }},
+        // Survival action — equip shield/armor/sword during a fight cannot
+        // wait for plan approval.
+        isSurvival: true,
         perform: runAsAction(async (agent, item_name) => {
             await skills.equip(agent.bot, item_name);
         })
@@ -290,7 +300,7 @@ export const actionsList = [
     },
     {
         name: '!collectBlocks',
-        description: 'Collect the nearest blocks of a given type. Auto-equips the right tool tier, paths to each block, and retries up to 8 times. Returns a terminal result — if it fails (no blocks in range, can\'t reach), escalate to !newAction.',
+        description: 'Collect nearest blocks of a type. Auto-equips tool. On fail, escalate to !newAction.',
         params: {
             'type': { type: 'BlockName', description: 'The block type to collect.' },
             'num': { type: 'int', description: 'The number of blocks to collect.', domain: [1, Number.MAX_SAFE_INTEGER] }
@@ -350,6 +360,9 @@ export const actionsList = [
         name: '!attack',
         description: 'Attack and kill the nearest entity of a given type.',
         params: {'type': { type: 'string', description: 'The type of entity to attack.'}},
+        // Survival action — fighting off mobs that just damaged the bot
+        // cannot wait for plan approval.
+        isSurvival: true,
         perform: runAsAction(async (agent, type) => {
             await skills.attackNearest(agent.bot, type, true);
         })
@@ -487,6 +500,8 @@ export const actionsList = [
         name: '!goToSurface',
         description: 'Moves the bot to the highest block above it (usually the surface).',
         params: {},
+        // Survival action — escaping a cave-in / drowning / lava can't wait.
+        isSurvival: true,
         perform: runAsAction(async (agent) => {
             await skills.goToSurface(agent.bot);
         })
@@ -505,7 +520,7 @@ export const actionsList = [
     {
         name: '!addTask',
         isConcurrencySafe: true,
-        description: 'Add a task to your own queue. Every task REQUIRES an end_factor — the observable condition that means the task is complete. Without an end factor the task is rejected. The task queue (with end factors) is shown to you at the top of every prompt.',
+        description: 'Add task to own queue. end_factor required (observable completion criterion).',
         params: {
             'description': { type: 'string', description: 'Short description of the task (e.g. "mine 5 iron_ore", "build a 3x3 oak_planks wall").' },
             'end_factor': { type: 'string', description: 'Observable completion criterion (e.g. "5 iron_ore in inventory", "iron_pickaxe in inventory", "player picked up the pickaxe", "bot at coords 100,64,-50"). Required — be specific.' }
@@ -528,7 +543,7 @@ export const actionsList = [
     {
         name: '!finishTask',
         isConcurrencySafe: true,
-        description: 'Mark the current in-progress task done. Call this when you\'ve completed what was asked. Omit id to finish the in-progress task. Measurable end_factors (e.g. "5 iron_ingot in inventory") are verified against the current bot state; the call is blocked if the criterion isn\'t actually met.',
+        description: 'Mark in-progress task done. Id -1 = current. end_factor verified against bot state; blocked if criterion unmet.',
         params: {
             'id': { type: 'int', description: 'Task id to finish, or -1 to finish whatever is in progress.', domain: [-1, Number.MAX_SAFE_INTEGER] }
         },
@@ -570,7 +585,7 @@ export const actionsList = [
         name: '!showQueue',
         isReadOnly: true,
         isConcurrencySafe: true,
-        description: 'Print your current task queue to chat so the player can see it. Use when asked "what are you doing" or "what\'s in your queue".',
+        description: 'Print current task queue to chat.',
         params: {},
         perform: async function (agent) {
             const text = agent.task_queue.formatForChat({ planMode: agent.planMode === true });
@@ -590,7 +605,7 @@ export const actionsList = [
     {
         name: '!enterPlanMode',
         isConcurrencySafe: true,
-        description: 'Enter plan mode: propose a multi-step plan via !addTask calls, post the plan in chat, and wait for player approval before executing. While in plan mode, body-touching commands (movement, mining, building, attacking, equipping, chest ops) are BLOCKED — only memory writes, queue mutations, observations, mode toggles, and chat run. Use when a player asks for a non-trivial task and you want to confirm the plan first. Exit with !exitPlanMode after approval.',
+        description: 'Enter plan mode (body commands blocked, queue/memory/observation OK). Propose plan via !addTask, wait for "ok"/!exitPlanMode.',
         params: {},
         perform: async function (agent) {
             const entered = agent.enterPlanMode();
@@ -602,7 +617,7 @@ export const actionsList = [
     {
         name: '!invokeSkill',
         isConcurrencySafe: true,
-        description: 'Invoke a bot-side meta-skill (stuck, loop, verify) by name. Returns the skill\'s result as a system message so the next LLM turn can act on it. Use when you detect a meta-behavior is needed — e.g. !invokeSkill("stuck") when consecutive primitive failures mean a !newAction rewrite is the only way forward.',
+        description: 'Invoke meta-skill (stuck/loop/verify) by name. Use after consecutive primitive failures.',
         params: {
             'name': { type: 'string', description: 'Skill name to invoke (stuck, loop, verify).' }
         },
@@ -613,7 +628,7 @@ export const actionsList = [
     {
         name: '!dispatchAgent',
         isConcurrencySafe: true,
-        description: 'Hand off a focused unit of work to a role-specific subagent (miner, builder, navigator, scout). The subagent runs with a tight role prompt and the higher-quality action model; on !finishTask it returns a [subagent finished] summary. Use when the planner has identified a clearly-scoped sub-task that benefits from a focused mindset (e.g. "mine 5 diamonds" → miner; "go to coords 100,64,-50" → navigator). Only one subagent active at a time.',
+        description: 'Hand off scoped sub-task to a role subagent (miner/builder/navigator/scout). One at a time. Returns [subagent finished] summary on its !finishTask.',
         params: {
             'role': { type: 'string', description: 'Role name: miner, builder, navigator, or scout.' },
             'description': { type: 'string', description: 'What the subagent should do, in one sentence.' },
@@ -626,7 +641,7 @@ export const actionsList = [
     {
         name: '!setSubagentSummary',
         isConcurrencySafe: true,
-        description: '(subagent-only) Set the summary text that will appear in the [subagent finished] message when the current task is finished. Use right before !finishTask so the planner sees what you actually accomplished — e.g. "Got 5 diamonds at y=12, took 4 minutes, no casualties".',
+        description: '(subagent-only) Set summary text for the [subagent finished] message. Call before !finishTask.',
         params: {
             'summary': { type: 'string', description: 'One-line summary of what the subagent did.' }
         },
@@ -639,7 +654,7 @@ export const actionsList = [
     {
         name: '!setSubagentResult',
         isConcurrencySafe: true,
-        description: '(subagent-only) Mark the current subagent task as failed (only call this if you cannot complete the end_factor). The next [subagent finished] message will report result=failed and the planner can re-plan. Call !finishTask right after to release control.',
+        description: '(subagent-only) Mark task failed (cannot meet end_factor). Call !finishTask after.',
         params: {
             'result': { type: 'string', description: 'Either "success" or "failed". Default is "success" if !setSubagentResult is never called.' }
         },
@@ -654,7 +669,7 @@ export const actionsList = [
     {
         name: '!sendMessage',
         isConcurrencySafe: true,
-        description: 'Send a one-shot message to another bot on the same mindserver without starting a full conversation. Use for quick coordination signals between paired bots ("I have the iron, meet at coords X"). The receiving bot processes it as a normal bot-to-bot message.',
+        description: 'One-shot message to another bot on the same mindserver. No conversation, just a signal.',
         params: {
             'target_bot': { type: 'string', description: 'Name of the bot to message.' },
             'content': { type: 'string', description: 'The message to send.' }
@@ -672,7 +687,7 @@ export const actionsList = [
     {
         name: '!exitPlanMode',
         isConcurrencySafe: true,
-        description: 'Leave plan mode and start the queued plan. Call after the player has approved the plan you posted in chat. The first pending task auto-starts.',
+        description: 'Exit plan mode and start the queued plan. Use after player approval.',
         params: {},
         perform: async function (agent) {
             const exited = agent.exitPlanMode();
@@ -693,7 +708,7 @@ export const actionsList = [
     {
         name: '!remember',
         isConcurrencySafe: true,
-        description: 'Save a persistent fact to your memory directory (survives reboots). Use for player preferences, world locations (non-coord), strategies, anything you should still know next session. For exact coordinates use !rememberHere instead. The MEMORY.md index is in every prompt; topic details load via !recall.',
+        description: 'Save persistent fact (survives reboots). For coords use !rememberHere. Index shown in $MEMORY; details via !recall.',
         params: {
             'topic': { type: 'string', description: 'Short kebab-case slug (e.g. "lospollos929-prefs", "village-trading-tips", "lava-near-mining-tunnel"). Reused topic name = update.' },
             'content': { type: 'string', description: 'The fact, in markdown. First line is shown as the summary in the index. Max ~4KB.' }
@@ -706,7 +721,7 @@ export const actionsList = [
         name: '!recall',
         isReadOnly: true,
         isConcurrencySafe: true,
-        description: 'Read the full content of a saved memory topic. Use when MEMORY.md shows a topic relevant to what you\'re doing and you need details. Returns the topic file body.',
+        description: 'Read full content of saved memory topic. Use when $MEMORY index shows relevant topic.',
         params: {
             'topic': { type: 'string', description: 'Topic slug from MEMORY.md (e.g. "lospollos929-prefs").' }
         },
@@ -740,7 +755,7 @@ export const actionsList = [
     {
         name: '!loadCOCFromLectern',
         isConcurrencySafe: true,
-        description: 'Read the written_book on the nearest lectern and replace your Code of Conduct (CLAUDE.md) with its contents. The new rules apply from the next turn onward. Use when a player tells you to "read the rulebook", "update the rules", or "load the lectern". You must be within 8 blocks of the lectern; if not, !goToPlayer or !goToPosition first.',
+        description: 'Read nearest lectern (within 8 blocks) and overwrite CLAUDE.md from its book.',
         params: {},
         perform: runAsAction(async (agent) => {
             await skills.loadCOCFromLectern(agent.bot, 8);
@@ -749,7 +764,7 @@ export const actionsList = [
     {
         name: '!designateRulebookLectern',
         isConcurrencySafe: true,
-        description: 'Mark the nearest lectern (within 8 blocks) as the official rulebook. From then on, whenever a player edits the book on that lectern (takes it off, edits, places back), you automatically re-read it and update CLAUDE.md — no command needed. Use when a player says "this lectern is the rulebook" or "set the rulebook here". The lectern\'s chunk must stay loaded for auto-updates to work.',
+        description: 'Mark nearest lectern (within 8 blocks) as rulebook; auto-updates CLAUDE.md when player edits the book.',
         params: {},
         perform: async function (agent) {
             const bot = agent.bot;

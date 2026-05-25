@@ -281,8 +281,17 @@ export async function executeCommand(agent, message) {
         if (agent.planMode === true && command.name !== '!exitPlanMode') {
             const resolve = (v) => typeof v === 'function' ? !!v(parsed.args) : !!v;
             const planSafe = resolve(command.isReadOnly) || resolve(command.isConcurrencySafe);
-            if (!planSafe) {
+            // Survival bypass: commands marked isSurvival run even in plan mode.
+            // Originating incident (2026-05-21): plan mode blocked !consume at
+            // 3 HP and the bot died waiting for player approval. Plan mode is
+            // for deliberation, not suicide pact — eating, fleeing, equipping,
+            // and self-defense always run.
+            const survival = resolve(command.isSurvival);
+            if (!planSafe && !survival) {
                 return `[plan mode] Execute blocked for ${command.name}. You're in plan mode — only memory, queue, observation, and chat commands run. Post the plan to chat via !addTask, wait for player approval, then call !exitPlanMode (or the player saying "ok"/"yes"/"go" auto-exits).`;
+            }
+            if (survival && !planSafe) {
+                console.log(`[plan mode] survival bypass: ${command.name}`);
             }
         }
         // Phase B4: per-tool permission gate. The hook receives the parsed

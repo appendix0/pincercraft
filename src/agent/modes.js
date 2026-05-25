@@ -239,7 +239,11 @@ const modes_list = [
         name: 'elbow_room',
         description: 'Move away from nearby players when idle.',
         interrupts: ['action:followPlayer'],
-        on: true,
+        // Off by default — fires at 0.5 blocks which is what happens when the
+        // player walks INTO the bot (chest exchange, item handoff, standing
+        // next to it). For a single-player companion bot the "shy" behavior
+        // reads as broken. Re-enable per-session via !setMode("elbow_room", true).
+        on: false,
         active: false,
         distance: 0.5,
         update: async function (agent) {

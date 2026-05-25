@@ -52,15 +52,43 @@ export function classifyInput(input) {
 //    feedback_pincercraft_llm_led_smarts.
 // ----------------------------------------------------------------------------
 
+// Original (too-broad) verb match kept as a low signal — any of these means
+// "could be a task", but plan-mode auto-entry needs more. Most one-verb player
+// requests like "give me logs" / "come here" / "tp" / "follow" should execute
+// directly, not stall the bot waiting for plan approval.
 const TASK_REQUEST_VERBS = /\b(mine|craft|build|make|get|bring|fetch|give|smelt|gather|find|collect|hand|deliver|cook|grab|harvest|chop|dig)\b/i;
-const MEMORY_REQUEST_PATTERNS = /\b(remember|don'?t forget|note that|save (this|that)|from now on|always|never|keep in mind|my name is|i (like|prefer|hate|live|work))\b/i;
+
+// Strong signals that the player actually wants a multi-step plan:
+//   - explicit multi-step verbs (build, set up, make a complete X)
+//   - quantities ≥ 5 of a thing ("mine 10 iron", "craft 32 sticks")
+//   - multiple comma/and-joined goals ("mine iron and craft a pickaxe")
+//   - explicit "plan", "step by step", "list", "first … then"
+const COMPLEXITY_PATTERNS = [
+    /\b(build|construct|set up|setup|automate|farm|grind)\b/i,            // multi-block / large goals
+    /\b(\d{2,}|[5-9])\s+\w+/i,                                            // quantity ≥ 5 (10 iron, 5 wood)
+    /\b(then|after that|next|finally|step by step|step-by-step|first .* then|make a plan|plan it out|list the steps)\b/i,
+    /,.+(and|then)/i,                                                     // "X, then Y" / "X, and Y"
+    /\band\s+(also\s+)?(mine|craft|build|make|get|bring|fetch|give|smelt|gather|find|collect)\b/i, // chained verbs
+];
+
+const MEMORY_REQUEST_PATTERNS = /\b(remember|don'?t forget|note that|save (this|that)|from now on|always|never|keep in mind|my name is|i (like|prefer|hate|live|work)|every time|each time|going forward|next time)\b/i;
 
 export const TASK_REQUEST_NUDGE = '[task request detected] Your first action this turn MUST be one or more !addTask(description, end_factor) calls — one per step, in execution order, including the final "tell the player" step. Only AFTER all !addTask calls may you execute the first task. Do not call any other command first.';
 export const MEMORY_REQUEST_NUDGE = '[memory cue detected] This message contains a fact worth keeping across sessions. Call !remember(topic, content) with a kebab-case topic slug — either now, or as the first step of your plan if you also have a task to do. Do not skip this. For exact coordinates use !rememberHere instead.';
 
+// Strong multi-step verbs ("build", "set up", "automate", "construct") imply
+// a plan all by themselves — no additional complexity signal needed.
+const MULTI_STEP_VERBS = /\b(build|construct|set up|setup|automate|farm)\b/i;
+
+// Plan mode is for genuinely complex multi-step work. A one-verb request
+// like "give me logs" or "come here" doesn't need a written plan + player
+// approval cycle — it stalls the bot and creates dead time. We require
+// EITHER a strong multi-step verb OR (any task verb + a complexity signal).
 export function detectTaskRequest(message) {
     if (!message || message.length < 4) return false;
-    return TASK_REQUEST_VERBS.test(message);
+    if (MULTI_STEP_VERBS.test(message)) return true;
+    if (!TASK_REQUEST_VERBS.test(message)) return false;
+    return COMPLEXITY_PATTERNS.some(re => re.test(message));
 }
 
 export function detectMemoryRequest(message) {

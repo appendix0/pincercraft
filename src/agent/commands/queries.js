@@ -104,24 +104,45 @@ export const queryList = [
         description: "Get the blocks near the bot.",
         perform: function (agent) {
             let bot = agent.bot;
+            // Token-budget cap: previously dumped EVERY distinct block within
+            // 16 blocks, which in a developed area is 100+ entries (~600 toks).
+            // The model only needs the "what's relevant nearby" signal —
+            // cap to the closest MAX_TYPES distinct names. Worth-keeping
+            // names (water/lava, ores, crafting/furnace/chest) get priority.
+            const MAX_TYPES = 15;
+            const PRIORITY = new Set([
+                'water', 'lava', 'fire',
+                'crafting_table', 'furnace', 'chest', 'bed', 'lectern',
+                'iron_ore', 'gold_ore', 'diamond_ore', 'coal_ore', 'copper_ore',
+                'redstone_ore', 'lapis_ore', 'emerald_ore', 'ancient_debris',
+            ]);
             let res = 'NEARBY_BLOCKS';
             let blocks = world.getNearestBlocks(bot);
-            let block_details = new Set();
-            
+            const seen = new Set();
+            const priorityHits = [];
+            const otherHits = [];
             for (let block of blocks) {
                 let details = block.name;
                 if (block.name === 'water' || block.name === 'lava') {
                     details += block.metadata === 0 ? ' (source)' : ' (flowing)';
                 }
-                block_details.add(details);
+                if (seen.has(details)) continue;
+                seen.add(details);
+                if (PRIORITY.has(block.name)) priorityHits.push(details);
+                else otherHits.push(details);
             }
-            for (let details of block_details) {
+            // Priority items always shown; others fill remaining budget.
+            const shown = priorityHits.concat(otherHits.slice(0, Math.max(0, MAX_TYPES - priorityHits.length)));
+            const total = priorityHits.length + otherHits.length;
+            for (let details of shown) {
                 res += `\n- ${details}`;
             }
-            if (block_details.size === 0) {
+            if (total > shown.length) {
+                res += `\n- (+${total - shown.length} more distinct types nearby, omitted to save tokens)`;
+            }
+            if (total === 0) {
                 res += ': none';
-            } 
-            else {
+            } else {
                 res += '\n- ' + world.getSurroundingBlocks(bot).join('\n- ');
                 res += `\n- First Solid Block Above Head: ${world.getFirstBlockAboveHead(bot, null, 32)}`;
             }

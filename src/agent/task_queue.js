@@ -40,6 +40,13 @@ export class TaskQueue {
         // _log become no-ops. Used by src/agent/subagent_v2.js per
         // dispatch.
         this.persist = options?.persist !== false;
+        // Anti-thrash: track recent cancellations so we can reject the
+        // immediate re-add. Observed 2026-05-20 03:50: model cancelled +
+        // re-added the same two descriptions every ~1.5s for 5 minutes,
+        // burning 132 task IDs. Window matches the heartbeat cadence —
+        // anything inside it that re-adds a cancelled phrase is thrash.
+        this._recentCancels = []; // [{description (lowercase), ts}]
+        this._thrashWindowMs = options?.thrashWindowMs ?? 15000;
         if (this.persist) this._load();
     }
 
@@ -107,6 +114,17 @@ export class TaskQueue {
         // distinct tasks (e.g. "mine 3 iron_ore" vs "mine 5 iron_ore").
         const dupe = this.tasks.find(t => t.status !== STATUS.DONE && t.description.toLowerCase() === description.toLowerCase());
         if (dupe) return {ok: false, message: `Duplicate of task #${dupe.id} (${dupe.status}): "${dupe.description}" — rejected. Use the existing task.`};
+        // Anti-thrash: if this same description was cancelled within the
+        // thrash window, the model is re-adding what it just removed.
+        // Reject and tell it to commit to the existing plan or take a
+        // concrete next step instead of churning the queue.
+        const descLc = description.toLowerCase();
+        const cutoff = Date.now() - this._thrashWindowMs;
+        this._recentCancels = this._recentCancels.filter(c => c.ts >= cutoff);
+        const thrash = this._recentCancels.find(c => c.description === descLc);
+        if (thrash) {
+            return {ok: false, message: `Task "${description}" was cancelled ${Math.round((Date.now()-thrash.ts)/1000)}s ago — re-adding it would just thrash the queue. Either execute the current in_progress task with concrete commands, or pick a genuinely different next step.`};
+        }
         const task = {id: this._nextId++, description, endFactor, status: STATUS.PENDING, createdAt: Date.now()};
         this.tasks.push(task);
         // Auto-advance: if nothing is in progress, promote this one immediately
@@ -176,6 +194,7 @@ export class TaskQueue {
         const idx = this.tasks.findIndex(x => x.id === Number(id));
         if (idx === -1) return {ok: false, message: `No task #${id}.`};
         const [t] = this.tasks.splice(idx, 1);
+        this._recentCancels.push({description: t.description.toLowerCase(), ts: Date.now()});
         this._persist();
         this._log('cancel', t);
         return {ok: true, message: `Cancelled task #${t.id}: ${t.description}`, task: t};
@@ -188,6 +207,8 @@ export class TaskQueue {
     cancelAllPending() {
         const cancelled = this.tasks.filter(x => x.status !== STATUS.DONE);
         if (cancelled.length === 0) return {ok: true, count: 0, message: 'No pending tasks to cancel.'};
+        const now = Date.now();
+        cancelled.forEach(t => this._recentCancels.push({description: t.description.toLowerCase(), ts: now}));
         this.tasks = this.tasks.filter(x => x.status === STATUS.DONE);
         this._persist();
         this._log(`cancelAllPending (removed ${cancelled.length})`);
