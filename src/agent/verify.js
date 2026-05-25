@@ -64,7 +64,7 @@ export function verifyEndFactor(agent, task) {
     const single = matchCountInInventory(text);
     if (single) {
         const have = inventoryCount(bot, single.item);
-        if (have >= single.count) return { programmatic: true, verified: true };
+        if (have >= single.count) return { programmatic: true, verified: true, observed: `${single.item}=${have}` };
         return {
             programmatic: true,
             verified: false,
@@ -75,7 +75,7 @@ export function verifyEndFactor(agent, task) {
     const one = matchSingleInInventory(text);
     if (one) {
         const have = inventoryCount(bot, one.item);
-        if (have >= 1) return { programmatic: true, verified: true };
+        if (have >= 1) return { programmatic: true, verified: true, observed: `${one.item}=${have}` };
         return {
             programmatic: true,
             verified: false,
@@ -86,7 +86,7 @@ export function verifyEndFactor(agent, task) {
     const many = matchMultiInInventory(text);
     if (many) {
         const missing = many.filter(item => inventoryCount(bot, item) < 1);
-        if (missing.length === 0) return { programmatic: true, verified: true };
+        if (missing.length === 0) return { programmatic: true, verified: true, observed: many.map(item => `${item}=${inventoryCount(bot, item)}`).join(',') };
         return {
             programmatic: true,
             verified: false,

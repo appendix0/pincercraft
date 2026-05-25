@@ -574,6 +574,9 @@ export const actionsList = [
                     if (v && v.programmatic && v.verified === false) {
                         return `[verify] Task #${target.id} not finished — ${v.reason} Keep working, or use !cancelTask if the criterion no longer applies.`;
                     }
+                    // Observability: record what the end_factor check saw at finish
+                    // time so a 0-ops done can be told apart from a false-done.
+                    console.log(`[finishTask] #${target.id} end_factor "${target.endFactor}" — ${v && v.programmatic ? `verified (${v.observed})` : 'honor-system (unmeasurable end_factor)'}`);
                 } catch (e) {
                     console.warn('verifyEndFactor threw:', e?.message || e);
                 }
