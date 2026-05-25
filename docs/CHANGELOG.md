@@ -335,3 +335,28 @@ not programmatically gated.)
 **Metric.** Moves nothing on cost/efficiency by design (pure log). It
 makes 0-ops `done` outcomes auditable going forward — the residual risk
 the diagnosis flagged.
+
+## 2026-05-25 — surface mining API for gather tasks (task-188)
+
+**Change.** `SkillLibrary.getRelevantSkillDocs` now injects the
+`skills.mineBlockAt` and `skills.collectBlock` docs into the selected
+set whenever the code-task text contains a resource-gathering verb
+(chop/mine/break/collect/gather/harvest/dig). Docs are matched on their
+first line (`startsWith(name + '\n')`) rather than a loose `includes`,
+because `breakBlockAt`'s docstring cross-references `skills.mineBlockAt`
+and would otherwise be returned in its place.
+
+**Hypothesis (task-188 diagnosis).** Over 43 turns the bot broke zero
+blocks (`block_ops=0`, `outcome=timeout`): the skill-doc selector only
+ever surfaced the static `placeBlock/wait/breakBlockAt` set, so with no
+correct mining signature in context the coder hallucinated
+`skills.mineBlock` and passed `oakLog.x` instead of `oakLog.position.x`.
+`mineBlockAt`'s existing docstring already names the right function and
+shows the `.position.x` arg shape — it simply was never retrieved.
+Surfacing it for gather tasks should stop both errors.
+
+**Metric.** Targets `block_ops` (0 → ≥5) and `tokens_per_block_op`
+(`null` → finite), flipping the gather-task outcome from timeout to
+success. Verify: re-run a chop/mine task and confirm `Selected skill
+docs` now lists `skills.mineBlockAt`/`skills.collectBlock` and that a
+break/collect lands (`block_ops > 0`).

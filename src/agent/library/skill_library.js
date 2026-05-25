@@ -80,7 +80,20 @@ export class SkillLibrary {
                 selected_docs.add(doc);
             }
         });
-        
+
+        // Resource-gathering tasks need the mining API in context, or the coder
+        // hallucinates skills.mineBlock / passes the wrong arg shape (task #188).
+        // Surface skills.mineBlockAt + skills.collectBlock when the task asks to
+        // chop/mine/break/collect/gather/harvest/dig.
+        if (/\b(chop|mine|mining|break|collect|gather|harvest|dig)\w*/i.test(message)) {
+            for (const skillName of ['skills.mineBlockAt', 'skills.collectBlock']) {
+                // Match the doc whose first line is the skill name — a loose
+                // includes() would catch docs that merely cross-reference it.
+                const doc = this.skill_docs.find(d => d.startsWith(skillName + '\n'));
+                if (doc) selected_docs.add(doc);
+            }
+        }
+
         let relevant_skill_docs = '#### RELEVANT CODE DOCS ###\nThe following functions are available to use:\n';
         relevant_skill_docs += Array.from(selected_docs).join('\n### ');
 
