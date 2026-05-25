@@ -128,6 +128,22 @@ export class ActionManager {
             this.currentActionLabel = '';
             this.currentActionFn = null;
             clearTimeout(TIMEOUT);
+
+            // A PathStopped rejection is the expected result of one action
+            // preempting another: stop() -> requestInterrupt() -> pathfinder.stop()
+            // rejects the in-flight goto. Treat it as a clean cancellation at the
+            // arbitration boundary instead of surfacing it as a thrown exception,
+            // so it never reaches the preempting action as a code error.
+            if (err && err.name === 'PathStopped') {
+                let output = this.getBotOutputSummary();
+                let interrupted = this.agent.bot.interrupt_code;
+                this.agent.clearBotLogs();
+                if (!interrupted) {
+                    this.agent.bot.emit('idle');
+                }
+                return { success: true, message: output, interrupted, timedout: false };
+            }
+
             this.cancelResume();
             console.error("Code execution triggered catch:", err);
             // Log the full stack trace
