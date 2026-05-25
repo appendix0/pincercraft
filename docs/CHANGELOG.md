@@ -311,3 +311,27 @@ recovery; ignored incremental progress.
   (pre-plan, thin-decomp, !addTask gate). Subtask markers exempt.
 - `feedback_bot_dev_target_yoon` — bot dev/smoke runs against YOON
   :25565, not PT. PT retired as dev target 2026-05-25.
+
+## 2026-05-25 — finishTask observability (task-186)
+
+**Change.** `!finishTask` now logs one line at the finish boundary
+recording how the end_factor was checked:
+`[finishTask] #ID end_factor "..." — verified (item=NN)` when the
+criterion was programmatically confirmed, or `— honor-system
+(unmeasurable end_factor)` when it passed through unparsed.
+`verifyEndFactor` was enriched to return the observed inventory count
+(`observed`) on its verified-true paths so the log can carry it.
+
+**Hypothesis (task-186 diagnosis).** The run was healthy — 2 turns,
+`outcome=done`, no errors — but with `block_ops=0` a legitimate
+early-out (≥32 cobblestone already in inventory) is indistinguishable
+in the log from a false-done like task-185. No functional fix was
+warranted; the only gap was observability. This is the diagnosis's
+minimal suggestion: record the verifying count so the loop can tell the
+two apart. (For task-186's exact phrasing the line reads `honor-system
+(unmeasurable end_factor)` — itself the key signal that the done was
+not programmatically gated.)
+
+**Metric.** Moves nothing on cost/efficiency by design (pure log). It
+makes 0-ops `done` outcomes auditable going forward — the residual risk
+the diagnosis flagged.
