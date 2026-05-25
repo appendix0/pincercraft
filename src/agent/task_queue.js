@@ -138,6 +138,7 @@ export class TaskQueue {
             this._persist();
             this._log('add+start', task);
             this._fire('add', task);
+            this._fire('start', task);
             return {ok: true, message: `Task #${task.id} added and started: ${description}.${endHint} Begin executing it now.`, task};
         }
         this._persist();
@@ -156,6 +157,7 @@ export class TaskQueue {
         t.status = STATUS.IN_PROGRESS;
         this._persist();
         this._log('start', t);
+        this._fire('start', t);
         return {ok: true, message: `Started task #${t.id}: ${t.description}`, task: t};
     }
 
@@ -176,6 +178,7 @@ export class TaskQueue {
             next.status = STATUS.IN_PROGRESS;
             this._persist();
             this._log('auto-start', next);
+            this._fire('start', next);
             return {
                 ok: true,
                 message: `Finished task #${t.id}: ${t.description}. Auto-started #${next.id}: ${next.description}. Begin executing it now.`,

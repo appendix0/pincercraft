@@ -217,6 +217,14 @@ export const SIZE_DECOMP_NUDGE = (estimate) => {
     return `[size detected] Your request implies ~${estimate.blocks} blocks/items of work (signal: ${estimate.signal}). HARD RULE: max ${SIZE_DECOMP_THRESHOLD} blocks/items per !addTask. You MUST emit ≥${chunks} !addTask calls for this. Example for a 20×50=1000-block floor: 5 row-chunk tasks of 10 rows × 50 blocks each. Cramming the whole job into one !newAction is a rule violation.`;
 };
 
+// Memory-hygiene rule. Fires whenever the player's message contains
+// explicit parameters (dimensions, material name + quantity, named
+// coordinates) — i.e. anything `estimateTaskSize` flagged with a signal.
+// Player input is canonical; saved memory is a stale snapshot. If they
+// conflict, use the new value and update memory.
+export const MEMORY_AUTHORITY_NUDGE = (estimate) =>
+    `[player input is canonical] The player's most recent message contains explicit parameters (signal: ${estimate.signal}). If these conflict with anything in your saved memory (e.g. an old "warehouse-floor = 20×50" entry vs the player just saying 30×30), the PLAYER'S MESSAGE WINS. Use the new values exactly as stated, do NOT blend with memory. Call !remember (or !rememberHere for coords) to overwrite the stale entry as your first or second step.`;
+
 export const THIN_DECOMPOSITION_NUDGE = (estimate, queuedTaskId) => {
     const chunks = Math.max(2, Math.ceil(estimate.blocks / SIZE_DECOMP_THRESHOLD));
     return `[thin plan rejected] You queued only 1 task for ~${estimate.blocks} blocks of work. That violates the ${SIZE_DECOMP_THRESHOLD}-block/task limit. REQUIRED: !cancelTask(${queuedTaskId}), then !addTask × ≥${chunks} with smaller chunks. ${SIZE_DECOMP_NUDGE(estimate)}`;
@@ -232,6 +240,9 @@ export function nudgesForUserMessage(message, { self_prompt = false, from_other_
     if (detectMemoryRequest(message)) out.push(MEMORY_REQUEST_NUDGE);
     const sizeEst = estimateTaskSize(message);
     if (sizeEst.blocks >= SIZE_DECOMP_THRESHOLD) out.push(SIZE_DECOMP_NUDGE(sizeEst));
+    // Memory authority: any explicit parameter (signal != null) triggers
+    // the "player wins over saved memory" reminder, even for small tasks.
+    if (sizeEst.signal != null) out.push(MEMORY_AUTHORITY_NUDGE(sizeEst));
     return out;
 }
 

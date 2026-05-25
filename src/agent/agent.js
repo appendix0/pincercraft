@@ -597,6 +597,21 @@ export class Agent {
                 console.warn('followup enqueue failed:', e?.message || e);
             }
         }
+        // Per-task start announcement: tell the player which task is starting
+        // so they know what the bot's about to do. Critical for the chunked-
+        // build pattern where each chunk takes 10-25s of LLM overhead — without
+        // this, the player sees long silences and assumes the bot is stuck.
+        // 5s debounce so rapid auto-advances (e.g. 5 tasks finishing in 30s)
+        // don't spam chat.
+        if (kind === 'start' && task) {
+            const now = Date.now();
+            if (!this._lastTaskStartChatTs || now - this._lastTaskStartChatTs >= 5000) {
+                this._lastTaskStartChatTs = now;
+                try {
+                    this.openChat(`Starting task #${task.id}: ${task.description}`);
+                } catch (e) { console.warn('[task start] openChat failed:', e?.message || e); }
+            }
+        }
         if (kind !== 'add') return; // only briefing on adds for now
         clearTimeout(this._planBriefTimer);
         this._planBriefTimer = setTimeout(() => {
