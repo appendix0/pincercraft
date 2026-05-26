@@ -20,6 +20,7 @@ import { log, validateNameFormat, handleDisconnection } from './connection_handl
 import { RunQueue } from './run_queue.js';
 import { humanizeCommand } from './command_humanizer.js';
 import { TaskQueue } from './task_queue.js';
+import { snapshotStartCounts } from './verify.js';
 import { MemoryStore } from './memory_store.js';
 import { RulebookLectern } from './rulebook_lectern.js';
 // Phase A5: classifier + gating logic lives in one module. Previously scattered
@@ -604,6 +605,10 @@ export class Agent {
         // 5s debounce so rapid auto-advances (e.g. 5 tasks finishing in 30s)
         // don't spam chat.
         if (kind === 'start' && task) {
+            // Snapshot the baseline count for delta-style end_factors ("X count
+            // increased by N this run") so the verify gate can later confirm
+            // the gain came from this task, not pre-existing stock.
+            try { snapshotStartCounts(this, task); } catch (e) { console.warn('[verify] snapshotStartCounts failed:', e?.message || e); }
             const now = Date.now();
             if (!this._lastTaskStartChatTs || now - this._lastTaskStartChatTs >= 5000) {
                 this._lastTaskStartChatTs = now;
