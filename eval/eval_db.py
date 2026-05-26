@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS task_attempts (
     task_id             TEXT,
     task_name           TEXT,
     difficulty_tier     TEXT,
+    task_set            TEXT,
     commit_hash         TEXT,
     timestamp           TEXT,
     success             INTEGER,          -- 0/1
@@ -33,7 +34,9 @@ CREATE TABLE IF NOT EXISTS task_attempts (
     input_tokens        INTEGER,
     output_tokens       INTEGER,
     steps               INTEGER,
+    retry_count         INTEGER,
     wall_clock_seconds  REAL,
+    n_distinct_actions  INTEGER,
     failure_mode        TEXT              -- nullable
 );
 CREATE TABLE IF NOT EXISTS gate_decisions (
@@ -41,6 +44,7 @@ CREATE TABLE IF NOT EXISTS gate_decisions (
     timestamp               TEXT,
     commit_hash             TEXT,
     proposed_change_summary TEXT,
+    proposed_diff           TEXT,
     decision                TEXT,         -- approve | reject
     human_reason            TEXT
 );
@@ -69,6 +73,7 @@ def log_attempt(row: dict, path=DB_PATH):
         "task_id": str(row.get("task_id", "")),
         "task_name": row.get("task_name", ""),
         "difficulty_tier": str(row.get("difficulty_tier", "")),
+        "task_set": str(row.get("task_set", row.get("mode", ""))),
         "commit_hash": row.get("commit_hash", ""),
         "timestamp": row.get("timestamp") or _now(),
         "success": success,
@@ -76,16 +81,24 @@ def log_attempt(row: dict, path=DB_PATH):
         "input_tokens": int(row.get("input_tokens", 0)),
         "output_tokens": int(row.get("output_tokens", 0)),
         "steps": int(row.get("steps", 0)),
+        "retry_count": int(row.get("retry_count", 0)),
         "wall_clock_seconds": float(row.get("wall_clock_seconds", 0.0)),
+        "n_distinct_actions": int(row.get("n_distinct_actions", 0)),
         # failure_mode is NULL on success unless explicitly given
         "failure_mode": row.get("failure_mode") or (None if success else "unknown"),
     }
+    # Named column list (not positional VALUES) so the insert survives schema
+    # drift — extra columns in the live table default to NULL instead of
+    # raising "N columns but M values supplied".
     with connect(path) as conn:
         conn.execute(
-            "INSERT INTO task_attempts VALUES "
-            "(:attempt_id,:task_id,:task_name,:difficulty_tier,:commit_hash,:timestamp,"
-            ":success,:progress_score,:input_tokens,:output_tokens,:steps,"
-            ":wall_clock_seconds,:failure_mode)",
+            "INSERT INTO task_attempts "
+            "(attempt_id,task_id,task_name,difficulty_tier,task_set,commit_hash,timestamp,"
+            "success,progress_score,input_tokens,output_tokens,steps,retry_count,"
+            "wall_clock_seconds,n_distinct_actions,failure_mode) VALUES "
+            "(:attempt_id,:task_id,:task_name,:difficulty_tier,:task_set,:commit_hash,:timestamp,"
+            ":success,:progress_score,:input_tokens,:output_tokens,:steps,:retry_count,"
+            ":wall_clock_seconds,:n_distinct_actions,:failure_mode)",
             rec,
         )
     return rec["attempt_id"]

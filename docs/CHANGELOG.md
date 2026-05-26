@@ -393,3 +393,63 @@ rate) for gather/mine tasks; secondarily restore a non-null
 no mining, `!finishTask` returns `[verify] … not met — cobblestone rose
 by 0 this task … need +10` instead of a honor-system done; with ≥10
 mined, it logs `verified (cobblestone+N)`.
+
+## 2026-05-26 — Checkpoint: self-improvement loop operational + reliability fixes
+
+Consolidation checkpoint after 6 self-improvement cycles: the reconnect/coder
+fixes that unblocked live runs, the eval-DB logging repair + history backfill,
+and the conduct/prompt rules tuned from a live play session.
+
+### Reliability — the bot now joins and codes reliably under v2
+- **IPv4 Mojang session-join (`5be4026`).** This host advertises IPv6 for
+  `sessionserver.mojang.com` but has no working v6 route; under the full bot's
+  event-loop pressure Node's happy-eyeballs mishandled the dead-v6 race and the
+  session join died with a bare `ETIMEDOUT`. Fix: pass `https.Agent({family:4})`
+  through `createBot` → minecraft-protocol's yggdrasil join. Scoped to Mojang
+  HTTP only (the local MC socket is separate raw TCP).
+- **`code_task_content` under OrchestratorV2 (`d3ef9e1`).** v2 generates code
+  via its own channel, not the legacy `!newAction(...)` string, so the RAG
+  doc-selector was fed an empty task string and surfaced the same three docs
+  279/279 times. Now falls back to the active task's description when no
+  `!newAction(` capture exists — gather tasks correctly surface
+  `mineBlockAt`/`collectBlock`.
+
+### Eval harness — logging fixed, history backfilled
+- **`task_attempts` logging repaired.** `eval/eval_db.py` had drifted to a
+  positional 13-value INSERT against a 16-column table, so every cycle from 2
+  on silently failed to log. Rewrote the schema to 16 columns and the insert to
+  **named columns** so it survives future drift (the same pattern that kept
+  `log_gate` working).
+- **Schema fork resolved — "eval/ wins."** The DB shared by the loop (`eval/`)
+  and the hardened layer (`evals/`) carried CHECK enums the loop's free-form
+  values (`explore`, `cancelled`) couldn't satisfy. Dropped the `task_attempts`
+  enum CHECKs in both the live DB and `evals/__init__.sql` (vocab is now
+  convention, enforced in `evals/checks.py`/`task_battery.py`); kept the
+  `gate_decisions.decision` CHECK. `evals/` pytest suite stays green.
+- **Backfilled cycles 1–6** (task_ids 185–190) into `task_attempts` from
+  `metrics.jsonl` + the diagnosis trailers, with per-row commit hashes
+  correlated to each attempt's timestamp.
+- **Loop agents moved off the metered API.** `eval/loop.sh` now `unset`s
+  `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`, so the task-giver, analyzer, and
+  improver run on the Claude CLI subscription. The in-world bot still uses the
+  API key (Mindcraft SDK, not the CLI).
+
+### Conduct + prompt rules — tuned from a live session
+- **Base protection (`CLAUDE.md`).** New rule: never break beds, chests,
+  fences, or any block that's part of a build — including the owner's base — and
+  never dig or path through base blocks to finish a task. Re-read into `$COC`
+  every turn.
+- **Inventory-aware behavior (`profiles/defaults/_default.json`).** A live
+  session showed the bot over-gathering (it had the 3 iron the task wanted but
+  kept mining) and claiming deliveries it never verified. The conversing prompt
+  now (a) `!finishTask` immediately when the live inventory already shows the
+  end_factor met — never gather/mine/craft more than needed; (b) for
+  give/deliver tasks, confirm the item leaves inventory before claiming it,
+  replacing the old "trust `!givePlayer` fire-and-forget" line.
+
+### State of the art
+Five structural features now operational (see README): **prioritized queue +
+Plan Mode** · **live in-world Code of Conduct + layered memory** · **closed-loop
+DB-backed self-improvement** · **deterministic anti-spec-gaming eval layer** ·
+**discovery-first agentic executor**. Baseline ~45% success; the human-gated
+loop drives it down one approved patch at a time.

@@ -2,8 +2,9 @@
 
 connect() applies the schema idempotently and returns a live connection.
 insert_attempt() / insert_gate() are the only write paths; both use
-keyword-only args so a caller cannot silently misorder columns, and both let
-the DB's CHECK constraints reject bad enums (sqlite3.IntegrityError).
+keyword-only args so a caller cannot silently misorder columns. gate_decisions
+still has a DB CHECK on `decision`; task_attempts enum CHECKs were dropped so the
+DB is shared with the free-form live eval/ loop (vocab enforced in checks.py).
 """
 import datetime
 import pathlib

@@ -13,6 +13,13 @@ MODE="${MODE:-explore}"
 WATCH_TIMEOUT="${WATCH_TIMEOUT:-900}"
 TASKGIVER_BUDGET="${TASKGIVER_BUDGET:-0.50}"
 IMPROVER_BUDGET="${IMPROVER_BUDGET:-2.00}"
+
+# The three loop agents (task-giver, analyzer, improver) run through the `claude`
+# CLI on the Claude subscription (OAuth in ~/.claude/.credentials.json), NOT the
+# metered API. keys.json carries an ANTHROPIC_API_KEY for the in-world bot; if it
+# leaks into our env the CLI silently bills it as API usage, so strip it (and any
+# auth token) here. The bot runs as a separate process and is unaffected.
+unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)  # code under eval
 TIER="explore"                                                    # overridden in bench mode
 
@@ -112,15 +119,16 @@ ROW=$(node -e '
   const m=JSON.parse(process.argv[1]), t=m.tokens||{};
   const id=process.argv[2], name=process.argv[3], tier=process.argv[4],
         commit=process.argv[5], outcome=process.argv[6], wall=process.argv[7],
-        prog=process.argv[8], fmode=process.argv[9];
+        prog=process.argv[8], fmode=process.argv[9], taskset=process.argv[10];
   const success = outcome==="done";
-  const row={ task_id:id, task_name:name, difficulty_tier:tier, commit_hash:commit,
-    success, input_tokens:(t.input||0)+(t.cache_read||0)+(t.cache_creation||0),
+  const row={ task_id:id, task_name:name, difficulty_tier:tier, task_set:taskset,
+    commit_hash:commit, success,
+    input_tokens:(t.input||0)+(t.cache_read||0)+(t.cache_creation||0),
     output_tokens:(t.output||0), steps:m.turns||0, wall_clock_seconds:Number(wall||0) };
   if (prog) row.progress_score=Number(prog);
   if (!success) row.failure_mode = fmode || outcome;
   process.stdout.write(JSON.stringify(row));
-' "$M" "$TASKID" "$DESC" "$TIER" "$COMMIT" "$OUTCOME" "$WALL" "${PROG:-}" "${FMODE:-}")
+' "$M" "$TASKID" "$DESC" "$TIER" "$COMMIT" "$OUTCOME" "$WALL" "${PROG:-}" "${FMODE:-}" "$MODE")
 printf '%s' "$ROW" | python3 eval/eval_db.py log-attempt >/dev/null \
   && say "logged attempt → pincercraft_evals.db (commit $COMMIT, tier $TIER, ${PROG:-auto} progress)"
 

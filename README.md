@@ -11,13 +11,13 @@
 
 ## What PincerCraft adds to Mindcraft
 
-Two architectural changes on top of upstream Mindcraft:
+PincerCraft turns stock Mindcraft from a one-message-in / one-command-out loop into a **Claude-Code-style autonomous agent with a self-improvement flywheel**. Five structural additions:
 
-### 1. Prioritized action queue (OpenClaw-inspired)
+### 1. Prioritized action queue + Plan Mode
 
-Stock Mindcraft has a single naive loop: one chat message in → one LLM call → one command → repeat. If you talk while the bot is mid-task, things race.
+Stock Mindcraft has a single naive loop: one chat message in → one LLM call → one command → repeat. Talk while the bot is mid-task and things race.
 
-PincerCraft adds a **session lane** (serial queue, no self-collisions) with four queue modes for handling new inputs that arrive during a running task:
+PincerCraft adds a **session lane** (serial queue, no self-collisions) with queue modes for inputs that arrive during a running task:
 
 | Mode | Behavior | Use case |
 |---|---|---|
@@ -26,17 +26,25 @@ PincerCraft adds a **session lane** (serial queue, no self-collisions) with four
 | `followup` | Current run finishes, new input starts after | "After the build, go to bed" |
 | `collect` | Multiple followups merge into one batched turn | Burst of instructions handled together |
 
-Plus a fifth MC-specific mode for game events (low health, enemy spotted, etc.) routed through the same lane as first-class inputs.
+Plus a fifth MC-event mode (low health, enemy spotted) routed through the same lane. On top sits a **Plan Mode**: for a multi-step request the bot decomposes it into queued tasks — each with an observable `end_factor` — shows the plan, and waits for your approval before executing (propose → approve, à la Claude Code). A task-size gate keeps individual tasks small so plans stay legible.
 
-> Status: **design phase**. Not yet implemented.
+### 2. Live, in-world Code of Conduct + layered memory
 
-### 2. Customizable in-game Code of Conduct
+The bot's rules live in a **writable book on a lectern** in the Minecraft world. Edit the book in vanilla MC's UI and the bot re-reads `CLAUDE.md` within ~2s — the rules are injected as `$COC` at the top of *every* prompt, so they can't be forgotten across long conversations or talked-around. Rules span persona, anti-griefing, and base protection (never break beds/chests/fences — not even its owner's).
 
-The bot reads its rules from a **writable book on a lectern** in the Minecraft world. Edit the book in vanilla MC's native UI; the bot picks up the new rules within ~2 seconds and refuses any future requests that violate them.
+Memory is **layered**: `memory/server/*` (shared across bots), `memory/players/<player>` (per-player), and a bot layer, concatenated into `$MEMORY`. Standing rules ("from now on…") auto-route to `!remember`, not the task queue; named locations go to `!rememberHere`.
 
-The COC lives at the top of every system prompt sent to the LLM, so it can't be forgotten across long conversations.
+### 3. Closed-loop, DB-backed self-improvement
 
-> Status: **planned**. Fallback `coc.md` file will exist for when no lectern is placed.
+A continuous improvement cycle (`eval/loop.sh`): an LLM **task-giver** invents a challenge with an observable end_factor → the bot attempts it → `eval/metrics.mjs` scores token-efficiency (tokens-per-block-op, cache-hit, cost) → an **analyzer** writes a diagnosis → an **improver** patches `src/` **on a branch only** and stops for your approval — nothing is ever auto-merged. Every attempt and every approve/reject decision is written to a **SQLite system of record** (`pincercraft_evals.db`), so `eval/eval_report.py` can trend success-rate and cost-per-task across commits. A difficulty curriculum starts easy and ramps on clean successes. The loop's three agents run on the Claude **CLI subscription**, not the metered API.
+
+### 4. Deterministic, anti-spec-gaming evaluation
+
+A hardened layer (`evals/`) grades success **deterministically from a world-state snapshot** — never an LLM judge, never the bot's self-report (which the loop has repeatedly caught lying: a "done" with zero blocks moved). It uses **delta semantics** ("gained ≥N this run", not absolute counts the bot may already hold), per-tier timeouts, and a **train/eval holdout split** so gains are measured on tasks the loop never trained against.
+
+### 5. Discovery-first agentic executor
+
+A v2 orchestrator with per-command tool metadata (`isReadOnly` / `isConcurrencySafe` / `checkPermissions`) and a **discovery-first** executor: before targeting a resource it perceives the world (`!searchForBlock` / `!nearbyBlocks` / `!inventory`) and bakes the found coords/counts into a single detailed `!newAction`. Smart primitives — `smartGoTo` / `smartGather` / `smartBuildAt` — escalate through tiers (walk → dig with auto-equipped pickaxe → tower/bridge), and work can be routed to role-based subagents (miner / builder / scout) via `!dispatchAgent`.
 
 ---
 
@@ -78,8 +86,11 @@ PincerCraft-specific notes:
   - Layered memory (server / bot / per-player)
   - Per-player permission rules
   - MCP server mode (external agents can drive the bot)
+- ✅ Closed-loop self-improvement (`eval/`) — task-giver → metrics → analyzer → improver (branch-only, human-gated), SQLite system of record (`pincercraft_evals.db`), `eval_report.py` cross-commit trends
+- ✅ Deterministic anti-spec-gaming eval layer (`evals/`) — world-state snapshot checks, delta semantics, train/eval holdout split (24-test pytest suite)
+- ✅ v2 orchestrator hardening — IPv4 Mojang session-join fix, `code_task_content` populated under v2, discovery-first executor + inventory-aware conduct rules
 
-See [`docs/agent-blueprint.md`](docs/agent-blueprint.md) for the full design.
+See [`docs/agent-blueprint.md`](docs/agent-blueprint.md) for the full design and [`docs/CHANGELOG.md`](docs/CHANGELOG.md) for the build history.
 
 ## License
 

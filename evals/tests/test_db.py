@@ -44,15 +44,15 @@ def test_insert_gate_roundtrip(conn):
 
 
 @pytest.mark.parametrize("over", [
-    {"difficulty_tier": "copper"},
-    {"task_set": "holdout"},
-    {"success": 2},
-    {"progress_score": 1.5},
-    {"failure_mode": "bogus"},
+    {"difficulty_tier": "explore"},   # live eval/ loop value
+    {"task_set": "bench"},            # live eval/ loop value
+    {"failure_mode": "cancelled"},    # live eval/ loop value
 ])
-def test_attempt_check_constraints_reject_bad_enums(conn, over):
-    with pytest.raises(sqlite3.IntegrityError):
-        _attempt(conn, **over)
+def test_attempt_accepts_live_loop_vocab(conn, over):
+    # task_attempts enum CHECKs were dropped so the shared DB accepts both the
+    # evals/ vocab and the live eval/ loop's free-form values (2026-05-26).
+    aid = _attempt(conn, **over)
+    assert len(aid) == 36
 
 
 def test_gate_decision_constraint_rejects_bad_enum(conn):
