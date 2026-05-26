@@ -7,7 +7,17 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
+import https from 'node:https';
 const armorManager = plugin;
+
+// This box advertises IPv6 for Mojang hosts (sessionserver.mojang.com is dual-stack)
+// but has no working IPv6 route. Node's happy-eyeballs normally falls back to IPv4,
+// but under the full bot's event-loop pressure at connect time the race mishandles
+// the dead-v6 attempt and the sessionserver join dies with a bare ETIMEDOUT. Forcing
+// IPv4 on the agent that minecraft-protocol hands to yggdrasil (createBot options.agent
+// -> encrypt.js -> yggdrasil join/hasJoined) skips v6 entirely. Scope: Mojang HTTP calls
+// only; the local MC server socket is a separate raw TCP connection unaffected by this.
+const mojangAgent = new https.Agent({ family: 4, keepAlive: false });
 let mc_version = settings.minecraft_version;
 let mcdata = null;
 let Item = null;
@@ -61,6 +71,7 @@ export function initBot(username) {
         version: mc_version,
         checkTimeoutInterval: 60000,  // 60s keep-alive check (default 30s) — reduces disconnects on slow servers
         disableChatSigning: true,  // bot has no Java profile key; server reports "Chat disabled due to missing profile public key" without this. Required for bot to receive AND send chat.
+        agent: mojangAgent,  // force IPv4 for Mojang session-join calls (see mojangAgent above; dead-v6 route otherwise causes ETIMEDOUT)
     }
     if (!mc_version || mc_version === "auto") {
         delete options.version;
