@@ -722,7 +722,7 @@ export const actionsList = [
     {
         name: '!remember',
         isConcurrencySafe: true,
-        description: 'Save persistent fact (survives reboots). For coords use !rememberHere. Index shown in $MEMORY; details via !recall.',
+        description: 'Save persistent fact (survives reboots). For coords use !rememberHere. Index shown in the MEMORY INDEX section; details via !recall.',
         params: {
             'topic': { type: 'string', description: 'Short kebab-case slug (e.g. "lospollos929-prefs", "village-trading-tips", "lava-near-mining-tunnel"). Reused topic name = update.' },
             'content': { type: 'string', description: 'The fact, in markdown. First line is shown as the summary in the index. Max ~4KB.' }
@@ -735,7 +735,7 @@ export const actionsList = [
         name: '!recall',
         isReadOnly: true,
         isConcurrencySafe: true,
-        description: 'Read full content of saved memory topic. Use when $MEMORY index shows relevant topic.',
+        description: 'Read full content of saved memory topic. Use when the MEMORY INDEX shows a relevant topic.',
         params: {
             'topic': { type: 'string', description: 'Topic slug from MEMORY.md (e.g. "lospollos929-prefs").' }
         },
