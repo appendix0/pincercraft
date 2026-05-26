@@ -360,3 +360,36 @@ Surfacing it for gather tasks should stop both errors.
 success. Verify: re-run a chop/mine task and confirm `Selected skill
 docs` now lists `skills.mineBlockAt`/`skills.collectBlock` and that a
 break/collect lands (`block_ops > 0`).
+
+## 2026-05-26 — verify delta-style "fresh production" end_factors (task-189)
+
+**Change.** `verifyEndFactor` now recognizes delta-phrased gather
+criteria — `"<item> count has increased by at least N"`, `"≥N new
+<item> mined and collected this run"` — via a new `matchCountIncrease`
+parser, and checks them against an inventory snapshot taken at task
+start. A new exported `snapshotStartCounts(agent, task)` records the
+baseline count for such criteria; `agent._onQueueChange` calls it on the
+queue `start` event. At `!finishTask`, the gain must be `≥ N` since the
+task started, or the finish is blocked. Absolute counts, multi-item, and
+fuzzy criteria are unchanged.
+
+**Hypothesis (task-189 diagnosis).** #189 ("mine ≥10 NEW cobblestone
+THIS run") closed `done` with every work counter at zero — a false done.
+Its end_factor "cobblestone count has increased by at least 10" is a
+textbook inventory-delta check, but the verifier had no parser for the
+"increased by" shape and fell back to honor-system, so a 0-op completion
+sailed through. The diagnosis also asked to "reject any honor-system
+done when `block_ops == 0`"; `block_ops` is a post-hoc metric computed by
+`eval/metrics.mjs` from `bot.log`, not a runtime counter, so the
+delta-vs-snapshot check is the runtime mechanism that captures the same
+"no real work happened" signal — when nothing was mined, the gain is 0
+and the finish is blocked. The snapshot (vs. an absolute check) is what
+makes "NEW this run" correct: a bot already holding ≥10 cobblestone can
+no longer pass by mining nothing.
+
+**Metric.** Eliminate `outcome=done` with `block_ops=0` (false-done
+rate) for gather/mine tasks; secondarily restore a non-null
+`tokens_per_block_op` once real mining occurs. Verify: re-run #189 — with
+no mining, `!finishTask` returns `[verify] … not met — cobblestone rose
+by 0 this task … need +10` instead of a honor-system done; with ≥10
+mined, it logs `verified (cobblestone+N)`.

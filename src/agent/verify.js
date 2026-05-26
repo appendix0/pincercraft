@@ -49,6 +49,39 @@ function matchMultiInInventory(text) {
     return items;
 }
 
+// Match delta-style "fresh production this run" criteria the task-giver phrases
+// as a gain rather than an absolute count:
+//   "cobblestone count has increased by at least 10"
+//   "cobblestone increased by 10"
+//   "≥10 new cobblestone mined and collected this run"
+//   "at least 10 new cobblestone collected this run"
+// Returns { item, delta } or null. Verified against task.startItemCount (the
+// inventory snapshot taken at task start) so the gain must come from THIS run,
+// not pre-existing stock — an absolute check would false-pass a bot that
+// already held enough and mined nothing.
+function matchCountIncrease(text) {
+    // "<item> [count] [has] increased by [at least|≥] N"
+    let m = text.match(/^([a-z][a-z0-9_]*)\s+(?:count\s+)?(?:has\s+)?increased\s+by\s+(?:at\s+least\s+|≥\s*)?(\d+)\b/);
+    if (m) return { item: m[1], delta: parseInt(m[2], 10) };
+    // "[at least|≥] N new <item> ..." in a gather context (mine/collect/etc.).
+    m = text.match(/(?:at\s+least\s+|≥\s*)?(\d+)\s+new\s+([a-z][a-z0-9_]*)\b/);
+    if (m && /\b(?:min|collect|gather|obtain|produc|dug|dig)/.test(text)) {
+        return { item: m[2], delta: parseInt(m[1], 10) };
+    }
+    return null;
+}
+
+// Snapshot the baseline count for a delta-style end_factor at task start, so
+// verifyEndFactor can later confirm the gain is from THIS run. No-op for
+// non-delta criteria. Called from the queue 'start' hook (agent._onQueueChange).
+export function snapshotStartCounts(agent, task) {
+    if (!task || !task.endFactor) return;
+    const bot = agent?.bot;
+    if (!bot) return;
+    const inc = matchCountIncrease(normalize(task.endFactor));
+    if (inc) task.startItemCount = inventoryCount(bot, inc.item);
+}
+
 // Public API. Returns:
 //   { programmatic: false } — couldn't parse the end_factor; caller should
 //     allow the finishTask through unchanged.
@@ -60,6 +93,19 @@ export function verifyEndFactor(agent, task) {
     const bot = agent?.bot;
     if (!bot) return { programmatic: false };
     const text = normalize(task.endFactor);
+
+    const inc = matchCountIncrease(text);
+    if (inc) {
+        const have = inventoryCount(bot, inc.item);
+        const base = typeof task.startItemCount === 'number' ? task.startItemCount : 0;
+        const gained = have - base;
+        if (gained >= inc.delta) return { programmatic: true, verified: true, observed: `${inc.item}+${gained}` };
+        return {
+            programmatic: true,
+            verified: false,
+            reason: `End factor "${task.endFactor}" not met — ${inc.item} rose by ${gained} this task (have ${have}, started with ${base}), need +${inc.delta}.`,
+        };
+    }
 
     const single = matchCountInInventory(text);
     if (single) {
