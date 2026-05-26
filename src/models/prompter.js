@@ -247,9 +247,18 @@ export class Prompter {
         if (prompt.includes('$COMMAND_DOCS'))
             prompt = prompt.replaceAll('$COMMAND_DOCS', getCommandDocs(this.agent));
         if (prompt.includes('$CODE_DOCS')) {
-            const code_task_content = messages.slice().reverse().find(msg =>
-                msg.role !== 'system' && msg.content.includes('!newAction(')
-            )?.content?.match(/!newAction\((.*?)\)/)?.[1] || '';
+            let code_task_content = messages.slice().reverse().find(msg =>
+                msg.role !== 'system' && typeof msg.content === 'string' && msg.content.includes('!newAction(')
+            )?.content?.match(/!newAction\((.*?)\)/)?.[1];
+            // The v2 orchestrator generates code without the legacy !newAction(...)
+            // wrapper, so the capture above is empty — which left skill-doc selection
+            // (incl. the gather-doc trigger in skill_library) matching an empty string
+            // and always returning the same generic docs. Fall back to the active
+            // task's description so doc selection sees the real intent ("chop oak logs").
+            if (!code_task_content) {
+                const active = this.agent.task_queue?.tasks?.find(t => t.status === 'in_progress');
+                code_task_content = active?.description || '';
+            }
 
             prompt = prompt.replaceAll(
                 '$CODE_DOCS',
