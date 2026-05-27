@@ -427,7 +427,6 @@ export class Agent {
         let lastTpAt = 0;
         let tpHistory = []; // timestamps; kill-switch trips if length ≥ KILL_THRESHOLD
         let killed = false;
-        let lastSkipLogAt = 0; // throttle the no-last_sender skip log to 1/min
         this._stuckWatcher = setInterval(() => {
             if (killed || !this.alive || !this.bot || !this.bot.entity || !this.bot.entity.position) return;
             const p = this.bot.entity.position;
@@ -447,29 +446,22 @@ export class Agent {
             }
             if (maxDrift >= MIN_DRIFT) return;
 
-            // No player to TP to → log and skip. Don't ~ ~10 ~ vertical-hop:
-            // if the bot is stuck without anyone to follow, random TPs make
-            // things worse (lose location context, possibly land in lava).
+            // Recovery is gated by a shared cooldown + kill-switch below, so the
+            // two paths (TP-to-player vs. self-unstick) can't loop. Don't ever
+            // random-hop: if the bot is stuck, random TPs make things worse
+            // (lose location context, possibly land in lava).
             const target = this.last_sender;
-            if (!target) {
-                const now2 = Date.now();
-                if (now2 - lastSkipLogAt > 60000) {
-                    console.warn(`[stuck] frozen during ${label} but no last_sender — skip TP (throttled)`);
-                    lastSkipLogAt = now2;
-                }
-                return;
-            }
 
             const now = Date.now();
             if (now - lastTpAt < COOLDOWN_MS) return;
             tpHistory = tpHistory.filter(t => now - t < KILL_WINDOW_MS);
             if (tpHistory.length >= KILL_THRESHOLD) {
                 killed = true;
-                console.warn(`[stuck] kill-switch: ${KILL_THRESHOLD} TPs in ${KILL_WINDOW_MS/60000}m — disabling watcher to avoid loop`);
+                console.warn(`[stuck] kill-switch: ${KILL_THRESHOLD} recoveries in ${KILL_WINDOW_MS/60000}m — disabling watcher to avoid loop`);
                 try {
                     this.history.add(
                         'system',
-                        `[stuck recovery DISABLED] Auto-teleport fired ${KILL_THRESHOLD} times in ${KILL_WINDOW_MS/60000} minutes. Something is wrong beyond pathfinding. Please !cancelTask and ask the player for direction.`,
+                        `[stuck recovery DISABLED] Auto-recovery fired ${KILL_THRESHOLD} times in ${KILL_WINDOW_MS/60000} minutes. Something is wrong beyond pathfinding. Please !cancelTask and ask the player for direction.`,
                     );
                 } catch (e) { /* ignore */ }
                 return;
@@ -478,16 +470,33 @@ export class Agent {
             tpHistory.push(now);
             samples = [];
 
-            const cmd = `/tp ${this.name} ${target}`;
-            console.warn(`[stuck] no drift for ${WINDOW}s during ${label} → ${cmd}`);
-            try {
-                this.bot.chat(cmd);
-                this.history.add(
-                    'system',
-                    `[stuck recovery] You were physically frozen for ${WINDOW}s during ${label}. Auto-teleported to ${target}. Re-orient with !nearbyBlocks if needed, then continue or !cancelTask if the goal isn't reachable.`,
-                );
-            } catch (e) {
-                console.warn('[stuck] tp failed:', e?.message || e);
+            if (target) {
+                const cmd = `/tp ${this.name} ${target}`;
+                console.warn(`[stuck] no drift for ${WINDOW}s during ${label} → ${cmd}`);
+                try {
+                    this.bot.chat(cmd);
+                    this.history.add(
+                        'system',
+                        `[stuck recovery] You were physically frozen for ${WINDOW}s during ${label}. Auto-teleported to ${target}. Re-orient with !nearbyBlocks if needed, then continue or !cancelTask if the goal isn't reachable.`,
+                    );
+                } catch (e) {
+                    console.warn('[stuck] tp failed:', e?.message || e);
+                }
+            } else {
+                // No player to TP to (explore/autonomous mode). Break the wedged
+                // action loose with an interrupt so the in-flight pathfinder /
+                // collectBlock unwinds and the orchestrator can re-issue it,
+                // instead of freezing in place until HARD_CAP.
+                console.warn(`[stuck] no drift for ${WINDOW}s during ${label}, no last_sender → self-unstick (interrupt)`);
+                try {
+                    this.requestInterrupt();
+                    this.history.add(
+                        'system',
+                        `[stuck recovery] You were physically frozen for ${WINDOW}s during ${label} with no player to teleport to. Auto-interrupted the stuck action. Re-orient with !nearbyBlocks, then retry with a different approach (e.g. !searchForBlock with a larger range) or !cancelTask if the goal isn't reachable.`,
+                    );
+                } catch (e) {
+                    console.warn('[stuck] self-unstick failed:', e?.message || e);
+                }
             }
         }, 1000);
     }

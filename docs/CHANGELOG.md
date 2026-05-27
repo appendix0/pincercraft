@@ -1,5 +1,34 @@
 # PincerCraft Changelog
 
+## 2026-05-27 — sender-independent stuck recovery (task-197)
+
+**Change.** The stuck watcher (`_startStuckWatcher` in `agent.js`) no
+longer dead-ends when there is no `last_sender`. Previously, with no
+player to `/tp` to (explore/autonomous mode), it logged `skip TP
+(throttled)` and returned every tick, leaving a frozen
+`searchForBlock`/`collectBlocks` wedged until `HARD_CAP`. Now the
+no-sender branch calls `requestInterrupt()` (stopDigging +
+collectBlock.cancelTask + pathfinder.stop + pvp.stop) so the in-flight
+action unwinds and the orchestrator can re-issue it. Both recovery paths
+(TP-to-player and self-unstick) now share the same cooldown + 3-in-5-min
+kill-switch, so the new path can't loop. No random vertical-hop TP — the
+lava/location-loss risk the original comment warned about is unchanged.
+
+**Hypothesis (task-197 diagnosis).** #197 ("chop 5 oak logs") froze in
+`searchForBlock`/`collectBlocks` and was cancelled with `block_ops=0`
+after burning 19 turns / ~221k tokens to `HARD_CAP`. The freeze hit the
+`no last_sender — skip TP` branch every cycle because recovery was gated
+on a player message that never exists in explore mode, so the unstick
+never fired. Removing that dead branch lets a wedged action recover
+autonomously.
+
+**Metric.** Move `block_ops` from 0 to >0 (restoring a finite
+`tokens_per_block_op`) and flip the outcome away from `cancelled` for
+autonomous-mode gather/mine tasks. Verify: re-run an explore-mode chop
+task; when the bot freezes mid-`collectBlocks`, the log shows `[stuck]
+… no last_sender → self-unstick (interrupt)` (not `skip TP`) and the
+action resumes instead of parking at `HARD_CAP`.
+
 ## 2026-05-18 — Overnight build: phases B → I
 
 The Daedelus404 bot becomes a Claude-Code-style agent. Phases A and 1
