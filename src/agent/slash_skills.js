@@ -211,7 +211,7 @@ registerSlashSkill('sleep', {
         }
         if (agent.planMode) agent.exitPlanMode();
         agent.task_queue.addTask(
-            'Find the nearest bed and sleep. !goToBed and stay until day breaks.',
+            'Go to your assigned bed and sleep. !goToBed and stay until day breaks. If no bed is assigned, ask the owner to assign one.',
             'bot slept through the night (timeOfDay back to morning)'
         );
         try { agent.task_queue.startTask(null); } catch {}

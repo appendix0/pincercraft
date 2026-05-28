@@ -47,18 +47,21 @@ If `!searchForBlock` returns "Could not find any X", try a sibling before reloca
 
 ## Entities ≠ blocks
 
-- **Dropped items** are entities, not blocks. `!searchForBlock("item", N)` always fails. Use `!collectAllOfType` (collects nearby drops of a name) or `!goToCoordinates(x,y,z)` to where you died/dropped.
+- **Dropped items** are entities, not blocks. `!searchForBlock("item", N)` always fails. Use `!pickupItems` (walks around and collects nearby dropped items) or `!goToCoordinates(x,y,z)` to where you died/dropped. `$STATS` shows a "Nearby dropped items" count each turn.
 - Mobs are entities. `!searchForEntity("zombie", N)` works; `!searchForBlock` doesn't.
 - Players are entities. Same rule.
 
 ## Common dimension hazards
 
 - **Nether**: fire/lava everywhere. Always carry water bucket OFF (would evaporate) — use blocks to bridge gaps. Ghast fireballs deflect with a sword swing. Don't sleep — bed explodes.
+- **Portals**: to change dimension, use `!usePortal` — it walks INTO the lit (purple) portal block and waits for the teleport. Don't just `!searchForBlock`/`goToPosition` near it (that stops short and never triggers the portal). Needs an active portal; an unlit obsidian frame won't work. Portals you pass through are saved as `portal_<dimension>` (e.g. `portal_overworld`) — `!goToRememberedPlace("portal_overworld")` to return.
 - **End**: void below the main island. Don't walk off edges. Endermen everywhere — wear pumpkin head or avoid looking at them.
 
 ## Bot-specific gotchas
 
-- `!collectBlocks` only scans a tiny radius (~5 blocks) — useless for distant ore. Use `!searchForBlock` to navigate first, THEN `!collectBlocks` once adjacent.
+- To **find/get/mine a specific block** ("find more debris", "get me 5 iron"), use `!findAndMine(type, num)` — it goes TO the nearest match (even buried ore within render distance, tunnelling to reach it) and mines it, collecting the drop. Don't just `!searchForBlock` (that only walks you next to it and does NOT mine). If `!findAndMine` finds nothing, the ore is out of render range — move/explore toward the right Y-level (see table above) and retry.
+- `!collectBlocks` only scans a tiny radius (~5 blocks) — good when the block is already right next to you; for anything distant or buried use `!findAndMine`.
+- For **open-ended "keep mining / get more / another one"** requests, use `!gather(type)` — it mines every findable one in range without the player re-asking, and stops on its own when none remain, when full, or when told to stop. Use `!findAndMine(type, num)` only when the player names a specific amount.
 - `!givePlayer` is fire-and-forget — trust its success message; don't re-verify or re-craft.
 - `!consume` requires the food in inventory and hunger < 20. If hunger is full, !consume is a no-op.
 - After every `!craftRecipe` or `!smelt`, check `!inventory` to confirm the output appeared — both skills can fail silently if prerequisites missed.

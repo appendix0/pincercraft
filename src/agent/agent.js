@@ -8,6 +8,7 @@ import { containsCommand, commandExists, executeCommand, truncCommandMessage, is
 import { ActionManager } from './action_manager.js';
 import { NPCContoller } from './npc/controller.js';
 import { MemoryBank } from './memory_bank.js';
+import { InventoryManager } from './inventory_manager.js';
 import { SelfPrompter } from './self_prompter.js';
 import convoManager from './conversation.js';
 import { handleTranslation, handleEnglishTranslation } from '../utils/translator.js';
@@ -104,6 +105,7 @@ export class Agent {
         this.coder = new Coder(this);
         this.npc = new NPCContoller(this);
         this.memory_bank = new MemoryBank();
+        this.inventory_manager = new InventoryManager(this);
         this.self_prompter = new SelfPrompter(this);
         this.task_queue = new TaskQueue(
             this.name,
@@ -232,6 +234,7 @@ export class Agent {
                 addBrowserViewer(this.bot, count_id);
                 console.log('Initializing vision intepreter...');
                 this.vision_interpreter = new VisionInterpreter(this, settings.allow_vision);
+                this.bot.inventory_manager = this.inventory_manager;
 
                 // wait for a bit so stats are not undefined
                 await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -324,6 +327,9 @@ export class Agent {
                 this.history.add('system', init_message);
             }
             await this.self_prompter.handleLoad(save_data.self_prompt, save_data.self_prompting_state);
+        }
+        if (save_data?.places) {
+            this.memory_bank.loadJson(save_data.places);
         }
         if (save_data?.last_sender) {
             this.last_sender = save_data.last_sender;

@@ -58,6 +58,9 @@ export const queryList = [
             res += '\n- Nearby Human Players: ' + (players.length > 0 ? players.join(', ') : 'None.');
             res += '\n- Nearby Bot Players: ' + (bots.length > 0 ? bots.join(', ') : 'None.');
 
+            const drops = world.getNearbyEntities(bot, 16).filter(e => e.name === 'item');
+            res += '\n- Nearby dropped items: ' + (drops.length > 0 ? `${drops.length} within 16 blocks (use !pickupItems to collect)` : 'None.');
+
             res += '\n' + agent.bot.modes.getMiniDocs() + '\n';
             return pad(res);
         }
@@ -95,6 +98,9 @@ export const queryList = [
                 res += `\nFeet: ${boots.name}`;
             if (!helmet && !chestplate && !leggings && !boots)
                 res += 'Nothing';
+
+            if (agent.inventory_manager)
+                res += '\n' + agent.inventory_manager.statusLine();
 
             return pad(res);
         }

@@ -452,6 +452,8 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     const unsafeBlocks = ['obsidian'];
 
     for (let i=0; i<num; i++) {
+        if (bot.inventory_manager?.isNearFull(1))
+            await bot.inventory_manager.ensureSpace();
         let blocks = world.getNearestBlocksWhere(bot, block => {
             if (!blocktypes.includes(block.name)) {
                 return false;
@@ -514,6 +516,8 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         }
         catch (err) {
             if (err.name === 'NoChests') {
+                if (await bot.inventory_manager?.ensureSpace())
+                    continue;
                 log(bot, `Failed to collect ${blockType}: Inventory full, no place to deposit.`);
                 break;
             }
@@ -530,15 +534,15 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     return collected > 0;
 }
 
-export async function pickupNearbyItems(bot) {
+export async function pickupNearbyItems(bot, distance=8) {
     /**
-     * Pick up all nearby items.
+     * Pick up all nearby dropped items, walking to each in turn.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
+     * @param {number} distance, the radius to sweep for dropped items. Defaults to 8.
      * @returns {Promise<boolean>} true if the items were picked up, false otherwise.
      * @example
-     * await skills.pickupNearbyItems(bot);
+     * await skills.pickupNearbyItems(bot, 32);
      **/
-    const distance = 8;
     const getNearestItem = bot => bot.nearestEntity(entity => entity.name === 'item' && bot.entity.position.distanceTo(entity.position) < distance);
     let nearestItem = getNearestItem(bot);
     let pickedUp = 0;
@@ -666,6 +670,119 @@ export async function mineBlockAt(bot, x, y, z) {
             return false;
         }
     }
+}
+
+export async function findAndMine(bot, blockType, num=1, range=128) {
+    /**
+     * Locate the nearest block(s) of a type within a wide range and mine each one,
+     * collecting the drop. This is the "find/get/mine me X" primitive: it goes TO the
+     * block and taps it — not just walks near. `getNearestBlock` scans loaded chunks
+     * regardless of exposure, so buried ore in render range is found, and `mineBlockAt`
+     * tunnels to reach it. Stops on a missing-tool/unreachable result.
+     * @param {MinecraftBot} bot, reference to the minecraft bot.
+     * @param {string} blockType, the block to find and mine.
+     * @param {number} num, how many to mine. Defaults to 1.
+     * @param {number} range, search radius. Defaults to 128.
+     * @returns {Promise<boolean>} true if at least one was mined.
+     * @example
+     * await skills.findAndMine(bot, "ancient_debris", 1);
+     **/
+    const candidates = [blockType];
+    const ores = ['coal', 'diamond', 'emerald', 'iron', 'gold', 'lapis_lazuli', 'redstone', 'copper'];
+    if (ores.includes(blockType)) candidates.push(blockType + '_ore', 'deepslate_' + blockType + '_ore');
+    if (blockType.endsWith('_ore')) candidates.push('deepslate_' + blockType);
+
+    let mined = 0;
+    for (let i = 0; i < num; i++) {
+        if (bot.interrupt_code) break;
+        let block = null;
+        for (const c of candidates) {
+            block = world.getNearestBlock(bot, c, range);
+            if (block) break;
+        }
+        if (!block) {
+            log(bot, mined === 0
+                ? `Could not find any ${blockType} within ${range} blocks.`
+                : `No more ${blockType} within ${range} blocks.`);
+            break;
+        }
+        const p = block.position;
+        if (!await mineBlockAt(bot, p.x, p.y, p.z))
+            break;
+        mined++;
+    }
+    log(bot, `Found and mined ${mined} ${blockType}.`);
+    return mined > 0;
+}
+
+export async function gather(bot, blockType, maxCount=256) {
+    /**
+     * Open-ended gather: keep finding and mining a block type until none remain in
+     * range, the inventory can't be freed, the player interrupts (!stop), or maxCount is
+     * reached. Removes the need for the player to re-ask for each block ("more", "another
+     * one"). Frees inventory via the inventory manager between mines. Reports when it stops.
+     * @param {MinecraftBot} bot, reference to the minecraft bot.
+     * @param {string} blockType, the block to gather.
+     * @param {number} maxCount, safety cap on how many to mine. Defaults to 256.
+     * @returns {Promise<number>} the number gathered.
+     * @example
+     * await skills.gather(bot, "ancient_debris");
+     **/
+    let total = 0;
+    while (!bot.interrupt_code && total < maxCount) {
+        if (bot.inventory_manager?.isNearFull(1)) {
+            if (!await bot.inventory_manager.ensureSpace()) {
+                log(bot, `Stopped gathering ${blockType}: inventory full and nothing to free.`);
+                return total;
+            }
+        }
+        if (!await findAndMine(bot, blockType, 1, 128)) {
+            log(bot, `Stopped gathering ${blockType} at ${total} — none more in range. Lead me to more or say stop.`);
+            return total;
+        }
+        total++;
+    }
+    if (total >= maxCount)
+        log(bot, `Gathered ${total} ${blockType} (hit safety cap).`);
+    else if (bot.interrupt_code)
+        log(bot, `Gathering ${blockType} stopped by request at ${total}.`);
+    return total;
+}
+
+export async function usePortal(bot, range=64) {
+    /**
+     * Walk INTO the nearest active nether portal and wait to be teleported to the other
+     * dimension. Stands in the portal block (not just next to it — that was the old bug)
+     * and pauses unstuck so the bot doesn't wander out before the ~4s activation completes.
+     * @param {MinecraftBot} bot, reference to the minecraft bot.
+     * @param {number} range, how far to look for an active portal block. Defaults to 64.
+     * @returns {Promise<boolean>} true if the bot changed dimension.
+     * @example
+     * await skills.usePortal(bot);
+     **/
+    const portal = world.getNearestBlock(bot, 'nether_portal', range);
+    if (!portal) {
+        log(bot, `No active nether portal within ${range} blocks. I need a lit portal (purple blocks), not just an obsidian frame.`);
+        return false;
+    }
+    const startDim = bot.game.dimension;
+    const p = portal.position;
+    log(bot, `Stepping into the portal at x:${p.x}, y:${p.y}, z:${p.z}.`);
+    bot.modes.pause('unstuck');
+    await goToPosition(bot, p.x, p.y, p.z, 0);
+
+    // Portal activation is ~4s, plus chunk load on the far side. Keep standing in it.
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+        if (bot.interrupt_code) break;
+        if (bot.game.dimension !== startDim) {
+            log(bot, `Went through the portal — now in ${bot.game.dimension}.`);
+            return true;
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    log(bot, `Stood in the portal but didn't change dimension — I may not be inside the purple blocks. Nudge me onto the portal and retry.`);
+    return false;
 }
 
 
@@ -1792,28 +1909,43 @@ export async function useDoor(bot, door_pos=null) {
     return true;
 }
 
-export async function goToBed(bot) {
+export async function goToBed(bot, loc=null) {
     /**
-     * Sleep in the nearest bed.
+     * Sleep in a bed. With `loc` ([x,y,z]) go to that assigned bed; otherwise the nearest one.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
+     * @param {number[]} loc, optional [x,y,z] of an assigned bed. Defaults to null (nearest).
      * @returns {Promise<boolean>} true if the bed was found, false otherwise.
      * @example
      * await skills.goToBed(bot);
      **/
-    const beds = bot.findBlocks({
-        matching: (block) => {
-            return block.name.includes('bed');
-        },
-        maxDistance: 32,
-        count: 1
-    });
-    if (beds.length === 0) {
-        log(bot, `Could not find a bed to sleep in.`);
-        return false;
+    let target;
+    if (loc) {
+        target = new Vec3(loc[0], loc[1], loc[2]);
     }
-    let loc = beds[0];
-    await goToPosition(bot, loc.x, loc.y, loc.z);
-    const bed = bot.blockAt(loc);
+    else {
+        const beds = bot.findBlocks({
+            matching: (block) => {
+                return block.name.includes('bed');
+            },
+            maxDistance: 32,
+            count: 1
+        });
+        if (beds.length === 0) {
+            log(bot, `Could not find a bed to sleep in.`);
+            return false;
+        }
+        target = beds[0];
+    }
+    await goToPosition(bot, target.x, target.y, target.z);
+    let bed = bot.blockAt(target);
+    if (!bed || !bed.name.includes('bed')) {
+        const near = bot.findBlocks({ matching: (b) => b.name.includes('bed'), maxDistance: 4, count: 1 });
+        if (near.length === 0) {
+            log(bot, `No bed at the assigned spot anymore.`);
+            return false;
+        }
+        bed = bot.blockAt(near[0]);
+    }
     await bot.sleep(bed);
     log(bot, `You are in bed.`);
     bot.modes.pause('unstuck');

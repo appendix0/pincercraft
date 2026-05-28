@@ -68,9 +68,11 @@ export class Examples {
     async createExampleMessage(turns) {
         let selected_examples = await this.getRelevant(turns);
 
-        console.log('selected examples:');
-        for (let example of selected_examples) {
-            console.log('Example:', example[0].content)
+        if (selected_examples.length) {
+            const labels = selected_examples
+                .map(e => (e[0]?.content || '').replace(/\s+/g, ' ').trim().slice(0, 40))
+                .join(' | ');
+            console.log(`[examples] ${selected_examples.length} selected: ${labels}`);
         }
 
         let msg = 'Examples of how to respond:\n';

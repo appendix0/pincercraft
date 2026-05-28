@@ -127,7 +127,7 @@ export const actionsList = [
     },
     {
         name: '!searchForBlock',
-        description: 'Find + go to nearest block. For mining, prefer !collectBlocks (it searches internally).',
+        description: 'Walk NEXT TO the nearest block (navigation/inspection only — does NOT mine it). To find AND mine/fetch a block, use !findAndMine.',
         params: {
             'type': { type: 'BlockName', description: 'The block type to go to.' },
             'search_range': { type: 'float', description: 'The range to search for the block. Minimum 32.', domain: [10, 512] }
@@ -138,6 +138,46 @@ export const actionsList = [
                 range = 32;
             }
             await skills.goToNearestBlock(agent.bot, block_type, 4, range);
+        })
+    },
+    {
+        name: '!pickupItems',
+        description: 'Walk around and pick up nearby dropped items (mob drops, scattered resources) within ~32 blocks. Use after a fight, or when $STATS shows dropped items nearby.',
+        perform: runAsAction(async (agent) => {
+            await skills.pickupNearbyItems(agent.bot, 32);
+        })
+    },
+    {
+        name: '!findAndMine',
+        description: 'Find the nearest block of a type (wide range; includes buried ore in render distance), go to it and mine it once, collecting the drop. This is the "find/get/mine me X" command — it tunnels to reach buried blocks. Needs the right pickaxe tier. If none found, move/explore and retry. For a fixed amount use num; for open-ended "keep mining" use !gather.',
+        params: {
+            'type': { type: 'BlockName', description: 'The block type to find and mine.' },
+            'num': { type: 'int', description: 'How many to find and mine.', domain: [1, Number.MAX_SAFE_INTEGER] }
+        },
+        perform: runAsAction(async (agent, type, num) => {
+            await skills.findAndMine(agent.bot, type, num);
+        })
+    },
+    {
+        name: '!usePortal',
+        description: 'Walk into the nearest lit nether portal and go through to the other dimension. Use when the player says "go through the portal" / "let\'s go to the nether / back to the overworld". Needs an active (purple) portal nearby. Remembers the portal you arrive at as portal_<dimension>.',
+        perform: runAsAction(async (agent) => {
+            const ok = await skills.usePortal(agent.bot);
+            if (ok) {
+                const dim = agent.bot.game.dimension.split(':').pop();
+                const h = agent.bot.entity.position;
+                agent.memory_bank.rememberPlace('portal_' + dim, Math.round(h.x), Math.round(h.y), Math.round(h.z));
+            }
+        })
+    },
+    {
+        name: '!gather',
+        description: 'Keep finding and mining a block type until none remain nearby, your inventory is full, or you are told to stop ("stop"/"that\'s enough" → !stop). Use for open-ended "keep mining X" / "get more X" / "another one" — you do NOT need the player to re-ask for each block. For a specific amount, use !findAndMine with num instead.',
+        params: {
+            'type': { type: 'BlockName', description: 'The block type to keep gathering.' }
+        },
+        perform: runAsAction(async (agent, type) => {
+            await skills.gather(agent.bot, type);
         })
     },
     {
@@ -299,6 +339,16 @@ export const actionsList = [
         })
     },
     {
+        name: '!makeSpace',
+        description: 'Free inventory space: deposit junk into a nearby chest, else discard low-value items. Never discards tools, armor, food, or the current task item.',
+        perform: runAsAction(async (agent) => {
+            const im = agent.inventory_manager;
+            const before = im.emptySlots();
+            await im.ensureSpace({ threshold: 3 });
+            skills.log(agent.bot, `Inventory: ${im.statusLine()} (freed ${im.emptySlots() - before} slots).`);
+        })
+    },
+    {
         name: '!collectBlocks',
         description: 'Collect nearest blocks of a type. Auto-equips tool. On fail, escalate to !newAction.',
         params: {
@@ -383,10 +433,29 @@ export const actionsList = [
     },
     {
         name: '!goToBed',
-        description: 'Go to the nearest bed and sleep.',
+        description: 'Go to your assigned bed and sleep. If no bed is assigned, asks the owner to assign one (does NOT pick a random nearest bed).',
         perform: runAsAction(async (agent) => {
-            await skills.goToBed(agent.bot);
+            const pos = agent.memory_bank.recallPlace('bed');
+            if (!pos) {
+                skills.log(agent.bot, `There is no bed assigned to me yet — want to assign one? Stand by the bed you want me to use and tell me to assign it.`);
+                return;
+            }
+            await skills.goToBed(agent.bot, pos);
         })
+    },
+    {
+        name: '!assignBed',
+        isConcurrencySafe: true,
+        description: 'Assign the nearest bed as my sleeping bed (persists across reboots). Use when the owner shows me which bed is mine.',
+        perform: function (agent) {
+            const beds = agent.bot.findBlocks({ matching: (b) => b.name.includes('bed'), maxDistance: 16, count: 1 });
+            if (beds.length === 0) {
+                return `No bed nearby to assign. Stand next to the bed you want me to use and try again.`;
+            }
+            const b = beds[0];
+            agent.memory_bank.rememberPlace('bed', b.x, b.y, b.z);
+            return `Got it — assigned the bed at (${b.x}, ${b.y}, ${b.z}) as mine. I'll sleep there from now on.`;
+        }
     },
     {
         name: '!stay',
