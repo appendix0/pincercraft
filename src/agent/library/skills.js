@@ -1258,6 +1258,12 @@ export async function goToGoal(bot, goal) {
      **/
 
     const nonDestructiveMovements = new pf.Movements(bot);
+    // True non-destructive: never break blocks. First-choice movement so the bot
+    // walks AROUND terrain instead of digging THROUGH it — faster in open ground
+    // and required by the Code of Conduct (don't break/path-through blocks the
+    // bot didn't place). Digging stays available via destructiveMovements below
+    // as a genuine last resort when no walkable path exists.
+    nonDestructiveMovements.canDig = false;
     const dontBreakBlocks = ['glass', 'glass_pane'];
     for (let block of dontBreakBlocks) {
         nonDestructiveMovements.blocksCantBreak.add(mc.getBlockId(block));
@@ -1269,7 +1275,11 @@ export async function goToGoal(bot, goal) {
 
     let final_movements = destructiveMovements;
 
-    const pathfind_timeout = 1000;
+    // Decision-phase search budget. Was 1000ms — too short for complex terrain,
+    // so a walkable path often wasn't found in time and the bot fell back to
+    // destructive digging unnecessarily. 2000ms gives the walk path a fair shot
+    // without freezing the bot too long during the pre-check.
+    const pathfind_timeout = 2000;
     if (await bot.pathfinder.getPathTo(nonDestructiveMovements, goal, pathfind_timeout).status === 'success') {
         final_movements = nonDestructiveMovements;
         log(bot, `Found non-destructive path.`);
