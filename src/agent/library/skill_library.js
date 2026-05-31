@@ -1,6 +1,28 @@
 import { cosineSimilarity } from '../../utils/math.js';
 import { getSkillDocs } from './index.js';
-import { wordOverlapScore } from '../../utils/text.js';
+
+// Lexical coverage scorer for skill-doc retrieval when no embedding model is
+// configured. Counts how many of the task's meaningful words appear in a doc,
+// after splitting camelCase + dotted names (so "smelt" / "go to" can match
+// skills.smeltItem / skills.goToPosition) and dropping stopwords. Coverage is
+// far more stable here than Jaccard word-overlap, which penalizes long
+// descriptive docs and inflates short ones via shared stopwords.
+const RETRIEVAL_STOPWORDS = new Set(
+    'a an the to with into from of and or is are be this that your you it its on at in for some down up out'.split(' ')
+);
+function lexicalTokens(text) {
+    return (text || '')
+        .replace(/([a-z])([A-Z])/g, '$1 $2')   // camelCase: smeltItem -> smelt Item
+        .replace(/[^a-zA-Z]/g, ' ')             // dots/underscores/digits -> spaces
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(w => w.length > 1 && !RETRIEVAL_STOPWORDS.has(w));
+}
+function coverageScore(message, doc) {
+    const docWords = new Set(lexicalTokens(doc));
+    const queryWords = [...new Set(lexicalTokens(message))];
+    return queryWords.filter(w => docWords.has(w)).length;
+}
 
 export class SkillLibrary {
     constructor(agent,embedding_model) {
@@ -50,10 +72,17 @@ export class SkillLibrary {
             }));
         }
         else if (!this.embedding_model) {
-            skill_doc_similarities = Object.keys(this.skill_docs_embeddings)
-                .map(doc_key => ({
-                    doc_key,
-                    similarity_score: wordOverlapScore(message, this.skill_docs_embeddings[doc_key])
+            // No embedding model: rank docs by lexical coverage of the task's
+            // meaningful words. Previously this iterated skill_docs_embeddings
+            // (empty without an embedding model) and passed a would-be vector to
+            // a text function, so it ranked nothing — every task fell back to
+            // just the always-show docs, which is why the coder hallucinated
+            // APIs on non-gather tasks. Coverage-ranking this.skill_docs revives
+            // retrieval for all task families (craft/smelt/build/navigate/...).
+            skill_doc_similarities = this.skill_docs
+                .map(doc => ({
+                    doc_key: doc,
+                    similarity_score: coverageScore(message, doc)
                 }))
                 .sort((a, b) => b.similarity_score - a.similarity_score);
         }
