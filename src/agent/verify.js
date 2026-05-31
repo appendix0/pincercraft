@@ -26,7 +26,11 @@ function inventoryCount(bot, itemName) {
 
 // Match "N item_name in inventory" → returns { count, item } or null.
 function matchCountInInventory(text) {
-    const m = text.match(/^(\d+)\s+([a-z][a-z0-9_]*)\s+in\s+inv(?:entory)?$/);
+    // Tolerate the quantity phrasings the planner actually generates: "20+",
+    // "at least 20", "20 or more" — not just a bare "20". A "20+ iron_ore in
+    // inventory" that didn't parse here is what fell through to honor-system and
+    // false-passed task #224 (have 0, marked done).
+    const m = text.match(/^(?:at\s+least\s+)?(\d+)\+?(?:\s+or\s+more)?\s+([a-z][a-z0-9_]*)\s+in\s+inv(?:entory)?$/);
     if (!m) return null;
     return { count: parseInt(m[1], 10), item: m[2] };
 }
