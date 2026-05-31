@@ -21,6 +21,7 @@ import { log, validateNameFormat, handleDisconnection } from './connection_handl
 import { RunQueue } from './run_queue.js';
 import { humanizeCommand } from './command_humanizer.js';
 import { TaskQueue } from './task_queue.js';
+import { logPlayAttempt } from './play_logger.js';
 import { snapshotStartCounts } from './verify.js';
 import { MemoryStore } from './memory_store.js';
 import { RulebookLectern } from './rulebook_lectern.js';
@@ -594,6 +595,10 @@ export class Agent {
                 console.warn('finalizeSubagent (cancel) failed:', e?.message || e);
             }
         }
+        // Capture player-driven attempts to the eval DB (best-effort; skipped
+        // during eval sessions, which loop.sh logs). logPlayAttempt never throws.
+        if (kind === 'finish') logPlayAttempt(this, task);
+
         // Side-chat follow-up: when a task finishes, address any player
         // messages we deferred earlier. Synthetic system input drives the
         // worker to run one planner turn focused on the deferred question.

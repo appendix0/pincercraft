@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 """eval_db.py — system of record for the Daedelus404 self-improvement loop.
 
-SQLite store (pincercraft_evals.db) with two tables:
-  task_attempts   — one row per agent loop run (the eval)
+SQLite store (pincercraft_evals.db) with three tables:
+  task_attempts   — one row per agent loop run, tagged by task_source
+                    (player vs llm task-giver) and rag_version (regime fingerprint)
   gate_decisions  — one row per human approve/reject at the authorization gate
+  eval_regimes    — one row per code-regime boundary (e.g. the RAG-revival fix),
+                    so post-fix data can be analyzed apart from pre-fix data
 
-Schema is created on demand, so `connect()` is safe to call anywhere.
+Schema is created/migrated on demand, so `connect()` is safe to call anywhere.
 
 CLI:
   eval_db.py init
   eval_db.py log-attempt --json '<row>'      # or pipe JSON on stdin
   eval_db.py log-gate --commit C --summary S --decision approve|reject --reason R
+  eval_db.py log-regime --name N --rag-version V --commit C --note NOTE
 """
 import argparse, json, os, sqlite3, sys, uuid
 from datetime import datetime, timezone
@@ -19,6 +23,13 @@ DB_PATH = os.environ.get(
     "PINCER_EVAL_DB",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "pincercraft_evals.db"),
 )
+
+# Current code regime for the doc-retrieval pipeline. Bumped when a foundation
+# fix changes bot behavior enough that older data must be quarantined.
+#   0 = dead-RAG era (retriever ranked nothing -> coder hallucinated)
+#   1 = lexical coverage retrieval revived (commit 96eca4c, 2026-05-31)
+# New attempts are stamped with this unless the row overrides it.
+CURRENT_RAG_VERSION = 1
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS task_attempts (
@@ -30,14 +41,16 @@ CREATE TABLE IF NOT EXISTS task_attempts (
     commit_hash         TEXT,
     timestamp           TEXT,
     success             INTEGER,          -- 0/1
-    progress_score      REAL,             -- 0.0–1.0
+    progress_score      REAL,             -- 0.0-1.0
     input_tokens        INTEGER,
     output_tokens       INTEGER,
     steps               INTEGER,
     retry_count         INTEGER,
     wall_clock_seconds  REAL,
     n_distinct_actions  INTEGER,
-    failure_mode        TEXT              -- nullable
+    failure_mode        TEXT,             -- nullable
+    rag_version         INTEGER DEFAULT 0,     -- regime fingerprint (see CURRENT_RAG_VERSION)
+    task_source         TEXT DEFAULT 'llm'     -- 'player' (real play) | 'llm' (eval task-giver)
 );
 CREATE TABLE IF NOT EXISTS gate_decisions (
     decision_id             TEXT PRIMARY KEY,
@@ -48,15 +61,39 @@ CREATE TABLE IF NOT EXISTS gate_decisions (
     decision                TEXT,         -- approve | reject
     human_reason            TEXT
 );
+CREATE TABLE IF NOT EXISTS eval_regimes (
+    regime_id    TEXT PRIMARY KEY,
+    name         TEXT UNIQUE,
+    rag_version  INTEGER,
+    commit_hash  TEXT,
+    created_at   TEXT,
+    note         TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_attempts_commit ON task_attempts(commit_hash);
 CREATE INDEX IF NOT EXISTS idx_attempts_tier   ON task_attempts(difficulty_tier);
 """
+
+# Columns added after the original schema shipped. CREATE TABLE IF NOT EXISTS
+# does not alter an existing table, so add them idempotently on connect.
+_MIGRATIONS = (
+    "ALTER TABLE task_attempts ADD COLUMN rag_version INTEGER DEFAULT 0",
+    "ALTER TABLE task_attempts ADD COLUMN task_source TEXT DEFAULT 'llm'",
+)
 
 
 def connect(path=DB_PATH):
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    for ddl in _MIGRATIONS:
+        try:
+            conn.execute(ddl)
+        except sqlite3.OperationalError:
+            pass  # duplicate column -> already migrated
+    # Indexes on the migrated columns must come AFTER the ALTERs — the columns
+    # don't exist when executescript runs on a pre-migration DB.
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_attempts_source ON task_attempts(task_source)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_attempts_rag    ON task_attempts(rag_version)")
     conn.commit()
     return conn
 
@@ -86,6 +123,9 @@ def log_attempt(row: dict, path=DB_PATH):
         "n_distinct_actions": int(row.get("n_distinct_actions", 0)),
         # failure_mode is NULL on success unless explicitly given
         "failure_mode": row.get("failure_mode") or (None if success else "unknown"),
+        # quarantine tags
+        "rag_version": int(row.get("rag_version", CURRENT_RAG_VERSION)),
+        "task_source": row.get("task_source", "llm"),
     }
     # Named column list (not positional VALUES) so the insert survives schema
     # drift — extra columns in the live table default to NULL instead of
@@ -95,10 +135,10 @@ def log_attempt(row: dict, path=DB_PATH):
             "INSERT INTO task_attempts "
             "(attempt_id,task_id,task_name,difficulty_tier,task_set,commit_hash,timestamp,"
             "success,progress_score,input_tokens,output_tokens,steps,retry_count,"
-            "wall_clock_seconds,n_distinct_actions,failure_mode) VALUES "
+            "wall_clock_seconds,n_distinct_actions,failure_mode,rag_version,task_source) VALUES "
             "(:attempt_id,:task_id,:task_name,:difficulty_tier,:task_set,:commit_hash,:timestamp,"
             ":success,:progress_score,:input_tokens,:output_tokens,:steps,:retry_count,"
-            ":wall_clock_seconds,:n_distinct_actions,:failure_mode)",
+            ":wall_clock_seconds,:n_distinct_actions,:failure_mode,:rag_version,:task_source)",
             rec,
         )
     return rec["attempt_id"]
@@ -127,6 +167,28 @@ def log_gate(commit_hash, summary, decision, reason, path=DB_PATH):
     return rec["decision_id"]
 
 
+def log_regime(name, rag_version, commit_hash, note, path=DB_PATH):
+    """Record a code-regime boundary. Idempotent on name (re-runs update it)."""
+    rec = {
+        "regime_id": str(uuid.uuid4()),
+        "name": name,
+        "rag_version": int(rag_version),
+        "commit_hash": commit_hash or "",
+        "created_at": _now(),
+        "note": note or "",
+    }
+    with connect(path) as conn:
+        conn.execute(
+            "INSERT INTO eval_regimes (regime_id,name,rag_version,commit_hash,created_at,note) "
+            "VALUES (:regime_id,:name,:rag_version,:commit_hash,:created_at,:note) "
+            "ON CONFLICT(name) DO UPDATE SET "
+            "rag_version=excluded.rag_version, commit_hash=excluded.commit_hash, "
+            "created_at=excluded.created_at, note=excluded.note",
+            rec,
+        )
+    return rec["regime_id"]
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -141,6 +203,12 @@ def main():
     g.add_argument("--decision", required=True)
     g.add_argument("--reason", default="")
 
+    r = sub.add_parser("log-regime")
+    r.add_argument("--name", required=True)
+    r.add_argument("--rag-version", type=int, required=True)
+    r.add_argument("--commit", default="")
+    r.add_argument("--note", default="")
+
     args = ap.parse_args()
     if args.cmd == "init":
         connect().close()
@@ -152,6 +220,9 @@ def main():
     elif args.cmd == "log-gate":
         did = log_gate(args.commit, args.summary, args.decision, args.reason)
         print(did)
+    elif args.cmd == "log-regime":
+        rid = log_regime(args.name, args.rag_version, args.commit, args.note)
+        print(rid)
 
 
 if __name__ == "__main__":

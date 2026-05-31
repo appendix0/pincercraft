@@ -122,7 +122,7 @@ ROW=$(node -e '
         prog=process.argv[8], fmode=process.argv[9], taskset=process.argv[10];
   const success = outcome==="done";
   const row={ task_id:id, task_name:name, difficulty_tier:tier, task_set:taskset,
-    commit_hash:commit, success,
+    task_source:"llm", commit_hash:commit, success,
     input_tokens:(t.input||0)+(t.cache_read||0)+(t.cache_creation||0),
     output_tokens:(t.output||0), steps:m.turns||0, wall_clock_seconds:Number(wall||0) };
   if (prog) row.progress_score=Number(prog);
