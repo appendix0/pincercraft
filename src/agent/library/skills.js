@@ -1284,16 +1284,23 @@ export async function goToGoal(bot, goal) {
         final_movements = nonDestructiveMovements;
         log(bot, `Found non-destructive path.`);
     }
-    else if (await bot.pathfinder.getPathTo(destructiveMovements, goal, pathfind_timeout).status === 'success') {
-        log(bot, `Found destructive path.`);
-    }
     else {
-        log(bot, `Path not found, but attempting to navigate anyway using destructive movements.`);
+        // No walkable path within the budget — fall back to digging as a last
+        // resort. (Removed a second, purely-cosmetic getPathTo pre-check here:
+        // both its "found destructive" and "not found" branches used
+        // destructiveMovements anyway, so the extra search only added latency.)
+        log(bot, `No walkable path found; navigating with digging as a last resort.`);
     }
 
     const doorCheckInterval = startDoorInterval(bot);
 
     bot.pathfinder.setMovements(final_movements);
+    // Give A* a larger compute budget than the 5000ms lib default — a meaningful
+    // share of failures were "Took too long to decide path to goal" on long /
+    // complex routes. Computation is spread across ticks, so this means standing
+    // still longer while thinking, not a hard freeze. Starting value; tune
+    // against live "took too long" rates.
+    bot.pathfinder.thinkTimeout = 10000;
     try {
         await bot.pathfinder.goto(goal);
         clearInterval(doorCheckInterval);
