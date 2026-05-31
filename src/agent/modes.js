@@ -328,10 +328,21 @@ async function execute(mode, agent, func, timeout=-1) {
         // auto prompt to respond to the interruption
         let role = convoManager.inConversation() ? agent.last_sender : 'system';
         let logs = agent.bot.modes.flushBehaviorLog();
+        // Re-ground the planner at the moment it's most confused: an interruption
+        // is NOT task completion. Restate the active task + live inventory so a
+        // small model can't carry forward a stale or invented "I finished / I have
+        // it" belief (the false "got 20 diamonds/iron" failure).
+        let regrounding = '';
+        try {
+            const active = agent.task_queue?.tasks?.find(t => t.status === 'in_progress');
+            if (active) regrounding += ` You were working task #${active.id}: "${active.description}"${active.endFactor ? ` (done when: ${active.endFactor})` : ''}.`;
+            const counts = world.getInventoryCounts(agent.bot);
+            const invStr = Object.entries(counts).map(([n, c]) => `${n} x${c}`).join(', ') || 'empty';
+            regrounding += ` Your inventory RIGHT NOW: ${invStr}. Re-check the end_factor against this before any claim — never tell the player you have or finished something your inventory does not show. Then resume.`;
+        } catch (e) { /* best-effort re-grounding */ }
         agent.enqueue({
             source: role,
-            message: `(AUTO MESSAGE)Your previous action '${interrupted_action}' was interrupted by ${mode.name}.
-        Your behavior log: ${logs}\nRespond accordingly.`,
+            message: `(AUTO MESSAGE) Your action '${interrupted_action}' was INTERRUPTED by ${mode.name} — this is NOT task completion.${regrounding}\nBehavior log: ${logs}`,
             kind: 'mode_auto',
             mode_name: mode.name,
         });

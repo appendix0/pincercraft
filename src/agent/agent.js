@@ -1427,7 +1427,7 @@ export class Agent {
                 let dimention = this.bot.game.dimension;
                 this.enqueue({
                     source: 'system',
-                    message: `You died at position ${death_pos_text || "unknown"} in the ${dimention} dimension with the final message: '${message}'. Your place of death is saved as 'last_death_position' if you want to return. Previous actions were stopped and you have respawned.`,
+                    message: `You died at position ${death_pos_text || "unknown"} in the ${dimention} dimension with the final message: '${message}'. Your place of death is saved as 'last_death_position' if you want to return. Previous actions were stopped and you have respawned. IMPORTANT: dying DROPPED your entire inventory on the ground — anything you were carrying is GONE, and any progress toward your current task's end_factor is now VOID. Re-check your current inventory before doing anything; do NOT claim or report items you no longer have; tell the player honestly that you died and lost what you were carrying.`,
                     kind: 'game_event_critical',
                 });
             }
