@@ -1,7 +1,7 @@
 <h1 align="center">PincerCraft</h1>
 
 <p align="center">
-  <img src="0E0BEF60-2881-4069-84B0-18CFF31B40B9.png" alt="PincerCraft — an AI agent that plays Minecraft with the discipline of Claude Code" width="640">
+  <img src="banner.webp" alt="PincerCraft — an AI agent that plays Minecraft with the discipline of Claude Code" width="640">
 </p>
 
 <p align="center">A Mindcraft fork that makes the bot <em>orderly</em>: prioritized action queue + customizable in-game Code of Conduct.</p>
