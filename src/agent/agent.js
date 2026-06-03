@@ -108,6 +108,25 @@ export class Agent {
         this.memory_bank = new MemoryBank();
         this.inventory_manager = new InventoryManager(this);
         this.self_prompter = new SelfPrompter(this);
+        // Claude-Code-style startup: the QUEUE is ephemeral — stale tasks must not
+        // auto-resume across reboots — but durable memory (places + facts) is kept
+        // and compacted below. Wipe tasks.json before the queue loads it.
+        if (settings.wipe_queue_on_start) {
+            try {
+                const fs = await import('fs');
+                const queuePath = `./bots/${this.name}/tasks.json`;
+                if (fs.existsSync(queuePath)) {
+                    // Clear stale tasks but keep nextId monotonic, so task IDs don't
+                    // collide across sessions in queue.log (the eval system of record).
+                    let nextId = 1;
+                    try { nextId = JSON.parse(fs.readFileSync(queuePath, 'utf8')).nextId || 1; } catch { /* fresh start */ }
+                    fs.writeFileSync(queuePath, JSON.stringify({ nextId, tasks: [] }, null, 2));
+                    console.log(`[start] cleared task queue (wipe_queue_on_start=true), nextId kept at ${nextId} — memory kept`);
+                }
+            } catch (e) {
+                console.warn('[start] queue wipe failed:', e?.message || e);
+            }
+        }
         this.task_queue = new TaskQueue(
             this.name,
             (kind, task) => this._onQueueChange(kind, task),
@@ -130,21 +149,9 @@ export class Agent {
             console.warn('[v2] use_orchestrator_v2=true but use_tool_use_protocol=false; orchestrator NOT initialized. Set both flags.');
         }
 
-        // Optionally wipe the summary memory before loading so stale task
-        // context from a previous session doesn't leak into the new prompt.
-        // Doesn't touch tasks.json (the queue) or histories/ (full chat logs).
-        if (settings.wipe_memory_on_start) {
-            try {
-                const fs = await import('fs');
-                const memPath = `./bots/${this.name}/memory.json`;
-                if (fs.existsSync(memPath)) {
-                    fs.unlinkSync(memPath);
-                    console.log(`[start] wiped ${memPath} (wipe_memory_on_start=true)`);
-                }
-            } catch (e) {
-                console.warn('[start] memory wipe failed:', e?.message || e);
-            }
-        }
+        // Memory (places + conversation turns) PERSISTS across reboots and is
+        // compacted after load below — Claude-Code style. Only the queue is wiped
+        // (above); histories/ (full chat logs) are untouched.
 
         // load mem first before doing task
         let save_data = null;
@@ -154,6 +161,14 @@ export class Agent {
         let taskStart = null;
         if (save_data) {
             taskStart = save_data.taskStart;
+            // Claude-Code style: carry memory across reboots, but compress it at
+            // boot so the next prompt doesn't reload a full prior session verbatim.
+            // Only fires when carried turns exceed the threshold; places + facts
+            // are untouched.
+            await this.history.compactIfNeeded(
+                settings.compaction_threshold_tokens ?? 3000,
+                settings.compaction_keep_recent ?? 8
+            );
         } else {
             taskStart = Date.now();
         }

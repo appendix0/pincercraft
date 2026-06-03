@@ -4,9 +4,9 @@
 //     into every prompt via $MEMORY so the model always sees what it knows
 //   - <topic>.md: detail files, read on demand via !recall(topic)
 //
-// Lives at bots/<name>/memory/. Not touched by wipe_memory_on_start (which
-// only deletes the file bots/<name>/memory.json — different path). Persists
-// across reboots; this is the whole point.
+// Lives at bots/<name>/memory/. A separate durable layer from bots/<name>/memory.json
+// (places + conversation turns). Both persist across reboots now — only the task
+// queue (tasks.json) is wiped on start. Persists across reboots; this is the whole point.
 
 import fs from 'fs';
 import path from 'path';
