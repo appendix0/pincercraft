@@ -259,6 +259,15 @@ export class Prompter {
                 const active = this.agent.task_queue?.tasks?.find(t => t.status === 'in_progress');
                 code_task_content = active?.description || '';
             }
+            // Free-chat commands ("get items from your chest") have no queued task
+            // and no !newAction wrapper, so both captures above stay empty and doc
+            // selection falls back to the generic mining set. Use the latest player
+            // message as the intent so conversational commands surface the right docs.
+            if (!code_task_content) {
+                code_task_content = messages.slice().reverse().find(msg =>
+                    msg.role !== 'system' && typeof msg.content === 'string' && msg.content.trim()
+                )?.content || '';
+            }
 
             prompt = prompt.replaceAll(
                 '$CODE_DOCS',
