@@ -35,6 +35,7 @@ pincercraft_evals.db
 eval/.pending_gate.json
 eval/diagnoses/
 eval/metrics.jsonl
+eval/play_attempts.jsonl
 __pycache__/
 .venv/
 eval/cycle*.log

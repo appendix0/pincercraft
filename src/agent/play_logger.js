@@ -1,16 +1,20 @@
-// Best-effort capture of PLAYER-driven task attempts into pincercraft_evals.db.
+// Best-effort capture of PLAYER-driven task attempts.
 //
 // Fires on task finish during normal play. Skipped during eval sessions —
-// eval/loop.sh logs those (as task_source 'llm'), and double-logging would
-// pollute the eval signal. Fully fire-and-forget: every failure is swallowed
-// so logging can never disturb or block the live bot.
-import { spawn } from 'child_process';
+// eval/loop.sh logs those (as task_source 'llm'). Writes a JSONL row
+// SYNCHRONOUSLY in-process (fs.appendFileSync) — no child process, so none of
+// the PATH / systemd-cgroup-kill / spawn fragility that made the earlier
+// spawn('python3', ...) approach silently capture 0 rows. Ingest into
+// pincercraft_evals.db on demand with:
+//   python3 eval/eval_db.py ingest-jsonl
+// Fully wrapped: any failure is swallowed so logging never disturbs the bot.
 import fs from 'fs';
 import path from 'path';
 import { verifyEndFactor } from './verify.js';
 
 // Owned by eval/session.sh; present iff an automated eval session is running.
 const CYCLE_FLAG = path.resolve('./.runtime/cycle_active');
+const PLAY_LOG = path.resolve('./eval/play_attempts.jsonl');
 
 export function logPlayAttempt(agent, task) {
     try {
@@ -40,15 +44,12 @@ export function logPlayAttempt(agent, task) {
             task_source: 'player',
             success,
             wall_clock_seconds: wall,
+            timestamp: new Date().toISOString(),
         };
         if (!success && failure_mode) row.failure_mode = failure_mode;
 
-        // Detached, output discarded, unref'd: the bot never waits on this and
-        // a missing python3 / DB just no-ops via the 'error' handler.
-        const child = spawn('python3', ['eval/eval_db.py', 'log-attempt', '--json', JSON.stringify(row)], {
-            cwd: process.cwd(), detached: true, stdio: 'ignore',
-        });
-        child.on('error', () => {});
-        child.unref();
+        // Synchronous, in-process append. Completes before this returns, so it
+        // survives an immediate bot restart and needs no external process.
+        fs.appendFileSync(PLAY_LOG, JSON.stringify(row) + '\n');
     } catch { /* never let logging disturb the bot */ }
 }

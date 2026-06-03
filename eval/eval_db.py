@@ -15,6 +15,7 @@ CLI:
   eval_db.py log-attempt --json '<row>'      # or pipe JSON on stdin
   eval_db.py log-gate --commit C --summary S --decision approve|reject --reason R
   eval_db.py log-regime --name N --rag-version V --commit C --note NOTE
+  eval_db.py ingest-jsonl [--path eval/play_attempts.jsonl]  # load + truncate play log
 """
 import argparse, json, os, sqlite3, sys, uuid
 from datetime import datetime, timezone
@@ -23,6 +24,9 @@ DB_PATH = os.environ.get(
     "PINCER_EVAL_DB",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "pincercraft_evals.db"),
 )
+
+# Where play_logger.js appends player-driven attempt rows (one JSON object per line).
+PLAY_LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "play_attempts.jsonl")
 
 # Current code regime for the doc-retrieval pipeline. Bumped when a foundation
 # fix changes bot behavior enough that older data must be quarantined.
@@ -189,6 +193,24 @@ def log_regime(name, rag_version, commit_hash, note, path=DB_PATH):
     return rec["regime_id"]
 
 
+def ingest_jsonl(jsonl_path, path=DB_PATH):
+    """Load newline-delimited attempt rows (written by play_logger.js) into the
+    DB, then truncate the file so a re-run doesn't duplicate. Returns count."""
+    if not os.path.exists(jsonl_path):
+        return 0
+    with open(jsonl_path) as f:
+        lines = [ln for ln in f if ln.strip()]
+    n = 0
+    for ln in lines:
+        try:
+            log_attempt(json.loads(ln), path)
+            n += 1
+        except Exception as e:
+            print(f"ingest: skipped bad line ({e})", file=sys.stderr)
+    open(jsonl_path, "w").close()  # consumed
+    return n
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -209,6 +231,9 @@ def main():
     r.add_argument("--commit", default="")
     r.add_argument("--note", default="")
 
+    i = sub.add_parser("ingest-jsonl")
+    i.add_argument("--path", default=PLAY_LOG_PATH, help="JSONL file to ingest and truncate")
+
     args = ap.parse_args()
     if args.cmd == "init":
         connect().close()
@@ -223,6 +248,9 @@ def main():
     elif args.cmd == "log-regime":
         rid = log_regime(args.name, args.rag_version, args.commit, args.note)
         print(rid)
+    elif args.cmd == "ingest-jsonl":
+        n = ingest_jsonl(args.path)
+        print(f"ingested {n} row(s) from {args.path}")
 
 
 if __name__ == "__main__":
