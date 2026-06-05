@@ -68,6 +68,12 @@ function matchCountIncrease(text) {
     if (m && /\b(?:min|collect|gather|obtain|produc|dug|dig)/.test(text)) {
         return { item: m[2], delta: parseInt(m[1], 10) };
     }
+    // "[net] +N <item> ..." — the task-giver's "net +6 cobblestone in inventory"
+    // gain phrasing. The leading "+" denotes a delta, so it's checked against the
+    // start-of-task snapshot, not as an absolute count. It fell through every
+    // matcher to honor-system and false-passed task #225 (mined nothing, done).
+    m = text.match(/^(?:net\s+)?\+\s*(\d+)\s+([a-z][a-z0-9_]*)\b/);
+    if (m) return { item: m[2], delta: parseInt(m[1], 10) };
     return null;
 }
 

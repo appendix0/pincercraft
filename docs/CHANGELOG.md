@@ -1,5 +1,33 @@
 # PincerCraft Changelog
 
+## 2026-06-05 — parse "net +N <item>" gain end_factors (task-225)
+
+**Change.** `matchCountIncrease` in `verify.js` now recognizes the
+task-giver's `"net +6 cobblestone in inventory"` gain phrasing (the
+leading `+` denotes a delta) in addition to the existing "increased
+by N" / "N new <item>" forms. Because both `snapshotStartCounts` (queue
+start hook) and `verifyEndFactor` (finishTask gate) route through this
+one matcher, the change wires up the start-of-task snapshot *and* the
+finish gate at once: finish is blocked until `count_now - count_start ≥
+N`. Single-line matcher addition; no behavior change for any other
+phrasing (existing matchers and fuzzy pass-through are untouched).
+
+**Hypothesis (task-225 diagnosis).** #225 ("mine ≥6 NEW cobblestone")
+mined nothing (`mine=0, collect=0, block_ops=0`) yet was marked `done`
+via the honor-system path because its end_factor `"net +6 cobblestone in
+inventory"` fell through every matcher to `{ programmatic: false }`. A
+false success. Making the criterion measurable converts the false `done`
+into a real, delta-aware check that the bot can only satisfy by actually
+mining this run.
+
+**Metric.** Success/failure correctness — block a `done` until
+`work.mine`/`block_ops` are non-zero for "net +N" gather tasks (and
+reject a finish that relies on pre-existing stock, since the check is a
+delta vs. the start snapshot). Verify: `verifyEndFactor` for
+`"net +6 cobblestone in inventory"` returns `verified:false` when the
+run mined 0 (have 0, start 0) and `verified:true` only at start 0 / now
+6; held-6-mined-0 (start 6, now 6) is still blocked.
+
 ## 2026-05-27 — sender-independent stuck recovery (task-197)
 
 **Change.** The stuck watcher (`_startStuckWatcher` in `agent.js`) no
