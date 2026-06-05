@@ -46,7 +46,10 @@ export async function craftRecipe(bot, itemName, num=1) {
      **/
     let placedTable = false;
 
-    if (mc.getItemCraftingRecipes(itemName).length == 0) {
+    // getItemCraftingRecipes returns null for unknown/uncraftable item names
+    // (e.g. an LLM-misspelled item) — guard before reading .length.
+    const craftingRecipes = mc.getItemCraftingRecipes(itemName);
+    if (!craftingRecipes || craftingRecipes.length == 0) {
         log(bot, `${itemName} is either not an item, or it does not have a crafting recipe!`);
         return false;
     }
