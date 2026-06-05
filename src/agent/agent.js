@@ -1313,12 +1313,23 @@ export class Agent {
     // promptConvo's template but strips $COMMAND_DOCS — under tool_use
     // protocol, the command surface comes from the tools[] param, not
     // the prompt body.
+    //
+    // Returns { static, dynamic } for prefix caching: the static half
+    // (rules, world knowledge, queue/give rules, persona) is byte-identical
+    // turn to turn so Anthropic cache_reads it; the dynamic half (live
+    // task queue, stats, inventory — different every turn) is emitted as a
+    // separate uncached block so it no longer invalidates the cached prefix.
     async _buildSystemPromptForTools() {
         let prompt = this.prompter.profile.conversing || '';
-        // Match $COMMAND_DOCS with any surrounding whitespace/newlines so
-        // we don't leave a gap in the formatted template.
         prompt = prompt.replace(/\n*\$COMMAND_DOCS\n*/g, '\n');
-        return await this.prompter.replaceStrings(prompt, [], this.prompter.convo_examples);
+        // Pull the per-turn placeholders out of the cached static body. The
+        // surrounding rule text stays (it's static); only the live values move.
+        prompt = prompt.replaceAll('$TASKQUEUE', '').replaceAll('$STATS', '').replaceAll('$INVENTORY', '');
+        const staticPrompt = await this.prompter.replaceStrings(prompt, [], this.prompter.convo_examples);
+        const dynamicPrompt = await this.prompter.replaceStrings(
+            '=== LIVE STATE (refreshed every turn) ===\n$TASKQUEUE\n$STATS\n$INVENTORY',
+            [], this.prompter.convo_examples);
+        return { static: staticPrompt, dynamic: dynamicPrompt };
     }
 
     // Bridge the orchestrator's promptWithTools callback to the model
@@ -1331,7 +1342,13 @@ export class Agent {
         const providerHistory = providerKey === 'anthropic'
             ? neutralToAnthropic(neutralHistory)
             : neutralToOpenAI(neutralHistory);
-        const resp = await activeModel.sendRequestWithTools(providerHistory, systemMessage, toolDescriptors);
+        // Claude consumes the { static, dynamic } split for prefix caching;
+        // any other provider (dead path under claude-only) just gets the
+        // concatenation as a single string.
+        const sys = (providerKey === 'anthropic' || typeof systemMessage !== 'object')
+            ? systemMessage
+            : `${systemMessage.static}\n${systemMessage.dynamic}`;
+        const resp = await activeModel.sendRequestWithTools(providerHistory, sys, toolDescriptors);
         try { this.prompter._recordUsage('convo_tools', activeModel); } catch {}
         return resp;
     }

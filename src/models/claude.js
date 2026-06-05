@@ -92,17 +92,28 @@ export class Claude {
                 ? this.params.thinking.budget_tokens + 1000
                 : 4096;
         }
-        // Prompt caching. The system prompt (~11K tokens of conversing
-        // template + role + examples) and the tools[] surface (~3K) are
-        // both stable across turns — mark them ephemeral so Anthropic
-        // hashes and reuses the prefix instead of re-billing each turn.
-        // 5-minute TTL. Two breakpoints (system + last tool) keep us well
-        // under the 4-breakpoint limit.
+        // Prompt caching. The static system prefix (~10K tokens: conversing
+        // template + role + rules + world knowledge) and the tools[] surface
+        // (~3K) are stable across turns — mark them ephemeral so Anthropic
+        // reuses the prefix (cache_read) instead of re-billing it (cache_creation)
+        // each turn. 5-minute TTL; breakpoints stay under the 4-breakpoint limit.
+        //
+        // systemMessage is either a plain string (single cached block) or a
+        // { static, dynamic } pair: the dynamic half (live inventory/stats/queue,
+        // which changes every turn) goes in a SEPARATE uncached block AFTER the
+        // cache breakpoint, so per-turn state no longer invalidates the cached
+        // static prefix.
         const tools = toAnthropicTools(toolDescriptors || []);
         const cachedTools = tools.length > 0
             ? [...tools.slice(0, -1), { ...tools[tools.length - 1], cache_control: { type: 'ephemeral' } }]
             : tools;
-        const cachedSystem = [{ type: 'text', text: systemMessage, cache_control: { type: 'ephemeral' } }];
+        let cachedSystem;
+        if (systemMessage && typeof systemMessage === 'object') {
+            cachedSystem = [{ type: 'text', text: systemMessage.static, cache_control: { type: 'ephemeral' } }];
+            if (systemMessage.dynamic) cachedSystem.push({ type: 'text', text: systemMessage.dynamic });
+        } else {
+            cachedSystem = [{ type: 'text', text: systemMessage, cache_control: { type: 'ephemeral' } }];
+        }
         const call = () => this.anthropic.messages.create({
             model: this.model_name || "claude-sonnet-4-6",
             system: cachedSystem,
