@@ -75,6 +75,13 @@ export function selectAPI(profile) {
     return profile;
 }
 
+// Daedelus404 is Claude-only. We do not use the multi-provider structure
+// anymore (the old daedelus404.nvidia.json regime routed to nvidia/llama/groq).
+// Every chat/code/vision/embedding client is built through createModel(), so
+// guarding here makes it impossible for a stray profile or sub-model to silently
+// route to a non-Anthropic provider again — it fails loud at construction.
+const ALLOWED_APIS = new Set(['anthropic']);
+
 export function createModel(profile) {
     if (!!apiMap[profile.model]) {
         // if the model value is an api (instead of a specific model name)
@@ -83,6 +90,9 @@ export function createModel(profile) {
     }
     if (!apiMap[profile.api]) {
         throw new Error('Unknown api:', profile.api);
+    }
+    if (!ALLOWED_APIS.has(profile.api)) {
+        throw new Error(`[claude-only] refusing to construct a non-Anthropic model client: api='${profile.api}' model='${profile.model}'. Daedelus404 runs full Claude — fix the profile, do not route to nvidia/llama/groq.`);
     }
     const model = new apiMap[profile.api](profile.model, profile.url, profile.params);
     return model;
