@@ -10,6 +10,15 @@ async function say(agent, message) {
     agent.openChat(message);
 }
 
+// Deterministic predicate for the tool_break_guard reflex: did the bot's LAST
+// pickaxe just break *while mining*? Pure + exported so the trigger logic is
+// unit-testable without a live bot. The msSinceDig window is what separates a
+// real break (item vanished right after a dig) from giving/depositing the
+// pickaxe (no recent dig) — so a handoff is never mistaken for a break.
+export function pickaxeJustBrokeMining({ hadPickaxe, pickaxeCount, msSinceDig, idle }) {
+    return hadPickaxe && pickaxeCount === 0 && msSinceDig < 1500 && !idle;
+}
+
 // a mode is a function that is called every tick to respond immediately to the world
 // it has the following fields:
 // on: whether 'update' is called every tick
@@ -85,6 +94,41 @@ const modes_list = [
             else if (agent.isIdle()) {
                 bot.clearControlStates(); // clear jump if not in danger or doing anything else
             }
+        }
+    },
+    {
+        // Deterministic reflex: when the LAST pickaxe breaks WHILE mining, stop
+        // and tell the player — never keep flailing bare-handed (ore drops
+        // nothing without a pickaxe). Code owns this fact; the LLM doesn't get
+        // to guess it. The interrupt makes execute() re-ground the planner with
+        // live inventory, so it re-plans (craft a pickaxe) instead of mining
+        // air. Only fires right after a dig, so giving/depositing the pickaxe
+        // is never mistaken for a break. Keeping a spare pickaxe → no fire
+        // (count only hits 0 when the last one is gone).
+        name: 'tool_break_guard',
+        description: 'Stop and alert when the pickaxe breaks while mining. Interrupts all actions.',
+        interrupts: ['all'],
+        on: true,
+        active: false,
+        had_pickaxe: false,
+        last_dig_time: 0,
+        update: function (agent) {
+            const bot = agent.bot;
+            if (bot.targetDigBlock) this.last_dig_time = Date.now();
+            const items = bot.inventory?.items?.() || [];
+            const pickaxeCount = items.filter(i => i.name && i.name.endsWith('_pickaxe')).length;
+            if (pickaxeJustBrokeMining({
+                hadPickaxe: this.had_pickaxe,
+                pickaxeCount,
+                msSinceDig: Date.now() - this.last_dig_time,
+                idle: agent.isIdle(),
+            })) {
+                say(agent, 'My pickaxe broke — stopping. I need a new pickaxe before mining more.');
+                execute(this, agent, async () => {
+                    agent.actions.cancelResume(); // don't auto-resume bare-handed mining
+                });
+            }
+            this.had_pickaxe = pickaxeCount > 0;
         }
     },
     {

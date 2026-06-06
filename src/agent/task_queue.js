@@ -23,6 +23,26 @@ const VAGUE_END_FACTOR_PATTERNS = [
     /\bsome\s+(?:more|of)\b/i,
 ];
 
+// On (re)start the queue is pruned Claude-Code style: stale PENDING/DONE tasks
+// must not auto-resume. But the single IN_PROGRESS task is work that a crash or
+// disconnect interrupted — dropping it is pure data loss, and because restarts
+// here are mostly involuntary and frequent it means a multi-step task can never
+// finish (2026-06-06 diamond run restarted ~14×, re-deriving from scratch each
+// time). So keep in_progress, drop the rest. nextId stays monotonic so IDs never
+// collide across sessions in queue.log (the eval system of record).
+export function pruneQueueOnStart(rawData, { keepInProgress = true } = {}) {
+    let nextId = 1;
+    let tasks = [];
+    try {
+        const data = typeof rawData === 'string' ? JSON.parse(rawData) : (rawData || {});
+        nextId = data.nextId || 1;
+        if (keepInProgress && Array.isArray(data.tasks)) {
+            tasks = data.tasks.filter(t => t && String(t.status) === 'in_progress');
+        }
+    } catch { /* unreadable queue → fresh start */ }
+    return { nextId, tasks };
+}
+
 export class TaskQueue {
     constructor(agentName, onChange = null, isPaused = null, options = {}) {
         this.agentName = agentName;

@@ -81,6 +81,25 @@ function matchCountIncrease(text) {
     return null;
 }
 
+// Best-effort PRIMARY goal item + count from a task's end_factor, reusing the
+// same matchers verifyEndFactor uses — so the live-state CAPABILITIES line and
+// the finish gate read the criterion identically (one parser, no drift).
+// Returns { item, count } or null when the criterion isn't an item-count shape
+// (e.g. "bot within 3 of p1", "greeting said in chat") — caller omits CAPABILITIES.
+export function parseEndFactorTarget(task) {
+    if (!task || !task.endFactor) return null;
+    const text = normalize(task.endFactor);
+    const inc = matchCountIncrease(text);
+    if (inc) return { item: inc.item, count: inc.delta };
+    const cnt = matchCountInInventory(text);
+    if (cnt) return { item: cnt.item, count: cnt.count };
+    const one = matchSingleInInventory(text);
+    if (one) return { item: one.item, count: 1 };
+    const multi = matchMultiInInventory(text);
+    if (multi) return { item: multi[0], count: 1 }; // primary = first listed
+    return null;
+}
+
 // Snapshot the baseline count for a delta-style end_factor at task start, so
 // verifyEndFactor can later confirm the gain is from THIS run. No-op for
 // non-delta criteria. Called from the queue 'start' hook (agent._onQueueChange).

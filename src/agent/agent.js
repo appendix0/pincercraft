@@ -20,9 +20,10 @@ import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
 import { RunQueue } from './run_queue.js';
 import { humanizeCommand } from './command_humanizer.js';
-import { TaskQueue } from './task_queue.js';
+import { TaskQueue, pruneQueueOnStart } from './task_queue.js';
 import { logPlayAttempt } from './play_logger.js';
 import { snapshotStartCounts } from './verify.js';
+import { buildLiveStateBlock } from './live_state.js';
 import { MemoryStore } from './memory_store.js';
 import { RulebookLectern } from './rulebook_lectern.js';
 // Phase A5: classifier + gating logic lives in one module. Previously scattered
@@ -116,15 +117,20 @@ export class Agent {
                 const fs = await import('fs');
                 const queuePath = `./bots/${this.name}/tasks.json`;
                 if (fs.existsSync(queuePath)) {
-                    // Clear stale tasks but keep nextId monotonic, so task IDs don't
-                    // collide across sessions in queue.log (the eval system of record).
-                    let nextId = 1;
-                    try { nextId = JSON.parse(fs.readFileSync(queuePath, 'utf8')).nextId || 1; } catch { /* fresh start */ }
-                    fs.writeFileSync(queuePath, JSON.stringify({ nextId, tasks: [] }, null, 2));
-                    console.log(`[start] cleared task queue (wipe_queue_on_start=true), nextId kept at ${nextId} — memory kept`);
+                    // Prune stale pending/done but keep the interrupted in_progress
+                    // task so an involuntary restart resumes the work instead of
+                    // losing it (see pruneQueueOnStart). Toggle off with
+                    // keep_in_progress_task_on_restart:false to restore full wipe.
+                    const pruned = pruneQueueOnStart(
+                        fs.readFileSync(queuePath, 'utf8'),
+                        { keepInProgress: settings.keep_in_progress_task_on_restart !== false }
+                    );
+                    fs.writeFileSync(queuePath, JSON.stringify(pruned, null, 2));
+                    const kept = pruned.tasks.length;
+                    console.log(`[start] queue pruned (wipe_queue_on_start=true): ${kept ? `kept ${kept} in-progress task(s)` : 'cleared all pending'}, nextId kept at ${pruned.nextId} — memory kept`);
                 }
             } catch (e) {
-                console.warn('[start] queue wipe failed:', e?.message || e);
+                console.warn('[start] queue prune failed:', e?.message || e);
             }
         }
         this.task_queue = new TaskQueue(
@@ -178,7 +184,12 @@ export class Agent {
 
         console.log(this.name, 'logging into minecraft...');
         this.bot = initBot(this.name);
-        
+        // Back-reference so world/skills functions (which only receive `bot`) can
+        // reach agent-level state like memory_bank — e.g. world.getRememberedPlace.
+        // Without this the Coder kept hallucinating world.getRememberedPlace /
+        // bot.memory_bank to read last_death_position, failing lint in a loop.
+        this.bot.agent = this;
+
         // Connection Handler
         const onDisconnect = (event, reason) => {
             if (this._disconnectHandled) return;
@@ -1316,9 +1327,9 @@ export class Agent {
     //
     // Returns { static, dynamic } for prefix caching: the static half
     // (rules, world knowledge, queue/give rules, persona) is byte-identical
-    // turn to turn so Anthropic cache_reads it; the dynamic half (live
-    // task queue, stats, inventory — different every turn) is emitted as a
-    // separate uncached block so it no longer invalidates the cached prefix.
+    // turn to turn so Anthropic cache_reads it; the dynamic half (live task
+    // queue + the deterministic state block — different every turn) is emitted
+    // as a separate uncached block so it no longer invalidates the cached prefix.
     async _buildSystemPromptForTools() {
         let prompt = this.prompter.profile.conversing || '';
         prompt = prompt.replace(/\n*\$COMMAND_DOCS\n*/g, '\n');
@@ -1326,9 +1337,12 @@ export class Agent {
         // surrounding rule text stays (it's static); only the live values move.
         prompt = prompt.replaceAll('$TASKQUEUE', '').replaceAll('$STATS', '').replaceAll('$INVENTORY', '');
         const staticPrompt = await this.prompter.replaceStrings(prompt, [], this.prompter.convo_examples);
-        const dynamicPrompt = await this.prompter.replaceStrings(
-            '=== LIVE STATE (refreshed every turn) ===\n$TASKQUEUE\n$STATS\n$INVENTORY',
-            [], this.prompter.convo_examples);
+        // Dynamic (uncached) half = live task queue + deterministic state block.
+        // $STATS/$INVENTORY are retired here: buildLiveStateBlock owns perception,
+        // so counts / canMine / craft-gap are code-computed (not LLM-guessed) and
+        // rebuilt from a fresh inventory snapshot every turn — they can't go stale.
+        const queue = await this.prompter.replaceStrings('$TASKQUEUE', [], this.prompter.convo_examples);
+        const dynamicPrompt = `${queue}\n${buildLiveStateBlock(this)}`;
         return { static: staticPrompt, dynamic: dynamicPrompt };
     }
 

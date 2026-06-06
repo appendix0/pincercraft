@@ -28,6 +28,7 @@ const settings = {
 
     "load_memory": true, // bot remembers prior sessions (memory.json persists)
     "wipe_queue_on_start": true, // clear the task queue (tasks.json) on every restart so stale tasks don't auto-resume. Durable memory (places + facts) is KEPT and compacted at boot — Claude-Code style.
+    "keep_in_progress_task_on_restart": true, // C1 (2026-06-06): when wiping the queue, SPARE the single in_progress task so an involuntary crash/disconnect restart resumes the interrupted work instead of losing it. Pending/done are still dropped. Set false to restore the old full-wipe behavior.
     "init_message": null, // upstream Mindcraft default was "Respond with hello world and your name" — we now use the reboot-context greeting in agent.js instead (queue-aware: "Online and ready" / "Back online, was working on X / picking it up")
     "only_chat_with": ["LosPollos929"], // Floodgate strips its `.` prefix before mineflayer sees the username
 
@@ -61,7 +62,7 @@ const settings = {
     "allow_insecure_coding": true, // enabled 2026-05-11 — Claude can write/run JS via !newAction. Required for any complex non-trivial task (building structures, custom multi-step logic). Bot runs as user `ubuntu` so cannot touch root-owned YOON files; iptables not modifiable without sudo.
     "allow_vision": false, // allows vision model to interpret screenshots as inputs
     "blocked_actions" : [] , // Step 2 prune removed the 5 commands previously listed here (blueprint quartet + !restart) — they no longer exist to block. Re-add command names here to block them at runtime.
-    "code_timeout_mins": -1, // minutes code is allowed to run. -1 for no timeout
+    "code_timeout_mins": 5, // C3 (2026-06-06): minutes a single !newAction may run before the action manager forces a stop. Was -1 (no timeout) — a hung action then only ended via an external preempt → stop()-spin → cleanKill (full process exit → disconnect → restart). A finite cap converts most hangs into a clean "timed out" return to the orchestrator. 5min is generous for one action; long builds are chunked into subtasks by the orchestrator, so no single action should need more.
     "relevant_docs_count": 5, // number of relevant code function docs to select for prompting. -1 for all
 
     "max_messages": 15, // max number of messages to keep in context (legacy summarizer; slated for Phase F removal)

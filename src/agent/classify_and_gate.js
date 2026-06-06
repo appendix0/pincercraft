@@ -334,3 +334,38 @@ export function findMissingToolsInPrompt(promptText, inventoryItems) {
 }
 
 export const MISSING_TOOL_REJECT = (missing) => `[tool check failed] Your !newAction prompt named ${missing.join(', ')} but $INVENTORY has none of these. The Coder cannot equip a tool you don't have, and pathfinder will time out trying to break blocks. DO NOT retry with the same plan. Choose ONE: (1) !cancelTask, then !addTask to craft ${missing[0]} (with any prerequisite tier — stone needs wooden_pickaxe, iron_ore needs stone_pickaxe, diamond_ore needs iron_pickaxe), then re-add the original mine task at the end. (2) Rewrite !newAction to only use tools currently in $INVENTORY.`;
+
+// ----------------------------------------------------------------------------
+// 6. !newAction redundant-fetch gate — the INVERSE of the missing-tool gate.
+//    Catches the iron_pickaxe-from-chest loop: the planner writes !newAction to
+//    go FETCH/CRAFT a tool it already holds. Fetching a tool you have is always
+//    a no-op, so skip the Coder turn entirely. Conservative on purpose
+//    (false-negative-biased): fires only when the prompt (a) names a tool the
+//    bot HOLDS and (b) shows clear acquire/fetch/craft intent toward it — so
+//    "mine diamonds WITH iron_pickaxe" never trips. The orchestrator loop-guard
+//    is the backstop for anything this misses.
+// ----------------------------------------------------------------------------
+
+const ACQUIRE_VERBS = '(get|grab|fetch|take|withdraw|retrieve|obtain|pull|bring|collect|craft|make)';
+
+export function findRedundantFetchInPrompt(promptText, inventoryItems) {
+    if (!promptText || typeof promptText !== 'string') return [];
+    const lower = promptText.toLowerCase();
+    const have = new Set((inventoryItems || []).map(it => it?.name).filter(Boolean));
+    const redundant = new Set();
+    for (const tool of TOOL_KEYWORDS) {
+        if (!have.has(tool)) continue;                       // only tools we actually hold
+        // Match both "iron_pickaxe" and the spaced "iron pickaxe" the LLM often writes.
+        const toolPat = tool.replace(/_/g, '[ _]');
+        const toolRe = new RegExp(`\\b${toolPat}\\b`, 'i');
+        if (!toolRe.test(lower)) continue;                   // prompt must name it
+        const fromChest = /(from|out of)\s+\w*\s*chest/i.test(lower);
+        const craftIt = new RegExp(`(craft|make)\\b[^.]{0,40}\\b${toolPat}\\b`, 'i').test(lower);
+        const fetchIt = new RegExp(`${ACQUIRE_VERBS}\\b[^.]{0,40}\\b${toolPat}\\b`, 'i').test(lower);
+        const toolFrom = new RegExp(`\\b${toolPat}\\b[^.]{0,30}(from|out of)\\b`, 'i').test(lower);
+        if (fromChest || craftIt || fetchIt || toolFrom) redundant.add(tool);
+    }
+    return Array.from(redundant);
+}
+
+export const REDUNDANT_FETCH_SKIP = (held) => `[already have it] You already hold ${held.join(', ')} — fetching or crafting another is pointless. Do NOT write code to get it. Use the tool you have for the actual task (or !finishTask if the goal is already met).`;

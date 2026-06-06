@@ -429,3 +429,18 @@ export function getBiomeName(bot) {
     const biomeId = bot.world.getBiome(bot.entity.position);
     return mc.getAllBiomes()[biomeId].name;
 }
+
+export function getRememberedPlace(bot, name) {
+    /**
+     * Get the coordinates of a place the bot saved earlier by name (e.g. a base, a portal, or 'last_death_position'). Returns null if no place by that name is saved.
+     * @param {Bot} bot - The bot whose saved places to read.
+     * @param {string} name - The remembered place name, e.g. "last_death_position".
+     * @returns {{x:number,y:number,z:number}|null} The saved position, or null.
+     * @example
+     * let death = world.getRememberedPlace(bot, "last_death_position");
+     * if (death) { await skills.goToPosition(bot, death.x, death.y, death.z, 2); await skills.pickupNearbyItems(bot); }
+     **/
+    const place = bot?.agent?.memory_bank?.recallPlace(name);
+    if (!place) return null;
+    return { x: place[0], y: place[1], z: place[2] };
+}

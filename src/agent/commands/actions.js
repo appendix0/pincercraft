@@ -1,7 +1,7 @@
 import * as skills from '../library/skills.js';
 import settings from '../settings.js';
 import convoManager from '../conversation.js';
-import { findMissingToolsInPrompt, MISSING_TOOL_REJECT } from '../classify_and_gate.js';
+import { findMissingToolsInPrompt, MISSING_TOOL_REJECT, findRedundantFetchInPrompt, REDUNDANT_FETCH_SKIP } from '../classify_and_gate.js';
 import { verifyEndFactor } from '../verify.js';
 
 
@@ -52,6 +52,15 @@ export const actionsList = [
             if (missing.length > 0) {
                 console.log('[tool-gate] rejecting !newAction, missing:', missing.join(', '));
                 return MISSING_TOOL_REJECT(missing);
+            }
+            // Redundant-fetch gate (inverse): skip the Coder when the prompt
+            // wants to fetch/craft a tool already in inventory (the
+            // iron_pickaxe-from-chest loop). Skip + one-line chat, no code run.
+            const redundant = findRedundantFetchInPrompt(prompt, inv);
+            if (redundant.length > 0) {
+                console.log('[tool-gate] skipping !newAction, already have:', redundant.join(', '));
+                try { agent.openChat(`Already have my ${redundant[0]} — skipping that, moving on.`); } catch {}
+                return REDUNDANT_FETCH_SKIP(redundant);
             }
             let result = "";
             const actionFn = async () => {
@@ -312,9 +321,22 @@ export const actionsList = [
             'item_name': { type: 'ItemName', description: 'The name of the item to take.' },
             'num': { type: 'int', description: 'The number of items to take.', domain: [1, Number.MAX_SAFE_INTEGER] }
         },
-        perform: runAsAction(async (agent, item_name, num) => {
-            await skills.takeFromChest(agent.bot, item_name, num);
-        })
+        // Plain async (not runAsAction) so the idempotency guard can short-
+        // circuit before acquiring the action lock / pathing to the chest.
+        // Mirrors !givePlayer's explicit-label runAction call.
+        perform: async function (agent, item_name, num) {
+            if (agent.inventory_manager?.redundantAcquire(item_name)) {
+                const msg = `Already have ${item_name} — not opening the chest.`;
+                try { agent.openChat(msg); } catch {}
+                return msg;
+            }
+            const code_return = await agent.actions.runAction(
+                'action:takeFromChest',
+                async () => { await skills.takeFromChest(agent.bot, item_name, num); },
+                { timeout: -1, resume: false },
+            );
+            return code_return.interrupted && !code_return.timedout ? undefined : code_return.message;
+        }
     },
     {
         name: '!viewChest',
@@ -369,9 +391,22 @@ export const actionsList = [
             'recipe_name': { type: 'ItemName', description: 'The name of the output item to craft.' },
             'num': { type: 'int', description: 'The number of times to craft the recipe. This is NOT the number of output items, as it may craft many more items depending on the recipe.', domain: [1, Number.MAX_SAFE_INTEGER] }
         },
-        perform: runAsAction(async (agent, recipe_name, num) => {
-            await skills.craftRecipe(agent.bot, recipe_name, num);
-        })
+        // Plain async so the idempotency guard runs before the action lock:
+        // never craft a second of a tool already held (resources are exempt —
+        // redundantAcquire only fires for tool/equipment-class items).
+        perform: async function (agent, recipe_name, num) {
+            if (agent.inventory_manager?.redundantAcquire(recipe_name)) {
+                const msg = `Already have a ${recipe_name} — no need to craft another.`;
+                try { agent.openChat(msg); } catch {}
+                return msg;
+            }
+            const code_return = await agent.actions.runAction(
+                'action:craftRecipe',
+                async () => { await skills.craftRecipe(agent.bot, recipe_name, num); },
+                { timeout: -1, resume: false },
+            );
+            return code_return.interrupted && !code_return.timedout ? undefined : code_return.message;
+        }
     },
     {
         name: '!smeltItem',

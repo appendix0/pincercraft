@@ -48,6 +48,18 @@
 import { getRegistry } from './tool_registry.js';
 import { checkPlayerPermission } from './permissions.js';
 import { matchesToolFilter } from './subagent_v2.js';
+import * as world from './library/world.js';
+
+// Acquisition-class actions: their whole point is to change inventory. If one
+// runs with the SAME args and produces NO inventory change, repeating it is the
+// token-burn loop (the iron_pickaxe-from-chest churn). Movement/social actions
+// are intentionally excluded — re-issuing !goToPlayer / !followPlayer is normal.
+const ACQUISITION_ACTIONS = new Set([
+    '!newAction', '!findAndMine', '!gather', '!collectBlocks',
+    '!craftRecipe', '!smeltItem', '!takeFromChest', '!pickupItems',
+]);
+
+const LOOP_GUARD_MSG = (name) => `[loop guard] ${name} just ran with no change to your inventory — repeating it will not help. STOP repeating the same action. Check your live INVENTORY: if the goal item is already there, !finishTask now. If not, this approach is failing — do something DIFFERENT (relocate, craft the missing tier, or ask the player). Do not call ${name} again with the same plan.`;
 
 export class OrchestratorV2 {
     // promptWithTools is injected so the orchestrator stays test-friendly
@@ -61,6 +73,12 @@ export class OrchestratorV2 {
         this.lastSource = null;
         this.invoking = false;
         this.pendingEvents = [];
+        // Loop-breaker (D) state. _acqLedger maps an acquisition action's
+        // signature -> 'progress' | 'noprogress' (did its last run change the
+        // inventory); _acqStreak counts consecutive acquisition actions that
+        // changed nothing. Both reset when a new user_message arrives.
+        this._acqLedger = new Map();
+        this._acqStreak = 0;
         // Step 5 hook: when use_background_handles is on, the orchestrator
         // delegates isLongRunning tools to backgroundTasks instead of awaiting
         // them. Set externally by the agent during construction.
@@ -94,6 +112,10 @@ export class OrchestratorV2 {
         switch (event.type) {
             case 'user_message':
                 this.lastSource = event.source || this.lastSource;
+                // Fresh player intent → forget the loop-breaker history so a
+                // deliberately-repeated request isn't blocked as a loop.
+                this._acqLedger.clear();
+                this._acqStreak = 0;
                 this.history.push({
                     role: 'user',
                     content: event.source ? `${event.source}: ${event.content}` : event.content,
@@ -275,8 +297,30 @@ export class OrchestratorV2 {
             }
         }
 
+        // Loop-breaker (D): block an acquisition action that cannot make
+        // progress. Two triggers: (1) this EXACT action already ran and changed
+        // nothing last time, or (2) the 3rd acquisition action in a row with no
+        // inventory change. Both are the token-burn loop — refuse and nudge.
+        let acqSig = null, invBefore = null;
+        if (ACQUISITION_ACTIONS.has(cmd.name)) {
+            acqSig = `${cmd.name}|${JSON.stringify(toolCall.args || {})}`;
+            invBefore = this._inventoryHash();
+            const lastWasNoProgress = this._acqLedger.get(acqSig) === 'noprogress';
+            if (lastWasNoProgress || this._acqStreak >= 2) {
+                console.log(`[loop guard] blocked ${cmd.name} (streak=${this._acqStreak}, repeatNoProgress=${lastWasNoProgress})`);
+                this._acqStreak = 0; // clean slate so the nudge gets a fresh try
+                return { id: toolCall.id, name: toolCall.name, isError: true, content: LOOP_GUARD_MSG(cmd.name) };
+            }
+        }
+
         try {
             const result = await cmd.perform(this.agent, ...this._argsToPositional(cmd, toolCall.args));
+            if (acqSig) {
+                // Did THIS run change inventory? That's the only honest progress signal.
+                const madeProgress = this._inventoryHash() !== invBefore;
+                this._acqStreak = madeProgress ? 0 : this._acqStreak + 1;
+                this._acqLedger.set(acqSig, madeProgress ? 'progress' : 'noprogress');
+            }
             return {
                 id: toolCall.id, name: toolCall.name, isError: false,
                 content: String(result ?? `${cmd.name} ok`),
@@ -286,6 +330,18 @@ export class OrchestratorV2 {
                 id: toolCall.id, name: toolCall.name, isError: true,
                 content: `${cmd.name} threw: ${e?.message || e}`,
             };
+        }
+    }
+
+    // Stable, order-independent fingerprint of the bot's inventory. Used by
+    // the loop-breaker to detect "this action changed nothing." Best-effort —
+    // any failure yields '' so the guard simply doesn't trip.
+    _inventoryHash() {
+        try {
+            const inv = world.getInventoryCounts(this.agent.bot);
+            return Object.keys(inv).sort().map(k => `${k}:${inv[k]}`).join(',');
+        } catch {
+            return '';
         }
     }
 

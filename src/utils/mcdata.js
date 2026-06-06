@@ -62,6 +62,18 @@ export const WOOL_COLORS = [
 ]
 
 
+// Initialize the static minecraft-data / Item tables for a version WITHOUT a
+// live bot, so offline tooling and tests can use the pure data helpers below
+// (getItemId, getCraftingGap, getBlockHarvestTools, …). No-op once loaded;
+// initBot still (re)sets these from the real bot.version on login.
+export function ensureMcData(version = mc_version) {
+    if (!mcdata) mcdata = minecraftData(version);
+    // Item is only needed by makeItem(); the pure data helpers don't use it.
+    // Don't let a prismarine-item version quirk block offline data-only use.
+    if (!Item) { try { Item = prismarine_items(version); } catch { /* data helpers don't need Item */ } }
+    return mcdata;
+}
+
 export function initBot(username) {
     const options = {
         username: username,
@@ -373,6 +385,17 @@ export function getBlockTool(blockName) {
     return getItemName(Object.keys(block.harvestTools)[0]);  // Double check first tool is always simplest
 }
 
+// Item NAMES of every tool that can harvest drops from this block, or null if
+// the block needs no tool (hand-harvestable, e.g. dirt/oak_log). Unlike
+// getBlockTool (simplest tool only), this returns the full set so a canMine
+// check can accept any sufficient tier already held — a stone_pickaxe satisfies
+// stone, not just the wooden_pickaxe getBlockTool would name.
+export function getBlockHarvestTools(blockName) {
+    let block = mcdata.blocksByName[blockName];
+    if (!block || !block.harvestTools) return null;
+    return Object.keys(block.harvestTools).map(id => getItemName(Number(id)));
+}
+
 export function makeItem(name, amount=1) {
     return new Item(getItemId(name), amount);
 }
@@ -489,6 +512,34 @@ export function getDetailedCraftingPlan(targetItem, count = 1, current_inventory
     const leftovers = {};
     const plan = craftItem(targetItem, count, inventory, leftovers);
     return formatPlan(targetItem, plan);
+}
+
+/**
+ * Structured sibling of getDetailedCraftingPlan: same recursive craftItem walk,
+ * but returns data instead of a prose paragraph so the deterministic live-state
+ * block can render a compact line. Returns:
+ *   null                                    — invalid item/count
+ *   { craftable: bool, base: bool,
+ *     missing: [{item, count}],             — base items still to obtain
+ *     steps:   [string] }                   — craft steps, coarse→fine
+ * `missing` empty means everything needed is already in `current_inventory`.
+ */
+export function getCraftingGap(targetItem, count = 1, current_inventory = {}) {
+    initializeLoopingItems();
+    if (!targetItem || count <= 0 || !getItemId(targetItem)) return null;
+
+    if (isBaseItem(targetItem)) {
+        const available = current_inventory[targetItem] || 0;
+        const short = Math.max(0, count - available);
+        return { craftable: false, base: true,
+            missing: short > 0 ? [{ item: targetItem, count: short }] : [], steps: [] };
+    }
+
+    const inventory = { ...current_inventory };
+    const leftovers = {};
+    const { required, steps } = craftItem(targetItem, count, inventory, leftovers);
+    const missing = Object.entries(required).map(([item, c]) => ({ item, count: c }));
+    return { craftable: true, base: false, missing, steps };
 }
 
 function isBaseItem(item) {

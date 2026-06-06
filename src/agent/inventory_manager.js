@@ -1,9 +1,14 @@
 import * as world from './library/world.js';
 import * as skills from './library/skills.js';
+import * as mc from '../utils/mcdata.js';
 
 // Tool/weapon/armor suffixes — never auto-discarded.
 const TOOL_SUFFIXES = ['pickaxe', 'axe', 'sword', 'shovel', 'hoe', 'shears', 'shield',
     'bow', 'crossbow', 'trident', 'elytra', 'helmet', 'chestplate', 'leggings', 'boots'];
+
+// Unique tools whose names don't end in a TOOL_SUFFIX. Holding one makes a
+// second pointless, same as a pickaxe — used by the redundant-acquire guard.
+const UNIQUE_TOOLS = new Set(['flint_and_steel', 'fishing_rod', 'compass', 'clock', 'spyglass']);
 
 // Utility items worth keeping regardless of space pressure.
 const KEEP = new Set(['bucket', 'water_bucket', 'lava_bucket', 'torch', 'soul_torch',
@@ -103,5 +108,53 @@ export class InventoryManager {
         let s = `SLOTS: ${this.usedSlots()}/36 used (${this.emptySlots()} free)`;
         if (this.isNearFull()) s += ' — LOW SPACE';
         return s;
+    }
+
+    // --- Deterministic state queries (no LLM) ---
+    // The state authority: counting items, "can I mine this", "what's the craft
+    // gap" are facts, not judgment — code answers them so the LLM never guesses.
+    // Each accepts an optional inventory snapshot; live_state.js takes ONE
+    // getInventoryCounts() per turn and threads it through all of these so the
+    // rendered INVENTORY and CAPABILITIES sections can never disagree.
+
+    count(item, inv = world.getInventoryCounts(this.bot)) {
+        return inv[item] || 0;
+    }
+
+    has(item, n = 1, inv = world.getInventoryCounts(this.bot)) {
+        return this.count(item, inv) >= n;
+    }
+
+    // Can the bot mine `blockName` and get its drop right now? A block with no
+    // harvestTools is hand-mineable (ok). Otherwise ok iff inventory holds any
+    // tool in the block's harvest set (any sufficient tier, not just simplest).
+    canMine(blockName, inv = world.getInventoryCounts(this.bot)) {
+        const tools = mc.getBlockHarvestTools(blockName);
+        if (!tools) return { ok: true };
+        if (tools.some(t => (inv[t] || 0) > 0)) return { ok: true };
+        return { ok: false, reason: `need ${mc.getBlockTool(blockName)}` };
+    }
+
+    // Recursive craft prereqs vs current inventory:
+    // { craftable, base, missing:[{item,count}], steps:[] } or null for junk input.
+    craftGap(item, count = 1, inv = world.getInventoryCounts(this.bot)) {
+        return mc.getCraftingGap(item, count, inv);
+    }
+
+    // Tool/weapon/armor-class item: holding one makes acquiring a second
+    // pointless. Resource items (logs, ore, ingots, food) are NOT tool-like —
+    // "get 5 more" of those is legitimate, so they keep delta semantics.
+    isToolLike(item) {
+        if (!item || typeof item !== 'string') return false;
+        if (TOOL_SUFFIXES.some(s => item.endsWith(s))) return true;
+        return UNIQUE_TOOLS.has(item);
+    }
+
+    // The idempotency guard: true iff `item` is a tool/equipment the bot
+    // ALREADY holds, so fetching/crafting another is a deterministic no-op.
+    // This is the "code owns 'already have it'" reflex — it never fires for
+    // stackable resources, so it can't block a real "gather more" request.
+    redundantAcquire(item, inv = world.getInventoryCounts(this.bot)) {
+        return this.isToolLike(item) && this.count(item, inv) >= 1;
     }
 }
