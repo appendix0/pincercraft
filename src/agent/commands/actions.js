@@ -400,6 +400,15 @@ export const actionsList = [
                 try { agent.openChat(msg); } catch {}
                 return msg;
             }
+            // Deterministic preflight (Claude Code-style precondition gate): never
+            // attempt a craft the bot can't afford. Bounce it with a structured
+            // corrective (missing materials + cheapest tool it CAN make) so the
+            // planner re-plans instead of failing the craft and flailing.
+            const pf = agent.inventory_manager?.craftPreflight(recipe_name, num);
+            if (pf && pf.ok === false) {
+                try { agent.openChat(pf.corrective); } catch {}
+                return pf.corrective;
+            }
             const code_return = await agent.actions.runAction(
                 'action:craftRecipe',
                 async () => { await skills.craftRecipe(agent.bot, recipe_name, num); },

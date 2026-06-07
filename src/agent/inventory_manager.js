@@ -10,6 +10,18 @@ const TOOL_SUFFIXES = ['pickaxe', 'axe', 'sword', 'shovel', 'hoe', 'shears', 'sh
 // second pointless, same as a pickaxe — used by the redundant-acquire guard.
 const UNIQUE_TOOLS = new Set(['flint_and_steel', 'fishing_rod', 'compass', 'clock', 'spyglass']);
 
+// Tool tiers cheapest→dearest (gold omitted — valuable and rarely the "cheapest
+// sufficient" answer) and the craftable tool categories. Used by the craft
+// preflight to suggest the cheapest <category> the bot can actually make.
+const CRAFT_TIERS = ['wooden', 'stone', 'iron', 'diamond', 'netherite'];
+const TOOL_CATEGORIES = ['pickaxe', 'axe', 'shovel', 'hoe', 'sword'];
+
+// '<material>_<category>' → category (e.g. diamond_axe → 'axe'), else null.
+function toolCategory(name) {
+    if (!name || typeof name !== 'string') return null;
+    return TOOL_CATEGORIES.find(c => name.endsWith('_' + c)) || null;
+}
+
 // Utility items worth keeping regardless of space pressure.
 const KEEP = new Set(['bucket', 'water_bucket', 'lava_bucket', 'torch', 'soul_torch',
     'ender_pearl', 'ender_eye', 'totem_of_undying', 'flint_and_steel', 'clock', 'compass',
@@ -156,5 +168,42 @@ export class InventoryManager {
     // stackable resources, so it can't block a real "gather more" request.
     redundantAcquire(item, inv = world.getInventoryCounts(this.bot)) {
         return this.isToolLike(item) && this.count(item, inv) >= 1;
+    }
+
+    // Cheapest tool of `category` the bot can craft from held materials right
+    // now (cheapest tier first); null if none. The tier oracle behind the craft
+    // preflight's "make a wooden_axe instead" suggestion — code owns "which tier
+    // is enough and affordable", not the LLM.
+    cheapestCraftableTool(category, inv = world.getInventoryCounts(this.bot)) {
+        for (const tier of CRAFT_TIERS) {
+            const gap = this.craftGap(`${tier}_${category}`, 1, inv);
+            if (gap && gap.missing.length === 0) return `${tier}_${category}`;
+        }
+        return null;
+    }
+
+    // Deterministic craft preflight — the "verify ground truth before acting"
+    // contract (Claude Code style). Reads real inventory, checks the recipe is
+    // satisfiable, and on a shortfall returns a structured corrective naming the
+    // exact missing materials + the cheapest tool the bot CAN make instead. So an
+    // over-specified craft (diamond_axe with 0 diamonds, picked from chat
+    // momentum) is bounced WITH a fix rather than attempted, failed, and retried.
+    // { ok:true } when craftable now or the item is unknown (let the skill error).
+    craftPreflight(item, num = 1, inv = world.getInventoryCounts(this.bot)) {
+        const gap = this.craftGap(item, 1, inv);
+        if (!gap || gap.missing.length === 0) return { ok: true };
+
+        const missingStr = gap.missing.map(m => `${m.count} ${m.item}`).join(', ');
+        let corrective = `Can't craft ${item} — short ${missingStr}.`;
+        const cat = toolCategory(item);
+        if (cat) {
+            const alt = this.cheapestCraftableTool(cat, inv);
+            corrective += alt
+                ? ` A ${alt} is craftable from what you hold and does the same job — make that, or get ${missingStr} first.`
+                : ` No ${cat} is craftable from current materials — gather ${gap.missing.map(m => m.item).join('/')} first.`;
+        } else {
+            corrective += ` Gather ${gap.missing.map(m => m.item).join('/')} first.`;
+        }
+        return { ok: false, corrective };
     }
 }
