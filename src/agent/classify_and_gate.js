@@ -168,6 +168,17 @@ export function parseDifficultyScore(text) {
     return n >= 1 && n <= 10 ? n : null;
 }
 
+// ----------------------------------------------------------------------------
+// 1c. Death handler (P2). On death the bot STOPS everything (action + plan +
+//     task auto-resume) and, if a player is directing it, asks this exact
+//     two-option question — code-emitted so it is ALWAYS asked clearly, not left
+//     to prompt adherence. Autonomous play keeps the CoC auto-recover default.
+// ----------------------------------------------------------------------------
+export function deathChoiceQuestion(posText) {
+    const where = posText ? ` at ${posText}` : '';
+    return `I died and dropped everything${where}. Want me to (1) go retrieve my lost items, or (2) forget it and wait for another task?`;
+}
+
 export function detectMemoryRequest(message) {
     if (!message || message.length < 4) return false;
     return MEMORY_REQUEST_PATTERNS.test(message);

@@ -37,6 +37,7 @@ import {
     detectPlanRequest,
     looksActionable,
     PLAN_MODE_DIFFICULTY_THRESHOLD,
+    deathChoiceQuestion,
     detectPlanApproval,
     detectPlanRejection,
     estimateTaskSize,
@@ -74,6 +75,10 @@ export class Agent {
         // mutations, chat-only) run. Toggled via !enterPlanMode / !exitPlanMode
         // — Phase C2 wires the auto-trigger on task-request classifier.
         this.planMode = false;
+        // P2: set true on death while a player is present — suppresses task
+        // auto-resume (the drive loop) until they choose to retrieve gear or
+        // forget it. Cleared by the next player message (enqueue).
+        this._awaitingDeathChoice = false;
 
         // Side-chat deferral tracker. When a player message arrives mid-task
         // and the bot replies with a canned "let me finish" because all the
@@ -570,6 +575,7 @@ export class Agent {
         this._driveLoop = setInterval(() => {
             if (!this.alive || !this.task_queue) return;
             if (this.planMode === true) return; // plan mode is "wait for player approval", don't auto-drive
+            if (this._awaitingDeathChoice) return; // died — stopped, waiting for the player's retrieve/forget choice
             if (this.run_queue?.state !== 'idle') return;
             if (this.run_queue?.depth > 0) return;
             const active = this.task_queue.tasks.find(t => t.status === 'in_progress');
@@ -854,6 +860,9 @@ export class Agent {
             // Drive-loop suppression window: don't auto-nudge the bot while
             // the player is actively chatting — gives them ~15s to type.
             this._lastPlayerInputTs = Date.now();
+            // A player is directing again → clear any pending death-choice wait:
+            // their message IS the answer (retrieve/forget) or a fresh task.
+            this._awaitingDeathChoice = false;
         }
         if (input.kind === 'player_chat' && this.run_queue.state === 'running') {
             // Don't enqueue — the running task keeps going. Just answer the player.
@@ -1508,16 +1517,31 @@ export class Agent {
                 console.log('Agent died: ', message);
                 let death_pos = this.bot.entity.position;
                 this.memory_bank.rememberPlace('last_death_position', death_pos.x, death_pos.y, death_pos.z);
-                let death_pos_text = null;
-                if (death_pos) {
-                    death_pos_text = `x: ${death_pos.x.toFixed(2)}, y: ${death_pos.y.toFixed(2)}, z: ${death_pos.z.toFixed(2)}`;
+                const death_pos_text = death_pos
+                    ? `x: ${death_pos.x.toFixed(0)}, y: ${death_pos.y.toFixed(0)}, z: ${death_pos.z.toFixed(0)}`
+                    : null;
+                const dimention = this.bot.game.dimension;
+                const lostNote = `You died at position ${death_pos_text || "unknown"} in the ${dimention} dimension ('${message}'). Your gear dropped on the ground (saved as 'last_death_position'); your inventory is now EMPTY and any progress toward your task's end_factor is VOID. Re-check your inventory; never claim or report items you no longer have.`;
+
+                if (this.self_prompter.isActive()) {
+                    // Autonomous — no player to ask. Keep the CoC auto-recover default.
+                    this.enqueue({
+                        source: 'system',
+                        message: `${lostNote} No player is directing you — go recover your gear: !goToRememberedPlace("last_death_position") then !pickupItems, then resume.`,
+                        kind: 'game_event_critical',
+                    });
+                } else {
+                    // Player-directed: STOP everything and ask. The drive loop is
+                    // suppressed (no task auto-resume) until the player answers;
+                    // their reply clears the flag (see enqueue).
+                    this._awaitingDeathChoice = true;
+                    try { this.openChat(deathChoiceQuestion(death_pos_text)); } catch {}
+                    this.enqueue({
+                        source: 'system',
+                        message: `${lostNote} You have ALREADY asked the player out loud: "(1) go retrieve my lost items, or (2) forget it and wait for another task?". Take NO action and do NOT resume your task — just wait silently for their answer. When they answer: (1)/retrieve/"go get it" → !goToRememberedPlace("last_death_position") then !pickupItems; (2)/forget/"leave it" → !cancelTask the dead task and wait for a new one. If they instead give a different instruction, do that.`,
+                        kind: 'game_event_critical',
+                    });
                 }
-                let dimention = this.bot.game.dimension;
-                this.enqueue({
-                    source: 'system',
-                    message: `You died at position ${death_pos_text || "unknown"} in the ${dimention} dimension with the final message: '${message}'. Your place of death is saved as 'last_death_position' if you want to return. Previous actions were stopped and you have respawned. IMPORTANT: dying DROPPED your entire inventory on the ground — anything you were carrying is GONE, and any progress toward your current task's end_factor is now VOID. Re-check your current inventory before doing anything; do NOT claim or report items you no longer have; tell the player honestly that you died and lost what you were carrying.`,
-                    kind: 'game_event_critical',
-                });
             }
         });
         this.bot.on('idle', () => {
