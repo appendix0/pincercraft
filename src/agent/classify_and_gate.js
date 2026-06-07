@@ -44,6 +44,23 @@ export function classifyInput(input) {
     return 'followup';
 }
 
+// P0 (say-do gap): decide what a mid-task side-chat reply should DO with the
+// commands it emits. A body-touching (non concurrency-safe) command means the
+// player gave a TASK-RELATED directive while the bot was busy ("go get the
+// diamonds"). User intent outranks the running task, so that must PREEMPT it —
+// not get silently deferred while the bot narrates an action it won't take (the
+// "said it'd go to the chest but kept mining" bug). The model emitting a body
+// command IS the directive signal (LLM-led, no brittle keyword list). Pure +
+// injected parser deps so it unit-tests without a live bot.
+export function classifySideChatReply(res, { findAllCommandSpans, getCommand }) {
+    const spans = findAllCommandSpans(res || '');
+    const safe = [], body = [];
+    for (const s of spans) {
+        (isSafeSideChatCommand(getCommand(s.commandName)) ? safe : body).push(s.commandName);
+    }
+    return { spans, hasCommands: spans.length > 0, safe, body, preempt: body.length > 0 };
+}
+
 // ----------------------------------------------------------------------------
 // 2. Pre-LLM Lever-2 nudges — run on the player's message before the model
 //    sees it. Re-assert prompt rules Haiku tends to drop under load. False

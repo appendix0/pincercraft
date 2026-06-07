@@ -30,8 +30,8 @@ import { RulebookLectern } from './rulebook_lectern.js';
 // at the top of this file + a small input_router module.
 import {
     classifyInput,
+    classifySideChatReply,
     nudgesForUserMessage,
-    isSafeSideChatCommand,
     isPathFailure,
     detectTaskRequest,
     detectPlanRequest,
@@ -839,13 +839,7 @@ export class Agent {
         const mode = classifyInput(input);
         input.mode = mode;
         if (mode === 'interrupt') {
-            if (this.run_queue.state === 'running') {
-                this.history.add('system', `[Interrupted by: ${input.source}]`);
-            }
-            this.run_queue.abortCurrent();
-            this.run_queue.clear();
-            this.requestInterrupt();
-            this.run_queue.push(input);
+            this._preemptCurrentRun(input);
             return;
         }
         if (input.kind === 'player_chat') {
@@ -865,6 +859,21 @@ export class Agent {
             return;
         }
         this.run_queue.push(input);
+    }
+
+    // Hard-preempt: abort the running task, clear the queue, interrupt the bot's
+    // body, and queue `nextInput` to be processed fresh. Shared by the enqueue()
+    // stop-intent path and the side-chat directive path — centralizes the rule
+    // that user input outranks the current task (P0 say-do fix), so both callers
+    // interrupt identically instead of one of them deferring.
+    _preemptCurrentRun(nextInput) {
+        if (this.run_queue.state === 'running') {
+            this.history.add('system', `[Interrupted by: ${nextInput.source}]`);
+        }
+        this.run_queue.abortCurrent();
+        this.run_queue.clear();
+        this.requestInterrupt();
+        this.run_queue.push(nextInput);
     }
 
     // Parallel LLM call that produces a short prose reply while a task is
@@ -901,53 +910,47 @@ export class Agent {
                 return;
             }
             // A1: parse all commands in the side-chat response, not just the first.
-            // Execute every safe command in order; defer body-touching ones until the
-            // current task finishes. Without this, a response like
-            // `!remember(...) !addTask(...)` would silently drop the !addTask.
-            const cmdSpans = findAllCommandSpans(res);
+            const disposition = classifySideChatReply(res, { findAllCommandSpans, getCommand });
 
-            if (cmdSpans.length === 0) {
+            if (!disposition.hasCommands) {
                 // No commands — pure prose reply
                 await this.history.add(this.name, res);
                 this.routeResponse(source, res.trim());
                 return;
             }
 
-            const preMessage = res.substring(0, cmdSpans[0].startIndex).trim();
-            const trailingProse = res.substring(cmdSpans[cmdSpans.length - 1].endIndex).trim();
-
             await this.history.add(this.name, res);
-            if (preMessage) this.routeResponse(source, preMessage);
 
-            let executedCount = 0;
-            const deferred = [];
-            for (const span of cmdSpans) {
-                const cmdName = span.commandName;
-                if (isSafeSideChatCommand(getCommand(cmdName))) {
-                    const cmdText = res.substring(span.startIndex, span.endIndex);
-                    try {
-                        const execRes = await executeCommand(this, cmdText);
-                        if (execRes) await this.history.add('system', execRes);
-                        console.log(`[side-chat] safe command executed: ${cmdName}`);
-                        executedCount++;
-                    } catch (e) {
-                        console.warn(`[side-chat] ${cmdName} failed:`, e?.message || e);
-                    }
-                } else {
-                    deferred.push(cmdName);
+            // P0 (say-do gap): a body-touching command in a mid-task reply means
+            // the player gave a TASK-RELATED directive ("go get the diamonds").
+            // User intent outranks the running task, so PREEMPT — do NOT defer the
+            // command while narrating it (the old path spoke "heading to the chest"
+            // then kept mining). Interrupt the current task and re-process the
+            // player's own message so the command actually runs via the full
+            // path, not the stripped side reply.
+            if (disposition.preempt) {
+                this.routeResponse(source, `On it — pausing what I'm on.`);
+                this._preemptCurrentRun({ source, message, kind: input.kind, mode: 'followup' });
+                return;
+            }
+
+            // Only side-chat-safe commands (e.g. !rememberHere) + prose: they don't
+            // touch the body, so run them in place without disturbing the task.
+            const spans = disposition.spans;
+            const preMessage = res.substring(0, spans[0].startIndex).trim();
+            const trailingProse = res.substring(spans[spans.length - 1].endIndex).trim();
+            if (preMessage) this.routeResponse(source, preMessage);
+            for (const span of spans) {
+                const cmdText = res.substring(span.startIndex, span.endIndex);
+                try {
+                    const execRes = await executeCommand(this, cmdText);
+                    if (execRes) await this.history.add('system', execRes);
+                    console.log(`[side-chat] safe command executed: ${span.commandName}`);
+                } catch (e) {
+                    console.warn(`[side-chat] ${span.commandName} failed:`, e?.message || e);
                 }
             }
-
-            if (deferred.length > 0 && executedCount === 0 && !preMessage) {
-                // Nothing got through and no prose — give the player a heads-up.
-                recordFollowup();
-                this.routeResponse(source, `Got it — let me finish what I'm on first.`);
-            } else if (deferred.length > 0) {
-                recordFollowup();
-                this.routeResponse(source, `(Deferring ${deferred.join(', ')} until I'm done with my current task.)`);
-            } else if (trailingProse) {
-                this.routeResponse(source, trailingProse);
-            }
+            if (trailingProse) this.routeResponse(source, trailingProse);
         } catch (e) {
             console.error('_handleSideChat failed:', e);
             try { this.routeResponse(source, `(I heard you but hit an error replying.)`); } catch {}

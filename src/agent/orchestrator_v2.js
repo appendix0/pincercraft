@@ -92,6 +92,14 @@ export class OrchestratorV2 {
         if (!event || !event.type) return;
         if (this.invoking) {
             this.pendingEvents.push(event);
+            // P0 (user intent outranks the running task): a player message that
+            // lands mid-invoke must not wait for the in-flight task action to
+            // finish. Interrupt the body so the current invoke parks promptly
+            // and this queued message drains next. Non-user events (checkpoints,
+            // bg/mode) keep the old queue-and-wait behavior.
+            if (event.type === 'user_message') {
+                try { this.agent?.requestInterrupt?.(); } catch { /* best-effort */ }
+            }
             return;
         }
         this.invoking = true;
