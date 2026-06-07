@@ -22,7 +22,7 @@ import { RunQueue } from './run_queue.js';
 import { humanizeCommand } from './command_humanizer.js';
 import { TaskQueue, pruneQueueOnStart } from './task_queue.js';
 import { logPlayAttempt } from './play_logger.js';
-import { snapshotStartCounts } from './verify.js';
+import { snapshotStartCounts, verifyEndFactor } from './verify.js';
 import { buildLiveStateBlock } from './live_state.js';
 import { MemoryStore } from './memory_store.js';
 import { RulebookLectern } from './rulebook_lectern.js';
@@ -572,6 +572,22 @@ export class Agent {
             if (this.run_queue?.depth > 0) return;
             const active = this.task_queue.tasks.find(t => t.status === 'in_progress');
             if (!active) return;
+            // Deterministic task-end: if the end_factor is a countable inventory
+            // target that's already satisfied, finish the task in CODE — don't
+            // wait for the LLM to notice (the bot wandered for minutes holding 20
+            // diamonds before the nudge made it finishTask). Same parser/count
+            // the verify gate uses, so the two never disagree. Non-countable
+            // criteria (programmatic:false) fall through to the normal nudge.
+            const ef = verifyEndFactor(this, active);
+            if (ef.programmatic && ef.verified) {
+                console.log(`[drive] end_factor met (${ef.observed}) → auto-finishing #${active.id} deterministically`);
+                try { this.openChat(`Done — ${active.description} (${ef.observed}).`); } catch {}
+                try {
+                    const res = this.task_queue.finishTask(active.id);
+                    this.history.add('system', `[auto-finish] ${res.message}`);
+                } catch (e) { console.warn('[drive] auto-finish failed:', e?.message || e); }
+                return;
+            }
             const now = Date.now();
             if (this._lastPlayerInputTs && (now - this._lastPlayerInputTs) < 15000) return;
             if (this._lastDriveNudgeForTask === active.id && (now - this._lastDriveNudgeTs) < 30000) return;
