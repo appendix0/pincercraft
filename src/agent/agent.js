@@ -35,6 +35,8 @@ import {
     isPathFailure,
     detectTaskRequest,
     detectPlanRequest,
+    looksActionable,
+    PLAN_MODE_DIFFICULTY_THRESHOLD,
     detectPlanApproval,
     detectPlanRejection,
     estimateTaskSize,
@@ -1090,9 +1092,30 @@ export class Agent {
                     this.enterPlanMode();
                     await this.history.add('system', PLAN_MODE_AUTO_NUDGE);
                 }
-            } else if (detectTaskRequest(message)) {
+            } else if (detectPlanRequest(message)) {
+                // Fast path: explicit planning language ("make a plan", "step by
+                // step", "first … then") → plan, no need to rate it.
                 this.enterPlanMode();
                 await this.history.add('system', PLAN_MODE_AUTO_NUDGE);
+            } else if (looksActionable(message)) {
+                // Difficulty is a JUDGMENT, not a regex-measurable fact (a verb/
+                // quantity pattern mis-rated "mine 64 logs" as complex). So the
+                // LLM rates the request 1-10 and code owns the threshold: enter
+                // plan mode only for genuinely multi-stage work (builds /
+                // automation). Routine gather/craft scores low and just executes.
+                try {
+                    const score = await this.prompter.promptTaskDifficulty(message);
+                    if (score !== null && score > PLAN_MODE_DIFFICULTY_THRESHOLD) {
+                        console.log(`[plan mode] LLM difficulty ${score}/10 > ${PLAN_MODE_DIFFICULTY_THRESHOLD} → entering plan mode`);
+                        this.enterPlanMode();
+                        await this.history.add('system', PLAN_MODE_AUTO_NUDGE);
+                    } else {
+                        console.log(`[plan mode] LLM difficulty ${score}/10 → executing directly`);
+                    }
+                } catch (e) {
+                    // Fail safe: rating failed → just execute (don't force plan mode).
+                    console.warn('[plan mode] difficulty rating failed, executing directly:', e?.message || e);
+                }
             }
         }
         this.history.save();

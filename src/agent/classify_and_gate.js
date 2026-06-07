@@ -122,6 +122,52 @@ export function detectPlanRequest(message) {
     return PLAN_REQUEST_PATTERNS.test(message);
 }
 
+// ----------------------------------------------------------------------------
+// 1b. LLM-judged plan-mode entry. "Is this hard enough to need a decomposed plan
+//     before touching a block?" is a JUDGMENT, not a regex-measurable fact — a
+//     verb/quantity pattern mis-rates it (it called "mine 64 logs" complex on the
+//     number alone). So the LLM rates difficulty 1-10 and CODE owns the
+//     threshold. Per feedback_pincercraft_llm_led_smarts + the deterministic-
+//     state-authority boundary (facts→code, judgment→LLM).
+// ----------------------------------------------------------------------------
+
+// Enter plan mode when the LLM's difficulty score EXCEEDS this (so 8+ plans).
+// Tunable policy constant, NOT a measure of difficulty.
+export const PLAN_MODE_DIFFICULTY_THRESHOLD = 7;
+
+// Permissive "is it worth spending a difficulty-rating call?" gate — NOT a
+// difficulty measure. Broad on purpose: a false positive just costs one cheap
+// rating that scores low. Greetings/acks/questions with no action verb are
+// skipped so plain chat never triggers a rating call.
+const ACTIONABLE_VERBS = /\b(mine|craft|build|construct|make|get|bring|fetch|give|smelt|gather|find|collect|hand|deliver|cook|grab|harvest|chop|dig|place|set ?up|automate|farm|kill|fight|plant|brew|enchant|repair|fill|clear|create|assemble)\b/i;
+export function looksActionable(message) {
+    if (!message || message.length < 3) return false;
+    return ACTIONABLE_VERBS.test(message);
+}
+
+// The rating prompt. Difficulty = STRUCTURE (stages / block-types / layers),
+// NOT size — a bulk gather is one action repeated, so it stays low.
+export function buildDifficultyRatingPrompt(message) {
+    return `Decide whether a Minecraft bot should enter PLAN MODE — break a job into ordered steps before doing anything — for this player request.
+Rate the DIFFICULTY from 1 to 10. DIFFICULTY IS ABOUT STRUCTURE, NOT SIZE:
+- A single action = 1 ("come here", "give me dirt", "kill that zombie").
+- Routine gather / craft / smelt is LOW even in bulk — it's one action repeated: "mine 64 logs"=2, "get 30 iron and smelt it"=3.
+- HIGH = genuinely multi-stage: a structure with foundation/walls/roof, multiple block types or layers, or an automated contraption: "build a watch tower"=8, "set up an iron farm"=9, "build a castle"=10.
+Reply with ONLY the integer 1-10, nothing else.
+
+Request: "${message}"`;
+}
+
+// Parse an integer 1-10 from the rater's reply; null if unparseable (caller fails
+// safe to "execute directly" rather than forcing plan mode on garbage).
+export function parseDifficultyScore(text) {
+    if (text == null) return null;
+    const m = String(text).match(/\b(10|[1-9])\b/);
+    if (!m) return null;
+    const n = parseInt(m[1], 10);
+    return n >= 1 && n <= 10 ? n : null;
+}
+
 export function detectMemoryRequest(message) {
     if (!message || message.length < 4) return false;
     return MEMORY_REQUEST_PATTERNS.test(message);
