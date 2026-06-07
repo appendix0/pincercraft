@@ -1,5 +1,6 @@
 import * as mc from "../../utils/mcdata.js";
 import * as world from "./world.js";
+import { applyDigPolicy } from "./dig_policy.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
 import fs from 'fs';
@@ -597,6 +598,16 @@ export async function breakBlockAt(bot, x, y, z) {
             return true;
         }
 
+        // H2 precondition: don't path to a block we can't break. See mineBlockAt.
+        const im = bot.inventory_manager;
+        if (im && bot.game.gameMode !== 'creative') {
+            const m = im.canMine(block.name);
+            if (!m.ok) {
+                log(bot, `Cannot break ${block.name} with current tools — ${m.reason}. Craft/equip a pickaxe first; not pathing to it.`);
+                return false;
+            }
+        }
+
         if (bot.entity.position.distanceTo(block.position) > 4.5) {
             let pos = block.position;
             let movements = new pf.Movements(bot);
@@ -644,6 +655,18 @@ export async function mineBlockAt(bot, x, y, z) {
     if (!block || block.name === 'air' || block.name === 'water' || block.name === 'lava') {
         log(bot, `No solid block at x:${Math.floor(x)}, y:${Math.floor(y)}, z:${Math.floor(z)}.`);
         return false;
+    }
+    // H2 precondition (deterministic, no LLM): refuse BEFORE navigating if we
+    // lack the harvest tool — otherwise goToGoal would tunnel all the way to a
+    // block we then can't mine. canMine checks the whole inventory (any
+    // sufficient tier), not just the held item.
+    const im = bot.inventory_manager;
+    if (im && bot.game.gameMode !== 'creative') {
+        const m = im.canMine(block.name);
+        if (!m.ok) {
+            log(bot, `Cannot break ${block.name} with current tools — ${m.reason}. Craft/equip a pickaxe first; not pathing to it.`);
+            return false;
+        }
     }
     if (bot.entity.position.distanceTo(block.position) > 4.5) {
         const movements = new pf.Movements(bot);
@@ -1275,6 +1298,11 @@ export async function goToGoal(bot, goal) {
     nonDestructiveMovements.digCost = 10;
 
     const destructiveMovements = new pf.Movements(bot);
+    // P1: gate the dig-as-last-resort fallback. Never break base/utility blocks
+    // (CoC), and never plan to tunnel through stone/ore we can't harvest — that
+    // route would abort mid-dig ("Cannot break X with current tools"). See
+    // dig_policy.js.
+    applyDigPolicy(bot, destructiveMovements);
 
     let final_movements = destructiveMovements;
 
