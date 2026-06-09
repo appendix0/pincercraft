@@ -90,10 +90,14 @@ export class InventoryManager {
 
     // Free inventory until at least `threshold` slots are empty. Deposits junk to a nearby
     // chest if one exists (lossless), otherwise discards it. Returns true if space was freed.
-    async ensureSpace({ threshold = 1 } = {}) {
+    async ensureSpace({ threshold = 1, discardOnly = false } = {}) {
         if (this.emptySlots() >= threshold) return true;
 
-        const chest = world.getNearestBlock(this.bot, 'chest', 32);
+        // discardOnly skips the lossless chest deposit (which navigates to a
+        // chest) — used by the proactive drive-loop space reflex, where
+        // wandering off could collide with a player command. In-action callers
+        // keep the chest-deposit path.
+        const chest = discardOnly ? null : world.getNearestBlock(this.bot, 'chest', 32);
         if (chest) {
             for (const name of this._junkStacks()) {
                 if (this.emptySlots() >= threshold) break;

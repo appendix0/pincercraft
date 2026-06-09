@@ -581,6 +581,19 @@ export class Agent {
             if (this._awaitingDeathChoice) return; // died — stopped, waiting for the player's retrieve/forget choice
             if (this.run_queue?.state !== 'idle') return;
             if (this.run_queue?.depth > 0) return;
+            // Inventory-space reflex (deterministic, no LLM): a clogged inventory
+            // silently breaks a chest fetch (the pickaxe re-fetch loop), a give,
+            // or ore pickup. When idle and near-full, drop junk to keep a slot
+            // free. Discard-only (no chest navigation) so it can't collide with a
+            // player command; _freeingSpace blocks the 10s tick from re-entering.
+            const inv_mgr = this.bot?.inventory_manager;
+            if (inv_mgr && !this._freeingSpace && inv_mgr.isNearFull(1)) {
+                this._freeingSpace = true;
+                Promise.resolve(inv_mgr.ensureSpace({ discardOnly: true }))
+                    .catch(e => console.warn('[drive] space reflex failed:', e?.message || e))
+                    .finally(() => { this._freeingSpace = false; });
+                return; // next tick re-evaluates with freed space
+            }
             const active = this.task_queue.tasks.find(t => t.status === 'in_progress');
             if (!active) return;
             // Deterministic task-end: if the end_factor is a countable inventory
