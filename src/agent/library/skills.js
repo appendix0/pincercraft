@@ -316,7 +316,7 @@ export async function clearNearestFurnace(bot) {
 }
 
 
-export async function attackNearest(bot, mobType, kill=true) {
+export async function attackNearest(bot, mobType, kill=true, bareHands=null) {
     /**
      * Attack mob of the given type.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
@@ -331,24 +331,33 @@ export async function attackNearest(bot, mobType, kill=true) {
         bot.modes.pause('self_preservation'); // so it can go underwater. TODO: have an drowning mode so we don't turn off all self_preservation
     const mob = world.getNearbyEntities(bot, 24).find(entity => entity.name === mobType);
     if (mob) {
-        return await attackEntity(bot, mob, kill);
+        return await attackEntity(bot, mob, kill, bareHands);
     }
     log(bot, 'Could not find any '+mobType+' to attack.');
     return false;
 }
 
-export async function attackEntity(bot, entity, kill=true) {
+export async function attackEntity(bot, entity, kill=true, bareHands=null) {
     /**
      * Attack mob of the given type.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
      * @param {Entity} entity, the entity to attack.
+     * @param {boolean} kill, whether to keep attacking until dead. Defaults to true.
+     * @param {boolean|null} bareHands, true = unarmed (unequip), false = force a weapon,
+     *   null = read the deterministic bare-hands window set from the player's order.
      * @returns {Promise<boolean>} true if the entity was attacked, false if interrupted
      * @example
      * await skills.attackEntity(bot, entity);
      **/
 
     let pos = entity.position;
-    await equipHighestAttack(bot)
+    // bareHands: explicit true/false wins; null → the player's bare-hands order
+    // window (bot._bareHandsCombat). Unequip for an unarmed attack, else
+    // auto-equip the best weapon. Fixes the bot using a pickaxe when told
+    // "use your bare hands".
+    const bare = bareHands ?? (bot._bareHandsCombat > Date.now());
+    if (bare) { try { await bot.unequip('hand'); } catch { /* hand already empty */ } }
+    else await equipHighestAttack(bot);
 
     if (!kill) {
         if (bot.entity.position.distanceTo(pos) > 5) {
@@ -1915,7 +1924,7 @@ export async function avoidEnemies(bot, distance=16) {
             break;
         }
         if (enemy && bot.entity.position.distanceTo(enemy.position) < 3) {
-            await attackEntity(bot, enemy, false);
+            await attackEntity(bot, enemy, false, false); // survival: always armed
         }
     }
     bot.pathfinder.stop();

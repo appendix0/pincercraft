@@ -199,6 +199,16 @@ export function parseRelativeQuantity(message) {
     return null;
 }
 
+// True iff the player ordered an UNARMED attack ("use your bare hands", "with
+// your fists", "punch them"). Read deterministically from the player message so
+// the bot honors it whether the kill goes through !attack or custom !newAction
+// code — the pickaxe-genocide bug was attackEntity ALWAYS calling
+// equipHighestAttack, which equips the best weapon (an iron_pickaxe here).
+export function wantsBareHands(message) {
+    if (!message || typeof message !== 'string') return false;
+    return /\b(bare[\s-]?hand(?:s|ed)?|fist(?:s|ed)?|punch(?:es|ing)?|unarmed|no weapon|without (?:a )?weapon)\b/i.test(message);
+}
+
 export function detectMemoryRequest(message) {
     if (!message || message.length < 4) return false;
     return MEMORY_REQUEST_PATTERNS.test(message);

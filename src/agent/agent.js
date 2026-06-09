@@ -46,6 +46,7 @@ import {
     PLAN_MODE_AUTO_NUDGE,
     PLAN_APPROVED_NUDGE,
     PLAN_REJECTED_NUDGE,
+    wantsBareHands,
 } from './classify_and_gate.js';
 // Phase H1: player slash-commands ( /init, /review, !!init ) dispatch through
 // a registry instead of going to the LLM. Skill bodies register themselves
@@ -875,6 +876,11 @@ export class Agent {
             // no one to TP to.
             this.last_sender = input.source;
             this._lastPlayerMessage = input.message;
+            // Bare-hands combat window (deterministic): when the player orders an
+            // unarmed kill, open a short window that attackEntity reads so it
+            // unequips instead of auto-equipping a weapon — covers !attack and
+            // custom code alike. Survival/hunting callers force-arm past it.
+            if (this.bot && wantsBareHands(input.message)) this.bot._bareHandsCombat = Date.now() + 120000;
             // Drive-loop suppression window: don't auto-nudge the bot while
             // the player is actively chatting — gives them ~15s to type.
             this._lastPlayerInputTs = Date.now();
