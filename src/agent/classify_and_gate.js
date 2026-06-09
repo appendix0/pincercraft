@@ -179,6 +179,26 @@ export function deathChoiceQuestion(posText) {
     return `I died and dropped everything${where}. Want me to (1) go retrieve my lost items, or (2) forget it and wait for another task?`;
 }
 
+// ----------------------------------------------------------------------------
+// 1d. Metric targets (deterministic). "Get N MORE / another N / N additional X"
+//     is a DELTA (+N from current), not an absolute count — but the LLM tends to
+//     encode it as an absolute end_factor ("30 raw_iron in inventory"), so the
+//     bot stops at 30 TOTAL instead of +30 (it delivered 27 more, not 30). This
+//     detects the relative phrasing in the player's message; verify.js then
+//     rewrites the end_factor to the "+N" delta the verify gate already checks
+//     against the task-start snapshot. The TARGET, not just the count, becomes
+//     deterministic.
+// ----------------------------------------------------------------------------
+export function parseRelativeQuantity(message) {
+    if (!message || typeof message !== 'string') return null;
+    const m = message.toLowerCase();
+    let mm = m.match(/\b(\d+)\s+(?:more|additional|extra)\b/);
+    if (mm) return { delta: parseInt(mm[1], 10) };
+    mm = m.match(/\banother\s+(\d+)\b/);
+    if (mm) return { delta: parseInt(mm[1], 10) };
+    return null;
+}
+
 export function detectMemoryRequest(message) {
     if (!message || message.length < 4) return false;
     return MEMORY_REQUEST_PATTERNS.test(message);

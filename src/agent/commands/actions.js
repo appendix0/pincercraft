@@ -650,6 +650,12 @@ export const actionsList = [
                 const chunks = Math.max(2, Math.ceil(est.blocks / SIZE_DECOMP_THRESHOLD));
                 return `[task rejected] Description implies ~${est.blocks} blocks/items of work (signal: ${est.signal}). HARD LIMIT: ${SIZE_DECOMP_THRESHOLD} per task. Split into ≥${chunks} smaller !addTask calls (e.g. "rows 1-10 of floor", "rows 11-20 of floor", ...). Each must have its own observable end_factor.`;
             }
+            // Deterministic metric target: if the player asked for "N MORE" (a
+            // delta) but the end_factor was encoded as an absolute count, rewrite
+            // it to "+N item" so the bot finishes at +N from where it started,
+            // not at N total. Code owns the target, not the LLM's encoding.
+            const { normalizeQuantityEndFactor } = await import('../verify.js');
+            end_factor = normalizeQuantityEndFactor(end_factor, agent._lastPlayerMessage);
             return agent.task_queue.addTask(description, end_factor).message;
         }
     },

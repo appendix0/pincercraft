@@ -10,6 +10,8 @@
 // "player picked up the pickaxe") are pass-through — we'd rather miss a
 // dishonest finish than block a legitimate one on language we can't parse.
 
+import { parseRelativeQuantity } from './classify_and_gate.js';
+
 // Strip a leading article and trailing period/space so end_factor matching
 // is forgiving on the LLM's casual phrasing.
 function normalize(s) {
@@ -79,6 +81,24 @@ function matchCountIncrease(text) {
     m = text.match(/^(?:net\s+)?\+\s*(\d+)\s+([a-z][a-z0-9_]*)\b/);
     if (m) return { item: m[2], delta: parseInt(m[1], 10) };
     return null;
+}
+
+// Deterministic metric-target normalizer. When the player asked for "N MORE" (a
+// delta) but the end_factor was encoded as an absolute count ("30 raw_iron in
+// inventory"), rewrite it to the "+N item" delta form — which verifyEndFactor
+// already checks against the task-start snapshot. So "get 30 more raw_iron"
+// finishes at +30 from where the bot started, not at 30 total. No-op when the
+// player gave no relative cue, the end_factor isn't a parseable absolute count,
+// it's already a delta, or N doesn't match the count (the LLM already did the
+// math, e.g. "had 3, set target 33").
+export function normalizeQuantityEndFactor(endFactor, playerMessage) {
+    if (!endFactor) return endFactor;
+    const rel = parseRelativeQuantity(playerMessage);
+    if (!rel) return endFactor;
+    if (/^\s*\+|increased|\bnew\b/i.test(endFactor)) return endFactor; // already a delta
+    const target = parseEndFactorTarget({ endFactor });
+    if (!target || target.count !== rel.delta) return endFactor;
+    return `+${target.count} ${target.item}`;
 }
 
 // Best-effort PRIMARY goal item + count from a task's end_factor, reusing the

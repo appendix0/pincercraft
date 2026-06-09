@@ -67,6 +67,9 @@ import { getRegistry } from './tool_registry.js';
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
         this.last_sender = null;
+        // Last player message text — used by the deterministic metric-target
+        // normalizer (!addTask) to detect "N more" delta requests.
+        this._lastPlayerMessage = null;
         this.count_id = count_id;
         this._disconnectHandled = false;
         // Phase C1: plan mode is OFF at boot. While on, body-touching commands
@@ -857,6 +860,7 @@ export class Agent {
             // it null, which meant the watcher would detect stuck but have
             // no one to TP to.
             this.last_sender = input.source;
+            this._lastPlayerMessage = input.message;
             // Drive-loop suppression window: don't auto-nudge the bot while
             // the player is actively chatting — gives them ~15s to type.
             this._lastPlayerInputTs = Date.now();
