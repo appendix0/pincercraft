@@ -1252,28 +1252,58 @@ export async function giveToPlayer(bot, itemType, username, num=1) {
     }
 
     await bot.lookAt(player.position);
-    if (await discard(bot, itemType, num)) {
-        let given = false;
-        bot.once('playerCollect', (collector, collected) => {
-            console.log(collected.name);
-            if (collector.username === username) {
-                log(bot, `${username} received ${itemType}.`);
-                given = true;
-            }
-        });
-        let start = Date.now();
-        while (!given && !bot.interrupt_code) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            if (given) {
-                return true;
-            }
-            if (Date.now() - start > 3000) {
-                break;
-            }
-        }
+
+    // Floodgate prefixes Bedrock players with '.' in bot.players, but chat and
+    // playerCollect events use the bare name — so match the un-dotted canonical
+    // name. The old `collector.username === username` never matched a dotted
+    // name, so a real give was reported as "never received" (the iron-give bug).
+    const targetName = (player.username || username).replace(/^\./, '');
+
+    // Must be next to the player, or tossed items land out of reach.
+    if (bot.entity.position.distanceTo(player.position) > 6) {
+        log(bot, `Couldn't get close enough to give ${itemType} to ${targetName}.`);
+        return false;
     }
-    log(bot, `Failed to give ${itemType} to ${username}, it was never received.`);
-    return false;
+
+    // Deterministic give: success = the items actually LEAVE the bot's inventory
+    // at the player's feet (proprioception), not the fragile 3s playerCollect
+    // window. Still listen for the collect to UPGRADE the report; retry one toss
+    // if the first dropped nothing (e.g. interrupted mid-action).
+    const countItem = () => bot.inventory.items().filter(i => i.name === itemType).reduce((s, i) => s + i.count, 0);
+    let collected = false;
+    const onCollect = (collector) => {
+        if (collector?.username && collector.username.replace(/^\./, '') === targetName) collected = true;
+    };
+    bot.on('playerCollect', onCollect);
+    try {
+        const before = countItem();
+        if (before === 0) {
+            log(bot, `I don't have any ${itemType} to give.`);
+            return false;
+        }
+        const want = num < 0 ? before : Math.min(num, before);
+        let dropped = 0;
+        for (let attempt = 0; attempt < 2 && dropped < want && !bot.interrupt_code; attempt++) {
+            await bot.lookAt(player.position);
+            await discard(bot, itemType, want - dropped);
+            await new Promise(resolve => setTimeout(resolve, 300)); // let the toss settle in inventory
+            dropped = before - countItem();
+        }
+        if (dropped <= 0) {
+            log(bot, `Failed to give ${itemType} to ${targetName} — couldn't drop any.`);
+            return false;
+        }
+        const waitStart = Date.now();
+        while (!collected && !bot.interrupt_code && Date.now() - waitStart < 2000) {
+            await new Promise(resolve => setTimeout(resolve, 250));
+        }
+        log(bot, collected
+            ? `${targetName} received ${dropped} ${itemType}.`
+            : `Gave ${dropped} ${itemType} to ${targetName} (dropped at their feet).`);
+        return true;
+    } finally {
+        bot.removeListener('playerCollect', onCollect);
+    }
 }
 
 export async function goToGoal(bot, goal) {

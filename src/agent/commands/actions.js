@@ -253,13 +253,13 @@ export const actionsList = [
                 { timeout: -1, resume: false },
             );
             const result = code_return.interrupted && !code_return.timedout ? undefined : code_return.message;
-            // skills.giveToPlayer only logs "<player> received <item>" after the
-            // mineflayer `playerCollect` event fires — so we know the player
-            // physically picked it up. Use that as the auto-finish gate. If
-            // the drop happened but no pickup observed within 3s, don't auto-
-            // finish; the LLM can decide whether to retry.
+            // giveToPlayer logs "<player> received <item>" when the player
+            // collected the drop, or "Gave N <item> (dropped at their feet)"
+            // when the items left the bot's inventory at the player but weren't
+            // collected yet — either way the give physically happened, so both
+            // gate the auto-finish. Failure messages don't match.
             try {
-                const pickedUp = result && /\breceived\b/i.test(result);
+                const pickedUp = result && /\b(received|gave)\b/i.test(result);
                 if (pickedUp) {
                     const active = agent.task_queue?.tasks.find(t => t.status === 'in_progress');
                     if (active) {
