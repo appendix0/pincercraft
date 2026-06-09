@@ -21,7 +21,7 @@ import { log, validateNameFormat, handleDisconnection } from './connection_handl
 import { RunQueue } from './run_queue.js';
 import { humanizeCommand } from './command_humanizer.js';
 import { TaskQueue, pruneQueueOnStart } from './task_queue.js';
-import { logPlayAttempt } from './play_logger.js';
+// import { logPlayAttempt } from './play_logger.js'; // MUTED 2026-06-09 — see finish handler (gold DB supersedes)
 import { snapshotStartCounts, verifyEndFactor } from './verify.js';
 import { buildLiveStateBlock } from './live_state.js';
 import { MemoryStore } from './memory_store.js';
@@ -648,9 +648,10 @@ export class Agent {
                 console.warn('finalizeSubagent (cancel) failed:', e?.message || e);
             }
         }
-        // Capture player-driven attempts to the eval DB (best-effort; skipped
-        // during eval sessions, which loop.sh logs). logPlayAttempt never throws.
-        if (kind === 'finish') logPlayAttempt(this, task);
+        // Auto play-attempt logging MUTED 2026-06-09: superseded by the curated,
+        // human-verified gold DB (gold_attempts table; added only on command via
+        // eval/gold_add.py). Re-enable by restoring this call + the import above.
+        // if (kind === 'finish') logPlayAttempt(this, task);
 
         // Side-chat follow-up: when a task finishes, address any player
         // messages we deferred earlier. Synthetic system input drives the
