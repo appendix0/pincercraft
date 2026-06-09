@@ -52,4 +52,35 @@ ok('already-delta end_factor → unchanged');
     ok('end-to-end: "+30" delta finishes at +30 from start (3→33), not at 30 total');
 }
 
+// 7. The #264 FALSE-DONE: a VERBOSE end_factor the strict matchers can't parse
+//    must still canonicalize to "+30 raw_iron" (it used to fall through to an
+//    honor-system finish, letting the bot quit at 22/49).
+{
+    const verbose = 'at least 30 raw_iron in inventory (currently have 19, need 30 more so total 49+)';
+    assert.strictEqual(
+        normalizeQuantityEndFactor(verbose, 'ok go get 30 more raw irons'),
+        '+30 raw_iron');
+    ok('verbose unparseable end_factor + "30 more" → "+30 raw_iron" (the #264 false-done)');
+}
+
+// 8. The canonicalized "+30" is now MEASURABLE — what was honor-system (#264).
+//    Start 19; done only at +30 (49), NOT at the bogus 22 the bot quit on.
+{
+    const ef = normalizeQuantityEndFactor(
+        'at least 30 raw_iron in inventory (currently have 19, need 30 more so total 49+)',
+        'ok go get 30 more raw irons');
+    const task = { endFactor: ef, startItemCount: 19 };
+    assert.strictEqual(verifyEndFactor(botWith({ raw_iron: 22 }), task).programmatic, true); // measurable now
+    assert.strictEqual(verifyEndFactor(botWith({ raw_iron: 22 }), task).verified, false);    // 22−19=3 < 30 → NOT done
+    assert.strictEqual(verifyEndFactor(botWith({ raw_iron: 49 }), task).verified, true);     // 49−19=30 ✓ → done
+    ok('#264 now measurable: not done at 22 (was a false-done), done at exactly +30 (49)');
+}
+
+// 9. Verbose but LLM already did absolute math, no "more" cue → left untouched.
+{
+    const verbose = 'reach 49 raw_iron in inventory total';
+    assert.strictEqual(normalizeQuantityEndFactor(verbose, 'mine up to 49 iron'), verbose);
+    ok('no relative cue → verbose absolute left untouched');
+}
+
 console.log(`\nALL PASS (${pass} checks)`);

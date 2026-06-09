@@ -83,22 +83,51 @@ function matchCountIncrease(text) {
     return null;
 }
 
+// Tolerant item extractor for a VERBOSE end_factor the strict matchers can't
+// parse (e.g. "at least 30 raw_iron in inventory (currently have 19, need 30
+// more so total 49+)"). Finds the item token the LLM named — preferring the one
+// sitting right after the delta count ("30 raw_iron"), else the first plausible
+// "<n> <item>" pair — skipping quantity words. Underscored names only (what the
+// planner emits), so the result is countable by inventoryCount.
+const QTY_STOPWORDS = new Set(['more', 'additional', 'extra', 'total', 'blocks', 'block',
+    'items', 'item', 'of', 'in', 'inventory', 'so', 'need', 'currently', 'have']);
+function extractItemForDelta(endFactor, delta) {
+    const text = normalize(endFactor);
+    let m;
+    const near = new RegExp(`\\b${delta}\\+?\\s+([a-z][a-z0-9_]*)`, 'g');
+    while ((m = near.exec(text))) { if (!QTY_STOPWORDS.has(m[1])) return m[1]; }
+    const any = /\b\d+\+?\s+([a-z][a-z0-9_]*)/g;
+    while ((m = any.exec(text))) { if (!QTY_STOPWORDS.has(m[1])) return m[1]; }
+    return null;
+}
+
 // Deterministic metric-target normalizer. When the player asked for "N MORE" (a
-// delta) but the end_factor was encoded as an absolute count ("30 raw_iron in
-// inventory"), rewrite it to the "+N item" delta form — which verifyEndFactor
-// already checks against the task-start snapshot. So "get 30 more raw_iron"
-// finishes at +30 from where the bot started, not at 30 total. No-op when the
-// player gave no relative cue, the end_factor isn't a parseable absolute count,
-// it's already a delta, or N doesn't match the count (the LLM already did the
-// math, e.g. "had 3, set target 33").
+// delta) but the end_factor was encoded otherwise, rewrite it to the "+N item"
+// delta form — which verifyEndFactor checks against the task-start snapshot. So
+// "get 30 more raw_iron" finishes at +30 from where the bot started, not 30
+// total, AND becomes machine-measurable (the verbose form falls through every
+// strict matcher to an honor-system finish — the #264 false-done). No-op when
+// the player gave no relative cue, it's already a delta, or the LLM already did
+// the absolute math (a clean count that differs from N, e.g. "had 3 → 33").
 export function normalizeQuantityEndFactor(endFactor, playerMessage) {
     if (!endFactor) return endFactor;
     const rel = parseRelativeQuantity(playerMessage);
     if (!rel) return endFactor;
     if (/^\s*\+|increased|\bnew\b/i.test(endFactor)) return endFactor; // already a delta
     const target = parseEndFactorTarget({ endFactor });
-    if (!target || target.count !== rel.delta) return endFactor;
-    return `+${target.count} ${target.item}`;
+    if (target) {
+        // Strict parse worked: rewrite only when it's the SAME N. A different
+        // clean count means the LLM already computed the absolute target — keep it.
+        if (target.count === rel.delta) return `+${target.count} ${target.item}`;
+        return endFactor;
+    }
+    // Strict parse FAILED — verbose, unmeasurable end_factor. The player's "N
+    // more" is the ground-truth intent, so canonicalize to "+N item" using the
+    // item the LLM named. This keeps the metric in CODE's hands rather than
+    // letting it fall through to an honor-system finish.
+    const item = extractItemForDelta(endFactor, rel.delta);
+    if (!item) return endFactor;
+    return `+${rel.delta} ${item}`;
 }
 
 // Best-effort PRIMARY goal item + count from a task's end_factor, reusing the
