@@ -1,6 +1,15 @@
 {
-    "name": "mindcraft",
+    "name": "pincercraft",
+    "version": "1.0.0",
+    "description": "A Mindcraft fork with a deterministic harness under the LLM — the bot can't guess its inventory, can't fake a finished task, and improves itself on a measured loop.",
     "type": "module",
+    "private": true,
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/appendix0/pincercraft.git"
+    },
+    "homepage": "https://github.com/appendix0/pincercraft#readme",
     "dependencies": {
         "@anthropic-ai/sdk": "^0.17.1",
         "@cerebras/cerebras_cloud_sdk": "^1.46.0",
