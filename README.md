@@ -30,12 +30,15 @@ Inventory counts, *"can I mine this?"*, the recipe gap, *"is this task actually 
 
 ## What makes it different
 
-- 🧠 **A deterministic harness.** Proprioception + recipe math + gates. Try to craft a diamond axe with zero diamonds and it stops you, offers the wooden one, and moves on. — [`live_state.js`](src/agent/live_state.js), [`verify.js`](src/agent/verify.js)
-- ⚡ **Event-driven orchestrator.** Thinks when something changes, then parks. No burst loop, no "my brain disconnected." — [`orchestrator_v2.js`](src/agent/orchestrator_v2.js)
-- 📋 **Queue + Plan Mode.** Talk mid-task without a race. Big builds get decomposed into a plan you approve before it touches a block.
-- 📖 **A Code of Conduct it can't forget.** The rules live in a book on a lectern *in the world*. Edit it in vanilla Minecraft; the bot obeys within ~2s.
-- 🔁 **It improves itself.** An eval loop invents tasks, scores them, and writes patches to `src/` — on a branch. We still read them before merging. Usually.
-- 🔍 **Honest grading.** Success is graded from world state, never the bot's word. It has lied ("done!" — 0 blocks moved). The grader caught it every time.
+🧠 **It can't lie to itself.** The hard facts — inventory counts, *"can I mine this?"*, the recipe gap, whether a task is actually finished — are computed in code every turn and handed to the model. So when it reaches for a diamond axe with zero diamonds, the bot catches it before the swing, points it at the wooden one, and carries on. The LLM owns the plan; it never gets to guess the facts. → [`live_state.js`](src/agent/live_state.js), [`verify.js`](src/agent/verify.js)
+
+⚡ **It thinks, then shuts up.** Stock Mindcraft re-prompts the model on every new line and bursts itself straight into a rate limit. PincerCraft wakes the model only when something actually changed — a chat message, a finished action, a mob with bad intentions — then parks until the next one. Cheaper, calmer, and no more "my brain disconnected." → [`orchestrator_v2.js`](src/agent/orchestrator_v2.js)
+
+📋 **It plans before it digs.** Talk to it mid-task and your words slot into a queue instead of starting a race. Hand it something big and it breaks the job into steps, posts the plan to chat, and waits for your "go" before touching a single block. Small stuff just runs — planning is reserved for builds that actually need it.
+
+📖 **Its rulebook lives in the world.** The bot's code of conduct is a writable book on a lectern inside Minecraft, not a config file you forget exists. Edit the book in vanilla MC and the bot re-reads it within ~2 seconds — no restart, no redeploy. Tell it "don't touch my chests" once and it holds the line, even hours deep into a conversation.
+
+🔁 **It grades and improves itself.** A loop invents tasks, runs them, and scores success from the actual world state — never the bot's self-report, which has cheerfully announced "done!" with zero blocks moved. When it finds a weak spot it writes a fix to `src/` on a branch and stops for a human. We still read them before merging. Usually.
 
 ## Stock Mindcraft vs PincerCraft
 
@@ -61,16 +64,17 @@ npm start                         # profile is set in settings.js
 - Ships an `nvidia` profile (`profiles/nvidia.json`) for the free [build.nvidia.com](https://build.nvidia.com) endpoint (Llama 3.3 70B).
 - The self-improvement loop lives in [`eval/`](eval/); the deterministic graders in [`evals/`](evals/).
 
-## Credits
+## Based on Mindcraft
 
-Built on [kolbytn/mindcraft](https://github.com/kolbytn/mindcraft), which wires LLMs to Minecraft via [Mineflayer](https://prismarinejs.github.io/mineflayer/). All credit for the foundation goes to the Mindcraft authors.
+This is a fork of [kolbytn/mindcraft](https://github.com/kolbytn/mindcraft), which provides the core integration of LLMs with Minecraft via [Mineflayer](https://prismarinejs.github.io/mineflayer/). All credit for the foundation goes to the Mindcraft authors. License is MIT, preserved verbatim — see [LICENSE](LICENSE).
 
-Pull upstream updates with:
+To pull upstream updates:
 
 ```bash
-git fetch upstream && git merge upstream/develop
+git fetch upstream
+git merge upstream/develop
 ```
 
 ## License
 
-MIT — same as upstream. See [LICENSE](LICENSE).
+MIT — same as upstream Mindcraft.
