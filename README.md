@@ -4,7 +4,7 @@
   <img src="banner.webp" alt="PincerCraft — a Minecraft bot that can't lie to itself" width="640">
 </p>
 
-<p align="center"><b>A Minecraft bot that can't lie to itself.</b><br>A Mindcraft fork with a deterministic harness under the LLM.</p>
+<p align="center"><b>A Minecraft bot that can't lie to itself.</b><br>A Mindcraft fork rebuilt Claude-Code-style: a deterministic harness under the LLM.</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT">
@@ -26,7 +26,7 @@ PincerCraft fixes that with one rule:
 
 > **Code owns the facts. The LLM owns the plan.**
 
-Inventory counts, *"can I mine this?"*, the recipe gap, *"is this task actually done?"* — computed every turn and handed to the model. It doesn't get to guess. The bot can't lie to itself about what it holds or what it finished, and it gets measurably better over time.
+Inventory counts, *"can I mine this?"*, the recipe gap, *"is this task actually done?"* — computed every turn and handed to the model. It doesn't get to guess. That's the discipline of a coding agent like Claude Code — check the ground truth before you act, gate anything destructive, plan before you execute — pointed at a Minecraft bot. The bot can't lie to itself about what it holds or what it finished, and it gets measurably better over time.
 
 ## What makes it different
 
