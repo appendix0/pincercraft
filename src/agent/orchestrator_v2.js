@@ -49,6 +49,7 @@ import { getRegistry } from './tool_registry.js';
 import { checkPlayerPermission } from './permissions.js';
 import { matchesToolFilter } from './subagent_v2.js';
 import * as world from './library/world.js';
+import settings from './settings.js';
 
 // Acquisition-class actions: their whole point is to change inventory. If one
 // runs with the SAME args and produces NO inventory change, repeating it is the
@@ -60,6 +61,29 @@ const ACQUISITION_ACTIONS = new Set([
 ]);
 
 const LOOP_GUARD_MSG = (name) => `[loop guard] ${name} just ran with no change to your inventory — repeating it will not help. STOP repeating the same action. Check your live INVENTORY: if the goal item is already there, !finishTask now. If not, this approach is failing — do something DIFFERENT (relocate, craft the missing tier, or ask the player). Do not call ${name} again with the same plan.`;
+
+// Flatten an orchestrator neutral turn into the { role, content:string } shape
+// that promptCompact → stringifyTurns expects. tool_result turns map to a
+// user-side line; assistant tool calls are rendered compactly so the summary
+// keeps the gist of what the bot actually did.
+function flattenForSummary(turn) {
+    if (turn.role === 'assistant') {
+        const calls = (turn.toolCalls || [])
+            .map(tc => `${tc.name}(${JSON.stringify(tc.args || {})})`)
+            .join(', ');
+        const parts = [];
+        if (turn.text) parts.push(turn.text);
+        if (calls) parts.push(`[called: ${calls}]`);
+        return { role: 'assistant', content: parts.join(' ') || '(no output)' };
+    }
+    if (turn.role === 'tool_result') {
+        const results = (turn.toolResults || [])
+            .map(tr => `${tr.name}${tr.isError ? ' ERROR' : ''}: ${String(tr.content ?? '')}`)
+            .join('; ');
+        return { role: 'user', content: `[results] ${results}` };
+    }
+    return { role: 'user', content: typeof turn.content === 'string' ? turn.content : '' };
+}
 
 export class OrchestratorV2 {
     // promptWithTools is injected so the orchestrator stays test-friendly
@@ -105,10 +129,12 @@ export class OrchestratorV2 {
         this.invoking = true;
         try {
             this._appendEvent(event);
+            await this._compactIfNeeded();
             await this._invokeUntilParked();
             while (this.pendingEvents.length > 0) {
                 const next = this.pendingEvents.shift();
                 this._appendEvent(next);
+                await this._compactIfNeeded();
                 await this._invokeUntilParked();
             }
         } finally {
@@ -156,6 +182,59 @@ export class OrchestratorV2 {
                 break;
             default:
                 console.warn('[orch] unknown event type', event.type);
+        }
+    }
+
+    // Auto-compaction for the orchestrator's OWN neutral history. The v1
+    // history.compactIfNeeded never runs on this path (agent.history is
+    // archival; THIS array is what the LLM actually sees), so under v2 it grew
+    // unbounded. Folds older turns into one summary turn via the existing
+    // promptCompact, keeping the recent N.
+    //
+    // Threshold-gated so it fires RARELY: each compaction rewrites the front of
+    // the history, which busts the prompt cache and forces a rebuild. Compacting
+    // every turn would defeat caching — so we only summarize once the history is
+    // genuinely large, the same trade Claude Code makes with occasional /compact.
+    // Called at invoke boundaries (after the triggering event is appended, so
+    // the tail is a user turn), never mid-tool-loop.
+    async _compactIfNeeded() {
+        const threshold = settings.compaction_threshold_tokens ?? 3000;
+        const keepRecent = settings.compaction_keep_recent ?? 8;
+        if (this.history.length <= keepRecent) return false;
+        const estimated = Math.ceil(JSON.stringify(this.history).length / 4);
+        if (estimated < threshold) return false;
+
+        const toCompact = this.history.slice(0, this.history.length - keepRecent);
+        const recent = this.history.slice(this.history.length - keepRecent);
+        // Don't keep a tool_result whose matching tool_use just got compacted
+        // away — Anthropic 400s on an orphaned tool_result. Pull only leading
+        // tool_result turns back into the compacted chunk. A leading assistant
+        // turn is fine to keep: the prepended summary is user-role, so
+        // user(summary) → assistant is valid and that assistant's tool_result
+        // is the next kept turn. This preserves ~keepRecent turns of real
+        // detail instead of collapsing the window.
+        while (recent.length > 0 && recent[0].role === 'tool_result') {
+            toCompact.push(recent.shift());
+        }
+        if (toCompact.length === 0) return false;
+
+        console.log(`[orch compact] turns=${this.history.length} tokens≈${estimated} threshold=${threshold} → compacting ${toCompact.length}, keeping ${recent.length}`);
+        try {
+            const summary = await this.agent.prompter.promptCompact(toCompact.map(flattenForSummary));
+            if (summary) {
+                this.history = [
+                    { role: 'user', content: `[compacted ${toCompact.length} older turns]\n${summary}` },
+                    ...recent,
+                ];
+            } else {
+                console.warn('[orch compact] empty summary; dropping oldest turns as fallback');
+                this.history = recent;
+            }
+            console.log(`[orch compact] done. new turn count=${this.history.length}`);
+            return true;
+        } catch (e) {
+            console.error('[orch compact] failed:', e?.message || e);
+            return false;
         }
     }
 
