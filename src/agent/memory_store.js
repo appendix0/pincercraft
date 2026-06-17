@@ -51,6 +51,25 @@ function normalize(text) {
         .replace(/^\n+|\n+$/g, '');
 }
 
+// Read-on-write dedup helper: tokenize for word-overlap. Drops short tokens,
+// bare numbers (noisy coords), and common filler so only salient terms remain.
+const STOPWORDS = new Set((
+    'the a an and or of to in on at for is are was were be been being my me i you your yours this that ' +
+    'these those with as it its from when then they them their we us our he she should can could would ' +
+    'will do does did not no nor only always never if so but because since while until about after before ' +
+    'between both through during again above below over under into onto out off up down here there where ' +
+    'what who how why also back now once just too very more most other some any all each such than own same ' +
+    'still even around near beside front use used using get got make made go going like likes want wants ' +
+    'told tell gave give keep carry said new old big small general friendly spare one two'
+).split(/\s+/));
+function memTokens(text) {
+    return new Set(
+        String(text || '').toLowerCase()
+            .split(/[^a-z0-9]+/)
+            .filter(w => w.length >= 3 && !/^\d+$/.test(w) && !STOPWORDS.has(w))
+    );
+}
+
 // Phase F4: load all .md files from a layer dir into [{slug, summary, body}].
 // Used by the prompter to assemble $MEMORY across server / bot / player layers.
 function readLayer(dir) {
@@ -173,6 +192,42 @@ export class MemoryStore {
         this._writeIndex(lines.join('\n') + '\n');
     }
 
+    // Existing topics that share salient terms with (slug, content). Word-overlap
+    // over slug+summary, with a document-frequency filter so boilerplate tokens
+    // that appear in > half the topics (e.g. the owner-name prefix on nearly every
+    // slug) don't match everything. No LLM, no embeddings. Returns up to `max`,
+    // strongest overlap first.
+    _relatedTopics(slug, content, max = 4) {
+        let files = [];
+        try { files = fs.readdirSync(this.dir).filter(f => f.endsWith('.md') && f !== 'MEMORY.md'); }
+        catch { return []; }
+        if (files.length <= 1) return [];
+        const docs = files.map(f => {
+            const s = f.replace(/\.md$/, '');
+            let summary = '';
+            try { summary = fs.readFileSync(path.join(this.dir, f), 'utf8').split('\n')[0].replace(/^#+\s*/, '').trim(); }
+            catch { /* ignore */ }
+            return { slug: s, summary, tokens: memTokens(s + ' ' + summary) };
+        });
+        const df = new Map();
+        for (const d of docs) for (const tk of d.tokens) df.set(tk, (df.get(tk) || 0) + 1);
+        // Only judge "common" once there are enough topics for it to mean anything.
+        const useDF = docs.length > 5;
+        const informative = (tk) => !useDF || (df.get(tk) || 0) <= Math.ceil(docs.length / 2);
+        const newTokens = new Set([...memTokens(slug + ' ' + content)].filter(informative));
+        if (newTokens.size === 0) return [];
+        return docs
+            .filter(d => d.slug !== slug)
+            .map(d => ({
+                slug: d.slug,
+                summary: truncAtWord(d.summary, SUMMARY_CHAR_CAP),
+                score: [...d.tokens].filter(tk => informative(tk) && newTokens.has(tk)).length,
+            }))
+            .filter(d => d.score >= 1)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, max);
+    }
+
     write(topic, content) {
         const t = this._topicPath(topic);
         if (!t) return {ok: false, message: 'Topic name empty or invalid — rejected.'};
@@ -192,7 +247,17 @@ export class MemoryStore {
         try { fs.writeFileSync(t.path, content + '\n'); }
         catch (e) { return {ok: false, message: `Failed to write memory: ${e?.message || e}`}; }
         this._rebuildIndex();
-        return {ok: true, message: `${exists ? 'Updated' : 'Saved'} memory "${t.slug}".`, slug: t.slug};
+        // Read-on-write dedup: surface existing topics that overlap this one so the
+        // model reconciles duplicates/contradictions instead of silently piling them
+        // up (e.g. two chest memories with disagreeing coords). Code finds them; the
+        // LLM judges whether to merge, !forget, or ask the player.
+        const related = this._relatedTopics(t.slug, content);
+        let message = `${exists ? 'Updated' : 'Saved'} memory "${t.slug}".`;
+        if (related.length) {
+            const list = related.map(r => `"${r.slug}" — ${r.summary}`).join('; ');
+            message += ` ⚠ This may overlap existing memories: ${list}. If one is the SAME thing, update it or !forget the stale one; if their facts disagree (e.g. coordinates), ask the player which is right before trusting either.`;
+        }
+        return {ok: true, message, slug: t.slug, related: related.map(r => r.slug)};
     }
 
     read(topic) {
