@@ -1474,6 +1474,10 @@ export class Agent {
         message = (await handleTranslation(to_translate)).trim() + " " + remaining;
         // newlines are interpreted as separate chats, which triggers spam filters. replace them with spaces
         message = message.replaceAll('\n', ' ');
+        // Strip emoji/pictographs — they render as broken glyphs and wreck the
+        // in-game font. A hard formatting rule, enforced in code so it can't slip
+        // through the LLM. Em/en dashes and normal punctuation are kept.
+        message = message.replace(/[\p{Extended_Pictographic}\u200d\uFE0F\u20E3]/gu, '').replace(/ {2,}/g, ' ').trim();
 
         // PATCHED: always use public chat when chat_ingame=true, regardless of only_chat_with.
         // only_chat_with is still respected for INPUT filtering (in respondFunc above).

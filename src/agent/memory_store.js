@@ -255,7 +255,7 @@ export class MemoryStore {
         let message = `${exists ? 'Updated' : 'Saved'} memory "${t.slug}".`;
         if (related.length) {
             const list = related.map(r => `"${r.slug}" — ${r.summary}`).join('; ');
-            message += ` ⚠ This may overlap existing memories: ${list}. If one is the SAME thing, update it or !forget the stale one; if their facts disagree (e.g. coordinates), ask the player which is right before trusting either.`;
+            message += ` Heads up — this may overlap existing memories: ${list}. If one is the SAME thing, update it or !forget the stale one; if their facts disagree (e.g. coordinates), ask the player which is right before trusting either.`;
         }
         return {ok: true, message, slug: t.slug, related: related.map(r => r.slug)};
     }
