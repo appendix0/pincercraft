@@ -5,6 +5,29 @@ import { findMissingToolsInPrompt, MISSING_TOOL_REJECT, findRedundantFetchInProm
 import { verifyEndFactor } from '../verify.js';
 
 
+// The player currently directing me (Floodgate '.'-prefix aware). I resolve
+// "this bed / this chest" relative to where the OWNER is standing/pointing, so
+// re-designating a spot overwrites my memory with the coordinate THEY mean —
+// not a stale remembered spot, and not whatever happens to be nearest me.
+function speakerPosition(agent) {
+    const name = agent.last_sender;
+    if (!name) return null;
+    const e = agent.bot.players[name]?.entity ?? agent.bot.players['.' + name]?.entity;
+    return e?.position ?? null;
+}
+
+// Nearest block satisfying `predicate(name)` to a reference point `ref`.
+// Returns { pos, name } or null. Used to determine the exact block the owner is
+// pointing at before overwriting the remembered place with its coordinate.
+function nearestBlockToRef(agent, predicate, maxDistance, ref) {
+    const positions = agent.bot.findBlocks({ matching: (b) => predicate(b.name), maxDistance, count: 128 });
+    if (positions.length === 0) return null;
+    positions.sort((a, b) => ref.distanceTo(a) - ref.distanceTo(b));
+    const pos = positions[0];
+    return { pos, name: agent.bot.blockAt(pos)?.name ?? null };
+}
+
+
 function runAsAction (actionFn, resume = false, timeout = -1) {
     let actionLabel = null;  // Will be set on first use
 
@@ -490,16 +513,45 @@ export const actionsList = [
     {
         name: '!assignBed',
         isConcurrencySafe: true,
-        description: 'Assign the nearest bed as my sleeping bed (persists across reboots). Use when the owner shows me which bed is mine.',
+        description: "(Re)assign my bed to the one the owner is showing me — OVERWRITES my remembered bed (persists across reboots). I determine the bed nearest the owner (the one they're standing by / pointing at) and write ITS coordinate to memory, replacing any stale bed. Use whenever the owner tells me a (different) bed is mine.",
         perform: function (agent) {
-            const beds = agent.bot.findBlocks({ matching: (b) => b.name.includes('bed'), maxDistance: 16, count: 1 });
-            if (beds.length === 0) {
+            const ref = speakerPosition(agent) ?? agent.bot.entity.position;
+            const found = nearestBlockToRef(agent, (n) => n.endsWith('_bed'), 16, ref);
+            if (!found) {
                 return `No bed nearby to assign. Stand next to the bed you want me to use and try again.`;
             }
-            const b = beds[0];
-            agent.memory_bank.rememberPlace('bed', b.x, b.y, b.z);
-            return `Got it — assigned the bed at (${b.x}, ${b.y}, ${b.z}) as mine. I'll sleep there from now on.`;
+            const { pos, name } = found;
+            agent.memory_bank.rememberPlace('bed', pos.x, pos.y, pos.z);
+            const color = name?.endsWith('_bed') ? name.slice(0, -4).replace(/_/g, ' ') : 'this';
+            return `Got it — overwrote my bed to the ${color} bed at (${pos.x}, ${pos.y}, ${pos.z}). I'll sleep there from now on.`;
         }
+    },
+    {
+        name: '!assignChest',
+        isConcurrencySafe: true,
+        description: "(Re)assign my chest to the one the owner is showing me — OVERWRITES my remembered chest (persists across reboots). I determine the chest nearest the owner (the one they're standing on / pointing at) and write ITS coordinate to memory, replacing any stale chest. Use whenever the owner tells me a (different) chest is mine.",
+        perform: function (agent) {
+            const ref = speakerPosition(agent) ?? agent.bot.entity.position;
+            const found = nearestBlockToRef(agent, (n) => n === 'chest' || n === 'trapped_chest', 16, ref);
+            if (!found) {
+                return `No chest nearby to assign. Stand on/next to the chest you want me to use and try again.`;
+            }
+            const { pos } = found;
+            agent.memory_bank.rememberPlace('my-chest', pos.x, pos.y, pos.z);
+            return `Got it — overwrote my chest to the one at (${pos.x}, ${pos.y}, ${pos.z}). I'll go there for my chest from now on.`;
+        }
+    },
+    {
+        name: '!goToChest',
+        description: 'Go to my assigned chest. If no chest is assigned, asks the owner to show me one (does NOT pick a random nearest chest).',
+        perform: runAsAction(async (agent) => {
+            const pos = agent.memory_bank.recallPlace('my-chest');
+            if (!pos) {
+                skills.log(agent.bot, `There's no chest assigned to me yet — stand by the chest you want me to use and tell me to assign it.`);
+                return;
+            }
+            await skills.goToPosition(agent.bot, pos[0], pos[1], pos[2]);
+        })
     },
     {
         name: '!stay',
