@@ -1773,8 +1773,7 @@ export async function goToNearestBlock(bot, blockType,  min_distance=2, range=64
         return false;
     }
     log(bot, `Found ${blockType} at ${block.position}. Navigating...`);
-    await goToPosition(bot, block.position.x, block.position.y, block.position.z, min_distance);
-    return true;
+    return await goToPosition(bot, block.position.x, block.position.y, block.position.z, min_distance);
 }
 
 export async function goToNearestEntity(bot, entityType, min_distance=2, range=64) {
@@ -1793,8 +1792,7 @@ export async function goToNearestEntity(bot, entityType, min_distance=2, range=6
     }
     let distance = bot.entity.position.distanceTo(entity.position);
     log(bot, `Found ${entityType} ${distance} blocks away.`);
-    await goToPosition(bot, entity.position.x, entity.position.y, entity.position.z, min_distance);
-    return true;
+    return await goToPosition(bot, entity.position.x, entity.position.y, entity.position.z, min_distance);
 }
 
 export async function goToPlayer(bot, username, distance=3) {
@@ -1831,7 +1829,16 @@ export async function goToPlayer(bot, username, distance=3) {
 
     await goToGoal(bot, goal, true);
 
-    log(bot, `You have reached ${username}.`);
+    // Honest verdict: goToGoal returns even when interrupted (stuck) or when
+    // pathfinding gives up. Falling straight through to "reached you" regardless
+    // is how the bot claimed it arrived when it never moved. Confirm proximity.
+    const dist = player.isValid ? bot.entity.position.distanceTo(player.position) : Infinity;
+    if (dist <= distance + 1) {
+        log(bot, `You have reached ${username}.`);
+        return true;
+    }
+    log(bot, `Did NOT reach ${username}${player.isValid ? ` — still ${dist.toFixed(0)} blocks away` : ''}. Path blocked or I got stuck; do not tell them you arrived.`);
+    return false;
 }
 
 
