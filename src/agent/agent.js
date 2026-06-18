@@ -1482,7 +1482,23 @@ export class Agent {
         if (settings.speak) {
             speak(to_translate, this.prompter.profile.speak_model);
         }
-        if (settings.chat_ingame) { this.bot.chat(message); }
+        if (settings.chat_ingame) {
+            // bot.chat() throws "bot._client.chat is not a function" when called
+            // in the connect/reboot window before minecraft-protocol attaches the
+            // chat helper to a freshly-created _client. openChat is mostly
+            // fire-and-forget (un-awaited), so that throw escaped as an
+            // unhandledRejection (mislogged as [fatal]) and the message was lost.
+            // Only send when the client can actually take chat; otherwise drop it.
+            try {
+                if (typeof this.bot?._client?.chat === 'function') {
+                    this.bot.chat(message);
+                } else {
+                    console.warn('[openChat] client not ready for chat, dropping:', message);
+                }
+            } catch (e) {
+                console.warn('[openChat] bot.chat failed:', e?.message || e);
+            }
+        }
         sendOutputToServer(this.name, message);
     }
 
