@@ -9,6 +9,9 @@ export class ActionManager {
         this.resume_name = '';
         this.last_action_time = 0;
         this.recent_action_counter = 0;
+        // Bumped when stop() force-abandons a wedged action, so a late-settling
+        // zombie can detect it no longer owns the action state (see _executeAction).
+        this._actionGen = 0;
     }
 
     async resumeAction(actionFn, timeout) {
@@ -25,16 +28,37 @@ export class ActionManager {
 
     async stop() {
         if (!this.executing) return;
+        let forced = false;
         const timeout = setTimeout(() => {
-            this.agent.cleanKill('Code execution refused stop after 10 seconds. Killing process.');
+            // A wedged action must NOT kill the process. A reboot here means a
+            // disconnect, a lost task, and the bot "quitting" mid-session — the
+            // standing rule is: stop the task and tell the player honestly, stay
+            // online. So hard-abort the stuck action, drop the task it was on,
+            // report it, and let the wait loop exit.
+            forced = true;
+            const label = this.currentActionLabel || 'that action';
+            console.error(`[stop] '${label}' refused to stop after 10s — abandoning it and stopping the task (no process kill).`);
+            try { this.agent.bot.pathfinder?.setGoal?.(null); } catch { /* best-effort hard stop */ }
+            try { this.agent.requestInterrupt(); } catch {}
+            // Invalidate the wedged action so its late cleanup can't reset state
+            // out from under a newer action (see the _actionGen guard below).
+            this._actionGen++;
+            this.executing = false;
+            this.currentActionLabel = '';
+            this.currentActionFn = null;
+            try {
+                const active = this.agent.task_queue?.tasks?.find(t => String(t.status) === 'in_progress');
+                if (active) this.agent.task_queue.cancelTask(active.id);
+            } catch { /* best-effort */ }
+            try { this.agent.openChat(`I got stuck on ${label} and couldn't finish it, so I stopped that task. What do you want me to do next?`); } catch {}
         }, 10000);
-        while (this.executing) {
+        while (this.executing && !forced) {
             this.agent.requestInterrupt();
             console.log('waiting for code to finish executing...');
             await new Promise(resolve => setTimeout(resolve, 300));
         }
         clearTimeout(timeout);
-    } 
+    }
 
     cancelResume() {
         this.resume_func = null;
@@ -60,6 +84,7 @@ export class ActionManager {
 
     async _executeAction(actionLabel, actionFn, timeout = 10) {
         let TIMEOUT;
+        let myGen;
         try {
             if (this.last_action_time > 0) {
                 let time_diff = Date.now() - this.last_action_time;
@@ -95,6 +120,9 @@ export class ActionManager {
             this.executing = true;
             this.currentActionLabel = actionLabel;
             this.currentActionFn = actionFn;
+            myGen = this._actionGen; // captured after stop(); a later force-abandon bumps this
+
+
 
             // timeout in minutes
             if (timeout > 0) {
@@ -104,11 +132,14 @@ export class ActionManager {
             // start the action
             await actionFn();
 
-            // mark action as finished + cleanup
-            this.executing = false;
-            this.currentActionLabel = '';
-            this.currentActionFn = null;
+            // mark action as finished + cleanup. Skip the state reset if stop()
+            // already force-abandoned this action — a newer action owns it now.
             clearTimeout(TIMEOUT);
+            if (this._actionGen === myGen) {
+                this.executing = false;
+                this.currentActionLabel = '';
+                this.currentActionFn = null;
+            }
 
             // get bot activity summary
             let output = this.getBotOutputSummary();
@@ -124,10 +155,12 @@ export class ActionManager {
             // return action status report
             return { success: true, message: output, interrupted, timedout };
         } catch (err) {
-            this.executing = false;
-            this.currentActionLabel = '';
-            this.currentActionFn = null;
             clearTimeout(TIMEOUT);
+            if (this._actionGen === myGen) {
+                this.executing = false;
+                this.currentActionLabel = '';
+                this.currentActionFn = null;
+            }
 
             // A PathStopped rejection is the expected result of one action
             // preempting another: stop() -> requestInterrupt() -> pathfinder.stop()
