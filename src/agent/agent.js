@@ -128,17 +128,18 @@ export class Agent {
                 const fs = await import('fs');
                 const queuePath = `./bots/${this.name}/tasks.json`;
                 if (fs.existsSync(queuePath)) {
-                    // Prune stale pending/done but keep the interrupted in_progress
-                    // task so an involuntary restart resumes the work instead of
-                    // losing it (see pruneQueueOnStart). Toggle off with
-                    // keep_in_progress_task_on_restart:false to restore full wipe.
+                    // If a task was in_progress, restart interrupted an active
+                    // mission → keep it AND its pending downstream steps so the
+                    // whole plan resumes (not just the one running step). An idle
+                    // queue is stale → wipe it (see pruneQueueOnStart). Toggle off
+                    // with keep_in_progress_task_on_restart:false to restore full wipe.
                     const pruned = pruneQueueOnStart(
                         fs.readFileSync(queuePath, 'utf8'),
                         { keepInProgress: settings.keep_in_progress_task_on_restart !== false }
                     );
                     fs.writeFileSync(queuePath, JSON.stringify(pruned, null, 2));
                     const kept = pruned.tasks.length;
-                    console.log(`[start] queue pruned (wipe_queue_on_start=true): ${kept ? `kept ${kept} in-progress task(s)` : 'cleared all pending'}, nextId kept at ${pruned.nextId} — memory kept`);
+                    console.log(`[start] queue pruned (wipe_queue_on_start=true): ${kept ? `kept ${kept} task(s) of interrupted mission` : 'cleared all pending'}, nextId kept at ${pruned.nextId} — memory kept`);
                 }
             } catch (e) {
                 console.warn('[start] queue prune failed:', e?.message || e);

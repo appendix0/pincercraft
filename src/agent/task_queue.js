@@ -23,13 +23,17 @@ const VAGUE_END_FACTOR_PATTERNS = [
     /\bsome\s+(?:more|of)\b/i,
 ];
 
-// On (re)start the queue is pruned Claude-Code style: stale PENDING/DONE tasks
-// must not auto-resume. But the single IN_PROGRESS task is work that a crash or
-// disconnect interrupted — dropping it is pure data loss, and because restarts
-// here are mostly involuntary and frequent it means a multi-step task can never
-// finish (2026-06-06 diamond run restarted ~14×, re-deriving from scratch each
-// time). So keep in_progress, drop the rest. nextId stays monotonic so IDs never
-// collide across sessions in queue.log (the eval system of record).
+// On (re)start the queue is pruned Claude-Code style: a queue left IDLE (no
+// in_progress task) is stale leftovers and must not auto-resume → wipe it.
+// But an in_progress task means a crash/disconnect interrupted an ACTIVE
+// mission, and restarts here are mostly involuntary and frequent — so we keep
+// the in_progress task AND its pending downstream steps. Dropping the pending
+// steps truncated multi-step goals: "make an iron pickaxe" decomposes into
+// mine → smelt → craft, and a restart while smelting kept #269 (smelt) but
+// wiped the pending #270 (craft), so the bot "finished" after smelting and
+// never crafted the pickaxe (2026-06-18). DONE tasks are always dropped.
+// nextId stays monotonic so IDs never collide across sessions in queue.log
+// (the eval system of record).
 export function pruneQueueOnStart(rawData, { keepInProgress = true } = {}) {
     let nextId = 1;
     let tasks = [];
@@ -37,7 +41,10 @@ export function pruneQueueOnStart(rawData, { keepInProgress = true } = {}) {
         const data = typeof rawData === 'string' ? JSON.parse(rawData) : (rawData || {});
         nextId = data.nextId || 1;
         if (keepInProgress && Array.isArray(data.tasks)) {
-            tasks = data.tasks.filter(t => t && String(t.status) === 'in_progress');
+            const hasActive = data.tasks.some(t => t && String(t.status) === 'in_progress');
+            // Active mission → keep in_progress + pending (drop done) so the whole
+            // plan resumes. Idle queue → wipe all (anti-stale-resume, unchanged).
+            if (hasActive) tasks = data.tasks.filter(t => t && String(t.status) !== 'done');
         }
     } catch { /* unreadable queue → fresh start */ }
     return { nextId, tasks };
