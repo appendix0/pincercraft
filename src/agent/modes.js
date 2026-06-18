@@ -362,11 +362,15 @@ async function execute(mode, agent, func, timeout=-1) {
     mode.active = false;
     console.log(`Mode ${mode.name} finished executing, code_return: ${code_return.message}`);
 
-    let should_reprompt = 
+    let should_reprompt =
         interrupted_action && // it interrupted a previous action
         !agent.actions.resume_func && // there is no resume function
-        !agent.self_prompter.isActive() && // self prompting is not on
-        !code_return.interrupted; // this mode action was not interrupted by something else
+        !agent.self_prompter.isActive(); // self prompting is not on
+    // NOTE: we deliberately no longer require !code_return.interrupted. When the
+    // recovery action is itself interrupted (chained stuck → unstuck → stuck),
+    // the ORIGINAL action still did not complete — and suppressing the notice in
+    // that case is exactly how an interrupted attack got narrated as a kill.
+    // Always tell the planner the action did not finish.
 
     if (should_reprompt) {
         // auto prompt to respond to the interruption
@@ -383,6 +387,17 @@ async function execute(mode, agent, func, timeout=-1) {
             const counts = world.getInventoryCounts(agent.bot);
             const invStr = Object.entries(counts).map(([n, c]) => `${n} x${c}`).join(', ') || 'empty';
             regrounding += ` Your inventory RIGHT NOW: ${invStr}. Re-check the end_factor against this before any claim — never tell the player you have or finished something your inventory does not show. Then resume.`;
+            // Kill/hit goals leave no inventory trace, so the line above can't
+            // catch a confabulated "I killed it". Add live ground truth: the
+            // target is almost always still standing right there.
+            if (/attack|kill|hunt|hit/i.test(interrupted_action)) {
+                const mobs = [];
+                for (const e of world.getNearbyEntities(agent.bot, 16)) {
+                    if (e === agent.bot.entity || e.type === 'player' || e.name === 'item') continue;
+                    if (mobs.length < 6) mobs.push(`${e.name}(${e.position.distanceTo(agent.bot.entity.position).toFixed(0)}m)`);
+                }
+                regrounding += ` Living mobs near you RIGHT NOW: ${mobs.length ? mobs.join(', ') : 'none'}. If you were told to kill or hit something and it is still in this list, it is NOT dead — do not claim it is.`;
+            }
         } catch (e) { /* best-effort re-grounding */ }
         agent.enqueue({
             source: role,

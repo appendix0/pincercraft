@@ -364,8 +364,26 @@ export async function attackEntity(bot, entity, kill=true, bareHands=null) {
             console.log('moving to mob...')
             await goToPosition(bot, pos.x, pos.y, pos.z);
         }
+        // bot.attack swings whether or not the target is in reach, so confirm
+        // the hit actually LANDED (target took damage) before reporting it —
+        // otherwise "I hit it" is a guess (the "hit me once" hallucination).
         console.log('attacking mob...')
-        await bot.attack(entity);
+        let hit = false;
+        const onHurt = (e) => { if (e?.id === entity.id) hit = true; };
+        bot.on('entityHurt', onHurt);
+        try {
+            await bot.lookAt(entity.position);
+            await bot.attack(entity);
+            await new Promise(resolve => setTimeout(resolve, 300)); // let the damage event arrive
+        } finally {
+            bot.removeListener('entityHurt', onHurt);
+        }
+        if (hit) {
+            log(bot, `Hit ${entity.name}.`);
+            return true;
+        }
+        log(bot, `Swung at ${entity.name} but it did not connect (out of reach?). Get within ~3 blocks and try again.`);
+        return false;
     }
     else {
         bot.pvp.attack(entity);
@@ -373,12 +391,24 @@ export async function attackEntity(bot, entity, kill=true, bareHands=null) {
             await new Promise(resolve => setTimeout(resolve, 1000));
             if (bot.interrupt_code) {
                 bot.pvp.stop();
+                log(bot, `Attack on ${entity.name} was interrupted — it is NOT dead.`);
                 return false;
             }
         }
-        log(bot, `Successfully killed ${entity.name}.`);
-        await pickupNearbyItems(bot);
-        return true;
+        bot.pvp.stop();
+        // Honest verdict: this loop also exits when the mob FLEES or we lose
+        // track of it, not only when it dies. A death removes the entity from
+        // the world (entityGone → entity.isValid=false); a fleeing mob stays
+        // valid. Only claim a kill when the entity was actually removed — the
+        // old code reported "killed" for any mob that left our 24-block radius,
+        // which is how a horse the bot never reached got reported as killed.
+        if (!entity.isValid) {
+            log(bot, `Successfully killed ${entity.name}.`);
+            await pickupNearbyItems(bot);
+            return true;
+        }
+        log(bot, `Did not kill ${entity.name} — it is still alive (it fled or I lost track of it). Get closer and attack again.`);
+        return false;
     }
 }
 
