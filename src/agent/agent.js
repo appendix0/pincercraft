@@ -1614,11 +1614,18 @@ export class Agent {
     
 
     cleanKill(msg='Killing agent process...', code=1) {
+        // Instrumentation (Issue A): cleanKill previously only wrote msg to
+        // history, so this exit path showed no cause in bot.log. Log it loudly.
+        console.error(`[exit] cleanKill(code=${code}): ${msg}`);
         this.alive = false;
         if (this._heartbeat) clearInterval(this._heartbeat);
         if (this._driveLoop) clearInterval(this._driveLoop);
         this.history.add('system', msg);
-        this.bot.chat(code > 1 ? 'Restarting.': 'Exiting.');
+        // Guard the chat: if we're already disconnected, bot.chat throws
+        // ("bot._client.chat is not a function") and that throw would mask the
+        // exit reason. Don't let it.
+        try { this.bot.chat(code > 1 ? 'Restarting.': 'Exiting.'); }
+        catch (e) { console.error('[exit] cleanKill chat skipped (already disconnected):', e?.message || e); }
         this.history.save();
         process.exit(code);
     }

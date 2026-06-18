@@ -2,6 +2,19 @@ import { Agent } from '../agent/agent.js';
 import { serverProxy } from '../agent/mindserver_proxy.js';
 import yargs from 'yargs';
 
+// --- exit instrumentation (Issue A) ---------------------------------------
+// Several exit paths (cleanKill, the startup catch, library throws) left
+// bot.log with only the parent's "exited with code 1" and no cause. Wrap
+// process.exit so EVERY exit logs its call site, and log the final code on
+// the way out. Pure logging — does not change exit behavior.
+const _realProcessExit = process.exit.bind(process);
+process.exit = (code = 0) => {
+    const stack = (new Error().stack || '').split('\n').slice(2).join('\n');
+    console.error(`[exit] process.exit(${code}) called from:\n${stack}`);
+    return _realProcessExit(code);
+};
+process.on('exit', (code) => console.error(`[exit] agent process terminating with code=${code}`));
+
 // Surface async throws instead of dying silently. Before this, an
 // unhandledRejection inside !newAction code (e.g. mineflayer-pathfinder
 // throwing across an await) terminated the child with no log line; only
