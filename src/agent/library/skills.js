@@ -1284,6 +1284,12 @@ export async function giveToPlayer(bot, itemType, username, num=1) {
         if (collector?.username && collector.username.replace(/^\./, '') === targetName) collected = true;
     };
     bot.on('playerCollect', onCollect);
+    // Suppress the bot's own item_collecting while delivering. Otherwise it
+    // re-grabs the gift the instant it lands and the give silently bounces back
+    // into our inventory — the hallucinated-delivery bug, where giveToPlayer
+    // reported success but the bot had re-pocketed the item. Restored in finally.
+    const pausedCollecting = bot.modes?.exists?.('item_collecting') && bot.modes.isOn('item_collecting');
+    if (pausedCollecting) bot.modes.pause('item_collecting');
     try {
         const before = countItem();
         if (before === 0) {
@@ -1306,12 +1312,24 @@ export async function giveToPlayer(bot, itemType, username, num=1) {
         while (!collected && !bot.interrupt_code && Date.now() - waitStart < 2000) {
             await new Promise(resolve => setTimeout(resolve, 250));
         }
-        log(bot, collected
-            ? `${targetName} received ${dropped} ${itemType}.`
-            : `Gave ${dropped} ${itemType} to ${targetName} (dropped at their feet).`);
+        // Honest verdict — NEVER report a give the player didn't get. Re-check
+        // that the items actually STAYED out of our inventory: if they bounced
+        // back (item_collecting, or we walked over the drop), it is NOT a
+        // delivery and we must say so, not claim success.
+        const stillGone = before - countItem();
+        if (collected) {
+            log(bot, `${targetName} received ${dropped} ${itemType}.`);
+            return true;
+        }
+        if (stillGone <= 0) {
+            log(bot, `Failed to give ${itemType} to ${targetName} — the items bounced back into my inventory, so ${targetName} did NOT receive them.`);
+            return false;
+        }
+        log(bot, `Dropped ${stillGone} ${itemType} at ${targetName}'s feet — not confirmed picked up. Do NOT claim ${targetName} has it until your inventory shows it gone for good.`);
         return true;
     } finally {
         bot.removeListener('playerCollect', onCollect);
+        if (pausedCollecting) bot.modes.unpause('item_collecting');
     }
 }
 
