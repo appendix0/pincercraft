@@ -1370,6 +1370,11 @@ export async function goToGoal(bot, goal) {
      * @param {pf.goals.Goal} goal, the goal to navigate to.
      **/
 
+    // Don't begin a fresh pathfind (a 2s path pre-check + up to a 10s think
+    // budget) when an interrupt is already pending — bail so an abort settles
+    // fast instead of grinding out the navigation it was just told to stop.
+    if (bot.interrupt_code) return false;
+
     const nonDestructiveMovements = new pf.Movements(bot);
     // True non-destructive: never break blocks. First-choice movement so the bot
     // walks AROUND terrain instead of digging THROUGH it — faster in open ground
@@ -1616,10 +1621,17 @@ function _autoEquipForBlock(bot, blockName) {
 }
 
 async function _tryGoTo(bot, movements, x, y, z, min_distance) {
+    // Snappier abort: once an interrupt is requested (stop() / self-unstick),
+    // do not start — or escalate to — another pathfinding tier. Without this,
+    // the catch{} below swallowed the PathStopped rejection and smartGoTo ground
+    // through tiers 2 and 3 (each up to a 10s think budget), keeping the action
+    // wedged until the stop grace ran out. Bail immediately, before and after.
+    if (bot.interrupt_code) return false;
     bot.pathfinder.setMovements(movements);
     try {
         await goToGoal(bot, new pf.goals.GoalNear(x, y, z, min_distance));
     } catch {}
+    if (bot.interrupt_code) return false;
     const d = bot.entity.position.distanceTo(new Vec3(x, y, z));
     return d <= min_distance + 1;
 }
