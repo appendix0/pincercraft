@@ -6,8 +6,9 @@ Static facts you should always have. Don't waste turns rediscovering these by tr
 
 - **Crafting table required** for: pickaxes, axes, swords, shovels, hoes, bread, cake, cookies, bows, fishing_rod, shears, shield, bucket, compass, clock, beds, doors, trapdoors, fences, gates, signs, banners, armor (helmet/chestplate/leggings/boots), furnaces.
 - **Crafting table NOT required** (2x2 inventory grid is enough) for: planks (from logs), sticks, torches, ladders, crafting_table itself.
+- **ANY log → planks, ANY planks → sticks — you are NOT limited to oak.** If oak_log is missing, every other log type (spruce, birch, jungle, acacia, dark_oak, cherry, mangrove) crafts into planks (4 planks per log), and every plank type — even mixed types together — crafts into sticks (2 sticks per 2 planks). Never stall or refuse a planks/sticks/wood-tool task just because oak specifically isn't on hand: use whatever logs or planks you have, or gather the nearest log of any type.
 - Before `!craftRecipe(item)` for anything table-required: bot must be within ~4 blocks of a `crafting_table`, OR have one in inventory to place. Otherwise the skill silently fails — your inventory won't change and `!craftRecipe` returns empty output.
-- **Smelting** (iron_ingot, gold_ingot, cooked beef/mutton/chicken/porkchop, glass, smooth_stone) needs a `furnace` within ~4 blocks AND fuel (coal, charcoal, lava bucket, planks, sticks). Same silent-fail mode as crafting tables.
+- **Smelting** (iron_ingot, gold_ingot, cooked beef/mutton/chicken/porkchop, glass, smooth_stone) needs a `furnace` within ~4 blocks AND fuel. **Fuel the furnace with coal** (1 coal smelts 8 items) — if you have coal in your inventory, put it in the furnace before/while smelting; don't stall. Charcoal, planks, or sticks also work if you have no coal. Same silent-fail mode as crafting tables.
 
 ## Tool tiers (pickaxes)
 
