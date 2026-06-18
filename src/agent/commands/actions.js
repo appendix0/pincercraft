@@ -448,12 +448,15 @@ export const actionsList = [
             'num': { type: 'int', description: 'The number of times to smelt the item.', domain: [1, Number.MAX_SAFE_INTEGER] }
         },
         perform: runAsAction(async (agent, item_name, num) => {
-            let success = await skills.smeltItem(agent.bot, item_name, num);
-            if (success) {
-                setTimeout(() => {
-                    agent.cleanKill('Safely restarting to update inventory.');
-                }, 500);
-            }
+            // Upstream mindcraft self-restarted the process here ("Safely
+            // restarting to update inventory.") to work around an old
+            // inventory-desync-after-smelt bug. skills.smeltItem now pulls the
+            // result with furnace.takeOutput()/takeInput()/takeFuel(), so
+            // bot.inventory is already in sync and the restart is unnecessary.
+            // The restart WAS the disconnect loop: every successful smelt killed
+            // the bot mid-mission (the "stopped right after smelting 3 iron"
+            // bug) and the reboot wiped any execute-directly task. Don't kill.
+            await skills.smeltItem(agent.bot, item_name, num);
         })
     },
     {
