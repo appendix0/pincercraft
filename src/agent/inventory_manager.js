@@ -45,6 +45,12 @@ const JUNK_RANK = {
     stone: 6, deepslate: 6, dripstone_block: 6,
 };
 
+// Proactive tidy only drops the genuinely-useless end of JUNK_RANK (mining
+// byproducts and mob trash). Building-useful stone (cobblestone/stone/deepslate,
+// rank >= 5) is left for the near-full ensureSpace path so a furnace or stone-tool
+// craft isn't starved.
+const PROACTIVE_JUNK_MAX_RANK = 4;
+
 export class InventoryManager {
     constructor(agent) {
         this.agent = agent;
@@ -86,6 +92,30 @@ export class InventoryManager {
         return Object.keys(inv)
             .filter(n => !this.isProtected(n) && n in JUNK_RANK)
             .sort((a, b) => JUNK_RANK[a] - JUNK_RANK[b]);
+    }
+
+    // Stacks eligible for proactive tidy: non-protected junk at or below the
+    // genuinely-useless rank cutoff, least-valuable first.
+    _proactiveJunkStacks() {
+        return this._junkStacks().filter(n => JUNK_RANK[n] <= PROACTIVE_JUNK_MAX_RANK);
+    }
+
+    // Cheap gate for the drive-loop reflex — true iff there's useless junk to drop.
+    hasProactiveJunk() {
+        return this._proactiveJunkStacks().length > 0;
+    }
+
+    // Proactively drop genuinely-useless junk (granite/dirt/gravel/rotten_flesh…)
+    // so the bot doesn't hoard stacks it will never use. Discards on the ground
+    // (no chest navigation) to stay non-blocking; protected and task-relevant
+    // items are never touched. Returns the number of stacks dropped.
+    async tidyJunk() {
+        let dropped = 0;
+        for (const name of this._proactiveJunkStacks()) {
+            await skills.discard(this.bot, name, -1);
+            dropped++;
+        }
+        return dropped;
     }
 
     // Free inventory until at least `threshold` slots are empty. Deposits junk to a nearby

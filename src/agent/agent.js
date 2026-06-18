@@ -435,15 +435,17 @@ export class Agent {
     // turns even while mineflayer is still busy).
     // Position-based stuck detector. Polls bot.entity.position once a second
     // and watches for a 5-sample window with <0.6 block max drift while a
-    // *motion-class* action is running (whitelist below). On stuck: /tp the
-    // bot to the player who last spoke to it. Requires op on the server —
-    // without op the /tp is silently dropped and this becomes a no-op.
+    // *motion-class* action is running (whitelist below). On stuck: interrupt
+    // the wedged action so the in-flight pathfinder / collectBlock unwinds and
+    // the orchestrator can re-issue it. It never teleports — an earlier
+    // /tp-to-player recovery yanked the bot onto whoever last spoke and collided
+    // with elbow_room, producing a tp<->move ping-pong that just burned turns.
     //
     // Designed to be high-precision: skips !newAction (Sonnet code-gen
     // freezes the bot for 5-15s legitimately), skips actions where standing
     // still is normal (crafting, smelting, chest ops), and kills itself if
     // it fires 3 times in 5 min — that pattern means something deeper is
-    // wrong and further TPs would just bleed tokens via the system messages.
+    // wrong and further recoveries would just bleed tokens via the system messages.
     _startStuckWatcher() {
         const WINDOW = 5;                 // samples (= 5s at 1Hz)
         const MIN_DRIFT = 0.6;            // blocks
@@ -468,8 +470,8 @@ export class Agent {
             'action:givePlayer',
         ]);
         let samples = [];
-        let lastTpAt = 0;
-        let tpHistory = []; // timestamps; kill-switch trips if length ≥ KILL_THRESHOLD
+        let lastRecoveryAt = 0;
+        let recoveryHistory = []; // timestamps; kill-switch trips if length ≥ KILL_THRESHOLD
         let killed = false;
         this._stuckWatcher = setInterval(() => {
             if (killed || !this.alive || !this.bot || !this.bot.entity || !this.bot.entity.position) return;
@@ -490,16 +492,15 @@ export class Agent {
             }
             if (maxDrift >= MIN_DRIFT) return;
 
-            // Recovery is gated by a shared cooldown + kill-switch below, so the
-            // two paths (TP-to-player vs. self-unstick) can't loop. Don't ever
-            // random-hop: if the bot is stuck, random TPs make things worse
-            // (lose location context, possibly land in lava).
-            const target = this.last_sender;
-
+            // Recovery is gated by a shared cooldown + kill-switch below. We never
+            // teleport: a /tp-to-player recovery yanked the bot onto whoever last
+            // spoke and collided with elbow_room, producing a tp<->move ping-pong.
+            // Instead, interrupt the wedged action so the in-flight pathfinder /
+            // collectBlock unwinds and the orchestrator can re-issue it.
             const now = Date.now();
-            if (now - lastTpAt < COOLDOWN_MS) return;
-            tpHistory = tpHistory.filter(t => now - t < KILL_WINDOW_MS);
-            if (tpHistory.length >= KILL_THRESHOLD) {
+            if (now - lastRecoveryAt < COOLDOWN_MS) return;
+            recoveryHistory = recoveryHistory.filter(t => now - t < KILL_WINDOW_MS);
+            if (recoveryHistory.length >= KILL_THRESHOLD) {
                 killed = true;
                 console.warn(`[stuck] kill-switch: ${KILL_THRESHOLD} recoveries in ${KILL_WINDOW_MS/60000}m — disabling watcher to avoid loop`);
                 try {
@@ -510,37 +511,22 @@ export class Agent {
                 } catch (e) { /* ignore */ }
                 return;
             }
-            lastTpAt = now;
-            tpHistory.push(now);
+            lastRecoveryAt = now;
+            recoveryHistory.push(now);
             samples = [];
 
-            if (target) {
-                const cmd = `/tp ${this.name} ${target}`;
-                console.warn(`[stuck] no drift for ${WINDOW}s during ${label} → ${cmd}`);
-                try {
-                    this.bot.chat(cmd);
-                    this.history.add(
-                        'system',
-                        `[stuck recovery] You were physically frozen for ${WINDOW}s during ${label}. Auto-teleported to ${target}. Re-orient with !nearbyBlocks if needed, then continue or !cancelTask if the goal isn't reachable.`,
-                    );
-                } catch (e) {
-                    console.warn('[stuck] tp failed:', e?.message || e);
-                }
-            } else {
-                // No player to TP to (explore/autonomous mode). Break the wedged
-                // action loose with an interrupt so the in-flight pathfinder /
-                // collectBlock unwinds and the orchestrator can re-issue it,
-                // instead of freezing in place until HARD_CAP.
-                console.warn(`[stuck] no drift for ${WINDOW}s during ${label}, no last_sender → self-unstick (interrupt)`);
-                try {
-                    this.requestInterrupt();
-                    this.history.add(
-                        'system',
-                        `[stuck recovery] You were physically frozen for ${WINDOW}s during ${label} with no player to teleport to. Auto-interrupted the stuck action. Re-orient with !nearbyBlocks, then retry with a different approach (e.g. !searchForBlock with a larger range) or !cancelTask if the goal isn't reachable.`,
-                    );
-                } catch (e) {
-                    console.warn('[stuck] self-unstick failed:', e?.message || e);
-                }
+            // Break the wedged action loose with an interrupt so the in-flight
+            // pathfinder / collectBlock unwinds and the orchestrator can re-issue
+            // it, instead of freezing in place until HARD_CAP.
+            console.warn(`[stuck] no drift for ${WINDOW}s during ${label} → self-unstick (interrupt)`);
+            try {
+                this.requestInterrupt();
+                this.history.add(
+                    'system',
+                    `[stuck recovery] You were physically frozen for ${WINDOW}s during ${label}. Auto-interrupted the stuck action. Re-orient with !nearbyBlocks, then retry with a different approach (e.g. !searchForBlock with a larger range) or !cancelTask if the goal isn't reachable.`,
+                );
+            } catch (e) {
+                console.warn('[stuck] self-unstick failed:', e?.message || e);
             }
         }, 1000);
     }
@@ -594,6 +580,17 @@ export class Agent {
                     .catch(e => console.warn('[drive] space reflex failed:', e?.message || e))
                     .finally(() => { this._freeingSpace = false; });
                 return; // next tick re-evaluates with freed space
+            }
+            // Proactive tidy reflex (deterministic, no LLM): drop genuinely-useless
+            // junk (granite/dirt/gravel/mob trash) before it fills the bag, so the
+            // bot doesn't hoard stacks it will never use. Idle-only and gated on
+            // there actually being junk; protected + task-relevant items are kept.
+            if (inv_mgr && !this._freeingSpace && inv_mgr.hasProactiveJunk()) {
+                this._freeingSpace = true;
+                Promise.resolve(inv_mgr.tidyJunk())
+                    .catch(e => console.warn('[drive] tidy reflex failed:', e?.message || e))
+                    .finally(() => { this._freeingSpace = false; });
+                return; // next tick re-evaluates with a cleaner bag
             }
             const active = this.task_queue.tasks.find(t => t.status === 'in_progress');
             if (!active) return;
