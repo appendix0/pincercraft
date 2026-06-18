@@ -98,11 +98,12 @@ export class OrchestratorV2 {
         this.invoking = false;
         this.pendingEvents = [];
         // Loop-breaker (D) state. _acqLedger maps an acquisition action's
-        // signature -> 'progress' | 'noprogress' (did its last run change the
-        // inventory); _acqStreak counts consecutive acquisition actions that
-        // changed nothing. Both reset when a new user_message arrives.
+        // signature (which now includes the inventory it ran against) ->
+        // 'progress' | 'noprogress'. Keying on inventory means a "no progress"
+        // verdict only blocks a re-run while the inventory is unchanged; once
+        // the bot makes any change (e.g. crafts a prerequisite), the old
+        // verdict is stale and the action is retried. Resets on user_message.
         this._acqLedger = new Map();
-        this._acqStreak = 0;
         // Step 5 hook: when use_background_handles is on, the orchestrator
         // delegates isLongRunning tools to backgroundTasks instead of awaiting
         // them. Set externally by the agent during construction.
@@ -149,7 +150,6 @@ export class OrchestratorV2 {
                 // Fresh player intent → forget the loop-breaker history so a
                 // deliberately-repeated request isn't blocked as a loop.
                 this._acqLedger.clear();
-                this._acqStreak = 0;
                 this.history.push({
                     role: 'user',
                     content: event.source ? `${event.source}: ${event.content}` : event.content,
@@ -384,18 +384,21 @@ export class OrchestratorV2 {
             }
         }
 
-        // Loop-breaker (D): block an acquisition action that cannot make
-        // progress. Two triggers: (1) this EXACT action already ran and changed
-        // nothing last time, or (2) the 3rd acquisition action in a row with no
-        // inventory change. Both are the token-burn loop — refuse and nudge.
+        // Loop-breaker (D): block an acquisition action only when this EXACT
+        // action already ran against THIS EXACT inventory and changed nothing.
+        // Keying the verdict to the inventory is what unblocks multi-step
+        // crafts: !craftRecipe("iron_axe") with no table changes nothing and
+        // gets marked, but the moment the bot crafts/places a crafting_table
+        // the inventory differs, so the next iron_axe attempt is a new
+        // signature and runs (the skill auto-places the table and succeeds).
+        // The old args-only key marked it bad forever and the bot could never
+        // finish the recipe.
         let acqSig = null, invBefore = null;
         if (ACQUISITION_ACTIONS.has(cmd.name)) {
-            acqSig = `${cmd.name}|${JSON.stringify(toolCall.args || {})}`;
             invBefore = this._inventoryHash();
-            const lastWasNoProgress = this._acqLedger.get(acqSig) === 'noprogress';
-            if (lastWasNoProgress || this._acqStreak >= 2) {
-                console.log(`[loop guard] blocked ${cmd.name} (streak=${this._acqStreak}, repeatNoProgress=${lastWasNoProgress})`);
-                this._acqStreak = 0; // clean slate so the nudge gets a fresh try
+            acqSig = `${cmd.name}|${JSON.stringify(toolCall.args || {})}|${invBefore}`;
+            if (this._acqLedger.get(acqSig) === 'noprogress') {
+                console.log(`[loop guard] blocked ${cmd.name} (repeatNoProgress=true, same inventory)`);
                 return { id: toolCall.id, name: toolCall.name, isError: true, content: LOOP_GUARD_MSG(cmd.name) };
             }
         }
@@ -403,9 +406,10 @@ export class OrchestratorV2 {
         try {
             const result = await cmd.perform(this.agent, ...this._argsToPositional(cmd, toolCall.args));
             if (acqSig) {
-                // Did THIS run change inventory? That's the only honest progress signal.
+                // Did THIS run change inventory? That's the only honest progress
+                // signal. Record the verdict against the inventory it ran on, so
+                // it only blocks a re-run while nothing else has changed.
                 const madeProgress = this._inventoryHash() !== invBefore;
-                this._acqStreak = madeProgress ? 0 : this._acqStreak + 1;
                 this._acqLedger.set(acqSig, madeProgress ? 'progress' : 'noprogress');
             }
             return {
