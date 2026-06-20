@@ -266,6 +266,15 @@ export const actionsList = [
             'num': { type: 'int', description: 'The number of items to give.', domain: [1, Number.MAX_SAFE_INTEGER] }
         },
         perform: async function (agent, player_name, item_name, num) {
+            // Deterministic give-gate: never give (or claim to give) what we don't
+            // hold. Code owns this fact — the LLM's belief that it has the item
+            // (the diamond_sword it never had) does NOT get a vote. Refuse with a
+            // structured corrective BEFORE moving, so a hallucinated possession
+            // can't turn into a hallucinated delivery. Fail-open if no manager.
+            const gate = agent.inventory_manager?.requireHeld(item_name, num, 'give');
+            if (gate && !gate.ok) {
+                return `[give blocked] ${gate.corrective}`;
+            }
             // Don't wrap via runAsAction() — it self-looks-up in actionsList by
             // perform-identity, and the inner wrapper is never registered, so
             // the lookup returned undefined and crashed with TypeError. Call
@@ -311,9 +320,21 @@ export const actionsList = [
         // Death from 3 HP starvation while plan-mode-locked was the original
         // motivating incident (2026-05-21).
         isSurvival: true,
-        perform: runAsAction(async (agent, item_name) => {
-            await skills.consume(agent.bot, item_name);
-        })
+        isLongRunning: true,
+        // Plain async so the proprioception gate short-circuits: can't eat (or
+        // claim to eat) food you don't hold — the "eat 2 chickens" hallucination.
+        perform: async function (agent, item_name) {
+            const gate = agent.inventory_manager?.requireHeld(item_name, 1, 'eat');
+            if (gate && !gate.ok) {
+                return `[eat blocked] ${gate.corrective}`;
+            }
+            const code_return = await agent.actions.runAction(
+                'action:consume',
+                async () => { await skills.consume(agent.bot, item_name); },
+                { timeout: -1, resume: false },
+            );
+            return code_return.interrupted && !code_return.timedout ? undefined : code_return.message;
+        }
     },
     {
         name: '!equip',
@@ -329,13 +350,25 @@ export const actionsList = [
     {
         name: '!putInChest',
         description: 'Put the given item in the nearest chest.',
+        isLongRunning: true,
         params: {
             'item_name': { type: 'ItemName', description: 'The name of the item to put in the chest.' },
             'num': { type: 'int', description: 'The number of items to put in the chest.', domain: [1, Number.MAX_SAFE_INTEGER] }
         },
-        perform: runAsAction(async (agent, item_name, num) => {
-            await skills.putInChest(agent.bot, item_name, num);
-        })
+        // Plain async (not runAsAction) so the proprioception gate short-circuits
+        // BEFORE pathing to the chest — don't walk there to stash what you don't hold.
+        perform: async function (agent, item_name, num) {
+            const gate = agent.inventory_manager?.requireHeld(item_name, num, 'put in the chest');
+            if (gate && !gate.ok) {
+                return `[put blocked] ${gate.corrective}`;
+            }
+            const code_return = await agent.actions.runAction(
+                'action:putInChest',
+                async () => { await skills.putInChest(agent.bot, item_name, num); },
+                { timeout: -1, resume: false },
+            );
+            return code_return.interrupted && !code_return.timedout ? undefined : code_return.message;
+        }
     },
     {
         name: '!takeFromChest',
@@ -372,16 +405,28 @@ export const actionsList = [
     {
         name: '!discard',
         description: 'Discard the given item from the inventory.',
+        isLongRunning: true,
         params: {
             'item_name': { type: 'ItemName', description: 'The name of the item to discard.' },
             'num': { type: 'int', description: 'The number of items to discard.', domain: [1, Number.MAX_SAFE_INTEGER] }
         },
-        perform: runAsAction(async (agent, item_name, num) => {
-            const start_loc = agent.bot.entity.position;
-            await skills.moveAway(agent.bot, 5);
-            await skills.discard(agent.bot, item_name, num);
-            await skills.goToPosition(agent.bot, start_loc.x, start_loc.y, start_loc.z, 0);
-        })
+        // Plain async so the proprioception gate short-circuits before moving.
+        perform: async function (agent, item_name, num) {
+            const gate = agent.inventory_manager?.requireHeld(item_name, num, 'discard');
+            if (gate && !gate.ok) {
+                return `[discard blocked] ${gate.corrective}`;
+            }
+            return await agent.actions.runAction(
+                'action:discard',
+                async () => {
+                    const start_loc = agent.bot.entity.position;
+                    await skills.moveAway(agent.bot, 5);
+                    await skills.discard(agent.bot, item_name, num);
+                    await skills.goToPosition(agent.bot, start_loc.x, start_loc.y, start_loc.z, 0);
+                },
+                { timeout: -1, resume: false },
+            ).then(cr => cr.interrupted && !cr.timedout ? undefined : cr.message);
+        }
     },
     {
         name: '!makeSpace',

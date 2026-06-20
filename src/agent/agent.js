@@ -927,7 +927,16 @@ export class Agent {
         };
         try {
             await this.history.add(source, `(mid-task) ${message}`);
-            const history = this.history.getHistory();
+            // Ground the answer in the deterministic state authority — the SAME
+            // buildLiveStateBlock the orchestrator uses — appended as the LAST,
+            // most-recent observation so a benign mid-task question is answered
+            // from real inventory/armor/position numbers, not the bot's narrative
+            // (the diamond_sword "you sure you have one?" hallucination). Appended
+            // to a COPY, never persisted to history — inventory is ephemeral state.
+            const history = [
+                ...this.history.getHistory(),
+                { role: 'system', content: `[LIVE STATE — your ACTUAL inventory/armor/position right now. Ground truth: trust this over anything you said, remember, or assumed earlier. If an item isn't listed here, you do NOT have it.]\n${buildLiveStateBlock(this)}` },
+            ];
             let res;
             try {
                 res = await this.prompter.promptConvo(history);

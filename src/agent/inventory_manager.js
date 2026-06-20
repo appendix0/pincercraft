@@ -240,4 +240,40 @@ export class InventoryManager {
         }
         return { ok: false, corrective };
     }
+
+    // Deterministic proprioception gate for EVERY inventory-out action — the bot
+    // cannot give/stash/drop (or claim to) what it does not hold. Reads REAL
+    // inventory; on a shortfall returns a structured corrective stating the TRUE
+    // count and forbidding the claim. This is the diamond_sword incident's fix:
+    // the LLM believed it had a sword (it was wearing diamond armor) and tried to
+    // !givePlayer AND !putInChest it — code now owns the fact and bounces the
+    // action BEFORE the bot moves, so a hallucinated possession can't become a
+    // hallucinated delivery. `verb` tailors the corrective to the caller
+    // (give / put in the chest / discard). { ok:true } when at least `num` held.
+    requireHeld(item, num = 1, verb = 'give', inv = world.getInventoryCounts(this.bot)) {
+        const have = inv[item] || 0;
+        if (have >= num) return { ok: true };
+        // Worn armor lives in equipment slots, not carried inventory, so it never
+        // shows in getInventoryCounts. If the player asks to move a piece the bot
+        // is wearing, that's "take it off first", NOT "you don't have it" — never
+        // make the bot deny owning armor it's visibly wearing (the inverse lie).
+        if (this._wornArmorNames().includes(item)) {
+            return { ok: false, corrective: `You're wearing the ${item} — it's equipped, not in your bag. Take it off first, then ${verb} it.` };
+        }
+        const corrective = have === 0
+            ? `You have no ${item} — you cannot ${verb} what you do not hold. Do NOT claim you did. Get it first: check your assigned chest (!goToChest, !viewChest, !takeFromChest) or craft/gather it, then ${verb}.`
+            : `You have only ${have} ${item}, not ${num} — ${verb} what you actually hold or get more first. Do NOT claim you handled ${num}.`;
+        return { ok: false, corrective };
+    }
+
+    // Names of armor the bot is currently wearing (equipment slots 5-8). Mirrors
+    // live_state.js's armor read. Best-effort: [] if inventory isn't readable
+    // (e.g. offline tests with a null bot), so the gate just falls through.
+    _wornArmorNames() {
+        try {
+            return [5, 6, 7, 8].map(i => this.bot?.inventory?.slots?.[i]?.name).filter(Boolean);
+        } catch {
+            return [];
+        }
+    }
 }
