@@ -62,6 +62,13 @@ const ACQUISITION_ACTIONS = new Set([
 
 const LOOP_GUARD_MSG = (name) => `[loop guard] ${name} just ran with no change to your inventory — repeating it will not help. STOP repeating the same action. Check your live INVENTORY: if the goal item is already there, !finishTask now. If not, this approach is failing — do something DIFFERENT (relocate, craft the missing tier, or ask the player). Do not call ${name} again with the same plan.`;
 
+// How many acquisition actions in a row that change nothing before the
+// loop-breaker blocks the next one — even when the args VARY each time. The
+// exact-signature ledger only catches verbatim repeats; a flail that tries to
+// craft A, then B, then C with no materials never repeats a signature yet still
+// gets nowhere. N=3: two no-progress attempts are tolerated, the third blocked.
+const NO_PROGRESS_STREAK_LIMIT = 3;
+
 // Flatten an orchestrator neutral turn into the { role, content:string } shape
 // that promptCompact → stringifyTurns expects. tool_result turns map to a
 // user-side line; assistant tool calls are rendered compactly so the summary
@@ -104,6 +111,12 @@ export class OrchestratorV2 {
         // the bot makes any change (e.g. crafts a prerequisite), the old
         // verdict is stale and the action is retried. Resets on user_message.
         this._acqLedger = new Map();
+        // Companion to _acqLedger: counts consecutive acquisition actions that
+        // produced no inventory change, regardless of whether their args
+        // matched. Catches a varied-args flail the exact-signature ledger
+        // can't. Reset by any inventory-changing acquisition and by fresh
+        // user intent (same lifetime as _acqLedger).
+        this._noProgressStreak = 0;
         // Step 5 hook: when use_background_handles is on, the orchestrator
         // delegates isLongRunning tools to backgroundTasks instead of awaiting
         // them. Set externally by the agent during construction.
@@ -150,6 +163,7 @@ export class OrchestratorV2 {
                 // Fresh player intent → forget the loop-breaker history so a
                 // deliberately-repeated request isn't blocked as a loop.
                 this._acqLedger.clear();
+                this._noProgressStreak = 0;
                 this.history.push({
                     role: 'user',
                     content: event.source ? `${event.source}: ${event.content}` : event.content,
@@ -401,6 +415,13 @@ export class OrchestratorV2 {
                 console.log(`[loop guard] blocked ${cmd.name} (repeatNoProgress=true, same inventory)`);
                 return { id: toolCall.id, name: toolCall.name, isError: true, content: LOOP_GUARD_MSG(cmd.name) };
             }
+            // Streak guard: even with VARYING args (so the exact-sig check above
+            // never matches), N acquisitions in a row that changed nothing is a
+            // flail. Block the Nth before it runs and tell the LLM to change tack.
+            if (this._noProgressStreak >= NO_PROGRESS_STREAK_LIMIT - 1) {
+                console.log(`[loop guard] blocked ${cmd.name} (noProgressStreak=${this._noProgressStreak} >= ${NO_PROGRESS_STREAK_LIMIT - 1})`);
+                return { id: toolCall.id, name: toolCall.name, isError: true, content: LOOP_GUARD_MSG(cmd.name) };
+            }
         }
 
         try {
@@ -411,6 +432,8 @@ export class OrchestratorV2 {
                 // it only blocks a re-run while nothing else has changed.
                 const madeProgress = this._inventoryHash() !== invBefore;
                 this._acqLedger.set(acqSig, madeProgress ? 'progress' : 'noprogress');
+                // Progress resets the streak; a no-op extends it toward the limit.
+                this._noProgressStreak = madeProgress ? 0 : this._noProgressStreak + 1;
             }
             return {
                 id: toolCall.id, name: toolCall.name, isError: false,

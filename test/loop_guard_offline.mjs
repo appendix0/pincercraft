@@ -101,6 +101,31 @@ const ok = (label) => { console.log('  ok -', label); pass++; };
     const g3 = await orch4._executeOne({ id: '3', name: 'goToPlayer', args: { name: 'p1' } }, goNoop);
     assert(!g1.isError && !g2.isError && !g3.isError, 'movement must never be loop-guarded');
     ok('D: repeated identical !goToPlayer → never blocked (movement exempt)');
+
+    // Progress mid-streak RESETS the counter — a stall that recovers isn't
+    // punished for its earlier no-ops. Without the reset, the no-op below would
+    // be the 3rd in a row and get blocked; with it, the streak is back to 0.
+    const orch5 = new OrchestratorV2(agent, { promptWithTools: async () => ({}), getSystemPrompt: async () => '' });
+    invItems = [{ name: 'iron_pickaxe', count: 1 }];
+    let yields = false;
+    const mineFlaky = {
+        name: '!findAndMine', params: { type: {}, num: {} },
+        perform: async () => {
+            if (yields) { invItems = [...invItems, { name: 'raw_iron', count: invItems.length }]; return 'mined 1'; }
+            return 'Could not find any iron_ore.';
+        },
+    };
+    await orch5._executeOne(tc({ type: 'iron_ore', num: 1 }), mineFlaky); // no-op  → streak 1
+    yields = true;
+    // num:9 → distinct sig, so the exact-repeat guard doesn't block it; it runs
+    // and makes progress, which is what must reset the streak.
+    const recover = await orch5._executeOne(tc({ type: 'iron_ore', num: 9 }), mineFlaky); // progress → streak 0
+    yields = false;
+    const after1 = await orch5._executeOne(tc({ type: 'iron_ore', num: 2 }), mineFlaky); // no-op  → streak 1
+    const after2 = await orch5._executeOne(tc({ type: 'iron_ore', num: 3 }), mineFlaky); // no-op  → streak 2
+    assert(!recover.isError && !after1.isError && !after2.isError,
+        `progress must reset the streak so later no-ops aren't pre-blocked, got ${JSON.stringify([recover, after1, after2].map(r => r.isError))}`);
+    ok('D: progress mid-streak resets the counter (legit recovery not cut off)');
 }
 
 console.log(`\nALL PASS (${pass} checks)`);
