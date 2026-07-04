@@ -2666,8 +2666,10 @@ function _extractBookPages(bookItem) {
 
 export async function loadCOCFromLectern(bot, distance=8, explicitPos=null) {
     /**
-     * Find a lectern, read its book, and write the pages to CLAUDE.md.
-     * The next prompt build picks up the new COC automatically ($COC is re-read each turn).
+     * Find a lectern, read its book, and write the pages to the bot's HOUSE
+     * RULES file (bots/<name>/house_rules.md) — NOT CLAUDE.md. CLAUDE.md is the
+     * staple Code of Conduct, never written at runtime; $COC is composed as
+     * staple + house rules each turn (src/agent/coc.js), staple wins on conflict.
      * @param {Bot} bot
      * @param {number} distance - max blocks to search for a lectern (default 8). Ignored if explicitPos given.
      * @param {{x:number,y:number,z:number}|null} explicitPos - if given, read this specific lectern (used by the rulebook auto-watcher) instead of searching for nearest.
@@ -2715,14 +2717,16 @@ export async function loadCOCFromLectern(bot, distance=8, explicitPos=null) {
         log(bot, `Book on lectern had no readable pages (NBT structure not recognized). Slot dump: ${JSON.stringify(book).substring(0, 400)}`);
         return false;
     }
-    const cocPath = path.resolve('./CLAUDE.md');
+    const { houseRulesPath } = await import('../coc.js');
+    const rulesPath = houseRulesPath(bot.username);
     const body = pages.join('\n\n');
     try {
-        fs.writeFileSync(cocPath, body + (body.endsWith('\n') ? '' : '\n'));
+        fs.mkdirSync(path.dirname(rulesPath), {recursive: true});
+        fs.writeFileSync(rulesPath, body + (body.endsWith('\n') ? '' : '\n'));
     } catch (e) {
-        log(bot, `Failed to write CLAUDE.md: ${e.message}`);
+        log(bot, `Failed to write house rules: ${e.message}`);
         return false;
     }
-    log(bot, `Read ${pages.length} page(s) from lectern at (${lectern.position.x},${lectern.position.y},${lectern.position.z}). CLAUDE.md updated — new rules apply next turn.`);
+    log(bot, `Read ${pages.length} page(s) from lectern at (${lectern.position.x},${lectern.position.y},${lectern.position.z}). House rules updated — they apply next turn (the Code of Conduct still wins on conflict).`);
     return true;
 }

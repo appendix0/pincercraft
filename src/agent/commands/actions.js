@@ -943,7 +943,7 @@ export const actionsList = [
     {
         name: '!loadCOCFromLectern',
         isConcurrencySafe: true,
-        description: 'Read nearest lectern (within 8 blocks) and overwrite CLAUDE.md from its book.',
+        description: 'Read nearest lectern (within 8 blocks) and set the house rules from its book (the Code of Conduct still wins on conflict).',
         params: {},
         perform: runAsAction(async (agent) => {
             await skills.loadCOCFromLectern(agent.bot, 8);
@@ -952,7 +952,7 @@ export const actionsList = [
     {
         name: '!designateRulebookLectern',
         isConcurrencySafe: true,
-        description: 'Mark nearest lectern (within 8 blocks) as rulebook; auto-updates CLAUDE.md when player edits the book.',
+        description: 'Mark nearest lectern (within 8 blocks) as rulebook; auto-updates the house rules when player edits the book.',
         params: {},
         perform: async function (agent) {
             const bot = agent.bot;
@@ -963,7 +963,7 @@ export const actionsList = [
             const block = bot.blockAt(positions[0]);
             const res = agent.rulebook_lectern.designate(block);
             if (res.ok) {
-                // read it once immediately so CLAUDE.md is in sync from the start
+                // read it once immediately so the house rules are in sync from the start
                 try { await skills.loadCOCFromLectern(bot, 8, agent.rulebook_lectern.position); } catch {}
             }
             return res.message;

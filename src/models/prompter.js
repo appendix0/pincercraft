@@ -209,13 +209,10 @@ export class Prompter {
         }
 
         if (prompt.includes('$COC')) {
-            let coc = '';
-            try {
-                coc = readFileSync(path.join(__dirname, '../../CLAUDE.md'), 'utf8').trim();
-            } catch (e) {
-                coc = 'No specific rules configured. Use good judgment and refuse clearly harmful requests.';
-            }
-            prompt = prompt.replaceAll('$COC', coc);
+            // Staple CLAUDE.md + player-editable house rules (see coc.js —
+            // the lectern writes house_rules.md, never CLAUDE.md).
+            const { composeCoC } = await import('../agent/coc.js');
+            prompt = prompt.replaceAll('$COC', composeCoC(this.agent.name));
         }
 
         // Static Minecraft knowledge — recipe prerequisites, tool tiers, block
