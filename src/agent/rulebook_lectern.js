@@ -1,4 +1,6 @@
-// Watches a designated lectern for book changes and re-syncs CLAUDE.md.
+// Watches a designated lectern for book changes and re-syncs the bot's
+// house rules (bots/<name>/house_rules.md — NOT CLAUDE.md, which is the
+// staple Code of Conduct and always wins on conflict).
 //
 // Flow:
 //   1. Player runs !designateRulebookLectern near a lectern → designate(block)
@@ -6,8 +8,8 @@
 //   2. We install bot.on('blockUpdate') listener for that exact position.
 //   3. When the lectern's `has_book` state flips false→true (player took the
 //      book off, edited it, placed it back), we pathfind to it and re-read.
-//   4. The bot writes the new pages to CLAUDE.md; the next LLM turn picks up
-//      the new $COC automatically (prompter re-reads CLAUDE.md every turn).
+//   4. The bot writes the new pages to house_rules.md; the next LLM turn
+//      picks up the new $COC automatically (composed fresh every turn).
 //
 // Constraint: the lectern's chunk must stay loaded. Either place it within
 // the bot's normal patrol range, in spawn chunks, or `forceload add` the chunk.
@@ -83,7 +85,7 @@ export class RulebookLectern {
         this._lastHadBook = block.getProperties?.()?.has_book ?? null;
         this._saveConfig();
         if (!this._installed) this.installListener();
-        return {ok: true, message: `Rulebook lectern set at (${this.position.x},${this.position.y},${this.position.z}). I'll re-read CLAUDE.md whenever you change the book on it.`};
+        return {ok: true, message: `Rulebook lectern set at (${this.position.x},${this.position.y},${this.position.z}). I'll re-read the house rules whenever you change the book on it.`};
     }
 
     _onBlockUpdate(oldBlock, newBlock) {
