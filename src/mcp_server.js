@@ -55,6 +55,17 @@ const TOOLS = [
         },
     },
     {
+        name: 'read_inventory_json',
+        description: 'Machine-readable inventory: JSON object of {item_name: total_count} summed across stacks. For scripts (e.g. the eval referee) — humans should prefer read_inventory.',
+        inputSchema: { type: 'object', properties: {} },
+        async exec(agent, p) {
+            const items = agent.bot?.inventory?.items?.() || [];
+            const counts = {};
+            for (const i of items) counts[i.name] = (counts[i.name] || 0) + (i.count || 0);
+            return counts;
+        },
+    },
+    {
         name: 'read_nearby_blocks',
         description: 'Get the block types near the bot, including the first solid block above its head.',
         inputSchema: { type: 'object', properties: {} },

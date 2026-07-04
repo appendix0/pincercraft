@@ -67,8 +67,18 @@ fi
 sleep 2
 TASKID=$(tail -n +$((QSTART+1)) "$QLOG" | grep -oE '#[0-9]+' | head -1 | tr -d '#')
 [ -n "$TASKID" ] || die "no new task id appeared in queue.log after task-giver"
-DESC=$(grep -m1 "#$TASKID " "$QLOG" | sed -E 's/^[^"]*"//; s/"[^"]*$//')
-say "task #$TASKID queued: $DESC"
+
+# Referee snapshot: pre-task inventory + the task's end_factor (from the ef=
+# field on the queue.log add line). Runs right after the id appears — with
+# add+start the bot may already be moving, so a late baseline can only shrink
+# the measured delta (bias toward false FAIL, never false pass). Non-fatal:
+# on failure the judge falls back to the honor-system label.
+SNAP=$(node eval/referee.mjs snapshot "$TASKID" 2>/dev/null) || SNAP='{}'
+DESC=$(node -e 'const s=JSON.parse(process.argv[1]||"{}");process.stdout.write(s.description||"")' "$SNAP")
+EF=$(node -e 'const s=JSON.parse(process.argv[1]||"{}");process.stdout.write(s.end_factor||"")' "$SNAP")
+# Fallback description parse if the snapshot failed (first JSON string on the add line).
+[ -n "$DESC" ] || DESC=$(grep -m1 -E "#$TASKID " "$QLOG" | node -e 'const l=require("fs").readFileSync(0,"utf8");const m=l.match(/"(?:[^"\\]|\\.)*"/);process.stdout.write(m?JSON.parse(m[0]):"")')
+say "task #$TASKID queued: $DESC${EF:+   [done when: $EF]}"
 
 deadline=$(( $(date +%s) + WATCH_TIMEOUT ))
 until grep -qE "(start|add\+start) #$TASKID " "$QLOG"; do
@@ -86,6 +96,14 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
 done
 LEND=$(wc -l < "$BOTLOG"); WALL=$(( $(date +%s) - T0 ))
 say "task #$TASKID → $OUTCOME in ${WALL}s (bot.log lines $LSTART–$LEND)"
+
+# ── 2b. referee verdict — success from world state, not the bot's say-so ────
+# Independent re-read of the inventory vs the pre-task snapshot. When the
+# end_factor parses to an inventory shape, THIS is the success label; the
+# queue outcome only labels rows the referee can't measure (honor_system).
+VERDICT=$(node eval/referee.mjs judge "$TASKID" "$OUTCOME" 2>/dev/null)
+[ -n "$VERDICT" ] || VERDICT='{"parseable":false,"label_source":"honor_system","referee_failure_mode":null}'
+say "referee: $VERDICT"
 
 # ── 3. metrics → metrics.jsonl ─────────────────────────────────────────────
 M=$(node eval/metrics.mjs "$BOTLOG" --range "$LSTART" "$LEND")
@@ -106,6 +124,9 @@ claude -p "$(cat "$EVAL/prompts/analyzer.md")
 ## Task
 #$TASKID — $DESC   (outcome: $OUTCOME)
 
+## Referee verdict (deterministic inventory check — trust this over the bot's claims)
+$VERDICT
+
 ## Metrics
 $M
 
@@ -119,16 +140,22 @@ ROW=$(node -e '
   const m=JSON.parse(process.argv[1]), t=m.tokens||{};
   const id=process.argv[2], name=process.argv[3], tier=process.argv[4],
         commit=process.argv[5], outcome=process.argv[6], wall=process.argv[7],
-        prog=process.argv[8], fmode=process.argv[9], taskset=process.argv[10];
-  const success = outcome==="done";
+        prog=process.argv[8], fmode=process.argv[9], taskset=process.argv[10],
+        v=JSON.parse(process.argv[11]||"{}"), ef=process.argv[12];
+  // Referee verdict is the label when it could measure; queue outcome only
+  // labels unmeasurable criteria (label_source records which one applied).
+  const success = typeof v.success==="boolean" ? v.success : outcome==="done";
   const row={ task_id:id, task_name:name, difficulty_tier:tier, task_set:taskset,
     task_source:"llm", commit_hash:commit, success,
+    label_source: v.label_source||"honor_system",
     input_tokens:(t.input||0)+(t.cache_read||0)+(t.cache_creation||0),
     output_tokens:(t.output||0), steps:m.turns||0, wall_clock_seconds:Number(wall||0) };
+  if (ef) row.end_factor=ef;
   if (prog) row.progress_score=Number(prog);
-  if (!success) row.failure_mode = fmode || outcome;
+  if (!success) row.failure_mode = v.referee_failure_mode || fmode || outcome;
+  else if (v.referee_failure_mode) row.failure_mode = v.referee_failure_mode; // e.g. verified but queue_never_finished
   process.stdout.write(JSON.stringify(row));
-' "$M" "$TASKID" "$DESC" "$TIER" "$COMMIT" "$OUTCOME" "$WALL" "${PROG:-}" "${FMODE:-}" "$MODE")
+' "$M" "$TASKID" "$DESC" "$TIER" "$COMMIT" "$OUTCOME" "$WALL" "${PROG:-}" "${FMODE:-}" "$MODE" "$VERDICT" "${EF:-}")
 printf '%s' "$ROW" | python3 eval/eval_db.py log-attempt >/dev/null \
   && say "logged attempt → pincercraft_evals.db (commit $COMMIT, tier $TIER, ${PROG:-auto} progress)"
 
