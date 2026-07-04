@@ -95,8 +95,12 @@ export class TaskQueue {
         if (!this.persist) return;  // ephemeral child queues skip queue.log
         try {
             const ts = new Date().toISOString();
+            // ef= trails the description so the eval referee can read the task's
+            // completion criterion from the log (verb/#id/status prefixes that
+            // metrics.mjs and loop.sh grep on are untouched).
+            const ef = task && task.endFactor ? ` ef=${JSON.stringify(task.endFactor)}` : '';
             const line = task
-                ? `${ts} [${this.agentName}] ${action} #${task.id} ${task.status} ${JSON.stringify(task.description)}\n`
+                ? `${ts} [${this.agentName}] ${action} #${task.id} ${task.status} ${JSON.stringify(task.description)}${ef}\n`
                 : `${ts} [${this.agentName}] ${action}\n`;
             fs.appendFileSync(LOG_PATH, line);
         } catch (e) {

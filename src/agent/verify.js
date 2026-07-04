@@ -130,6 +130,28 @@ export function normalizeQuantityEndFactor(endFactor, playerMessage) {
     return `+${rel.delta} ${item}`;
 }
 
+// Structured criterion from an end_factor string, preserving the delta-vs-
+// absolute distinction the matchers detect. Used by the eval referee
+// (eval/referee.mjs), which measures against its OWN inventory snapshots —
+// shared grammar, independent measurement. Returns one of:
+//   { kind: 'delta',    item, count }  — gain of `count` since task start
+//   { kind: 'absolute', item, count }  — current inventory holds ≥ count
+//   { kind: 'multi',    items }        — each listed item present (≥1)
+//   null — not an item-count shape (e.g. "bot within 3 of p1")
+export function parseEndFactorCriterion(endFactor) {
+    if (!endFactor) return null;
+    const text = normalize(endFactor);
+    const inc = matchCountIncrease(text);
+    if (inc) return { kind: 'delta', item: inc.item, count: inc.delta };
+    const cnt = matchCountInInventory(text);
+    if (cnt) return { kind: 'absolute', item: cnt.item, count: cnt.count };
+    const one = matchSingleInInventory(text);
+    if (one) return { kind: 'absolute', item: one.item, count: 1 };
+    const multi = matchMultiInInventory(text);
+    if (multi) return { kind: 'multi', items: multi };
+    return null;
+}
+
 // Best-effort PRIMARY goal item + count from a task's end_factor, reusing the
 // same matchers verifyEndFactor uses — so the live-state CAPABILITIES line and
 // the finish gate read the criterion identically (one parser, no drift).
@@ -137,16 +159,10 @@ export function normalizeQuantityEndFactor(endFactor, playerMessage) {
 // (e.g. "bot within 3 of p1", "greeting said in chat") — caller omits CAPABILITIES.
 export function parseEndFactorTarget(task) {
     if (!task || !task.endFactor) return null;
-    const text = normalize(task.endFactor);
-    const inc = matchCountIncrease(text);
-    if (inc) return { item: inc.item, count: inc.delta };
-    const cnt = matchCountInInventory(text);
-    if (cnt) return { item: cnt.item, count: cnt.count };
-    const one = matchSingleInInventory(text);
-    if (one) return { item: one.item, count: 1 };
-    const multi = matchMultiInInventory(text);
-    if (multi) return { item: multi[0], count: 1 }; // primary = first listed
-    return null;
+    const c = parseEndFactorCriterion(task.endFactor);
+    if (!c) return null;
+    if (c.kind === 'multi') return { item: c.items[0], count: 1 }; // primary = first listed
+    return { item: c.item, count: c.count };
 }
 
 // Snapshot the baseline count for a delta-style end_factor at task start, so

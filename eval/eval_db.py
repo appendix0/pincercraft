@@ -82,6 +82,10 @@ CREATE INDEX IF NOT EXISTS idx_attempts_tier   ON task_attempts(difficulty_tier)
 _MIGRATIONS = (
     "ALTER TABLE task_attempts ADD COLUMN rag_version INTEGER DEFAULT 0",
     "ALTER TABLE task_attempts ADD COLUMN task_source TEXT DEFAULT 'llm'",
+    # eval/referee.mjs: the task's completion criterion, and who labeled success —
+    # 'referee' (independent inventory verdict) vs 'honor_system' (queue outcome).
+    "ALTER TABLE task_attempts ADD COLUMN end_factor TEXT",
+    "ALTER TABLE task_attempts ADD COLUMN label_source TEXT DEFAULT 'honor_system'",
 )
 
 
@@ -130,6 +134,8 @@ def log_attempt(row: dict, path=DB_PATH):
         # quarantine tags
         "rag_version": int(row.get("rag_version", CURRENT_RAG_VERSION)),
         "task_source": row.get("task_source", "llm"),
+        "end_factor": row.get("end_factor"),
+        "label_source": row.get("label_source", "honor_system"),
     }
     # Named column list (not positional VALUES) so the insert survives schema
     # drift — extra columns in the live table default to NULL instead of
@@ -139,10 +145,12 @@ def log_attempt(row: dict, path=DB_PATH):
             "INSERT INTO task_attempts "
             "(attempt_id,task_id,task_name,difficulty_tier,task_set,commit_hash,timestamp,"
             "success,progress_score,input_tokens,output_tokens,steps,retry_count,"
-            "wall_clock_seconds,n_distinct_actions,failure_mode,rag_version,task_source) VALUES "
+            "wall_clock_seconds,n_distinct_actions,failure_mode,rag_version,task_source,"
+            "end_factor,label_source) VALUES "
             "(:attempt_id,:task_id,:task_name,:difficulty_tier,:task_set,:commit_hash,:timestamp,"
             ":success,:progress_score,:input_tokens,:output_tokens,:steps,:retry_count,"
-            ":wall_clock_seconds,:n_distinct_actions,:failure_mode,:rag_version,:task_source)",
+            ":wall_clock_seconds,:n_distinct_actions,:failure_mode,:rag_version,:task_source,"
+            ":end_factor,:label_source)",
             rec,
         )
     return rec["attempt_id"]
