@@ -13,6 +13,7 @@
 </p>
 
 <p align="center">
+  <a href="https://appendix0.github.io/pincercraft-site/">Site</a> ·
   <a href="https://github.com/kolbytn/mindcraft">Upstream</a> ·
   <a href="docs/agent-blueprint.md">Design</a> ·
   <a href="docs/CHANGELOG.md">Changelog</a>
@@ -26,7 +27,7 @@ PincerCraft fixes that with one rule:
 
 > **Code owns the facts. The LLM owns the plan.**
 
-Inventory counts, *"can I mine this?"*, the recipe gap, *"is this task actually done?"* — computed every turn and handed to the model. It doesn't get to guess. That's the discipline of a coding agent like Claude Code — check the ground truth before you act, gate anything destructive, plan before you execute — pointed at a Minecraft bot. The bot can't lie to itself about what it holds or what it finished, and it gets measurably better over time.
+Inventory counts, *"can I mine this?"*, the recipe gap, *"is this task actually done?"* — computed every turn and handed to the model. It doesn't get to guess. That's the discipline of a coding agent like Claude Code — check the ground truth before you act, gate anything destructive, plan before you execute — pointed at a Minecraft bot.
 
 ## What makes it different
 
@@ -36,33 +37,51 @@ Inventory counts, *"can I mine this?"*, the recipe gap, *"is this task actually 
 
 📋 **It plans before it digs.** Talk to it mid-task and your words slot into a queue instead of starting a race. Hand it something big and it breaks the job into steps, posts the plan to chat, and waits for your "go" before touching a single block. Small stuff just runs — planning is reserved for builds that actually need it.
 
-📖 **Its rulebook lives in the world.** The bot's code of conduct is a writable book on a lectern inside Minecraft, not a config file you forget exists. Edit the book in vanilla MC and the bot re-reads it within ~2 seconds — no restart, no redeploy. Tell it "don't touch my chests" once and it holds the line, even hours deep into a conversation.
+📖 **Players write house rules. Nobody rewrites the constitution.** The bot's conduct comes in two parts. The staple Code of Conduct — no griefing, no chest theft, protect the owner's base — ships in [`CLAUDE.md`](CLAUDE.md) and is never written at runtime. House rules live in a writable book on a lectern *inside Minecraft*: edit the book in vanilla MC and the bot re-reads it within ~2 seconds, no restart. On conflict, the constitution wins — we know, because someone put a book on the lectern that said "You are Groot" and it replaced the bot's entire personality for two weeks. Now it can't. → [`coc.js`](src/agent/coc.js), [`rulebook_lectern.js`](src/agent/rulebook_lectern.js)
 
-🔁 **It grades and improves itself.** A loop invents tasks, runs them, and scores success from the actual world state — never the bot's self-report, which has cheerfully announced "done!" with zero blocks moved. When it finds a weak spot it writes a fix to `src/` on a branch and stops for a human. We still read them before merging. Usually.
+🔁 **It grades itself — and the grader doesn't take its word.** An eval loop invents tasks, runs them, and labels success with a deterministic referee that snapshots inventory before the task and re-measures after. The bot's own "done!" doesn't count; the world state does. When the loop finds a weak spot it drafts a fix to `src/` on a branch and stops for human review — nothing merges itself. → [`eval/referee.mjs`](eval/referee.mjs), [`eval/loop.sh`](eval/loop.sh)
+
+## Receipts
+
+The referee exists because we caught the old honor system red-handed: eval cycle 2 asked the bot to *gather 32 cobblestone*, it already held 37, declared done in five seconds having moved zero blocks — and the LLM grader scored it a success. The deterministic delta check fails it: gained 0, needed 32. That disagreement is the whole thesis in one row of the database.
+
+Every attempt now lands in a SQLite ledger (`task_attempts`: tokens, wall clock, failure mode, and `label_source` — whether the referee measured it or it fell back to the honor system). A full benchmark table — success rate and token cost across difficulty tiers, referee-labeled — is the current campaign; it goes here when the numbers exist. We're not going to hand-wave the one section the fork is named after.
 
 ## Stock Mindcraft vs PincerCraft
 
 | | Stock | PincerCraft |
 |---|---|---|
 | Inventory & recipes | LLM eyeballs them | computed in code |
-| "Task done?" | honor system | checked against world state |
+| "Task done?" | honor system | measured against world state |
 | A bad plan | runs, fails, retries | bounced with a fix |
 | Agent loop | re-prompts on every line | parks until something changes |
-| Getting better | you edit the code | it drafts its own patches |
+| Bot rules | config file | staple CoC + in-world editable house rules |
+| Getting better | you edit the code | it drafts its own patches, you review |
 
 ## Setup
 
-Same as upstream Mindcraft — see the [Mindcraft README](https://github.com/kolbytn/mindcraft/blob/main/README.md) and [FAQ](https://github.com/kolbytn/mindcraft/blob/main/FAQ.md) for install and model config.
+**Requirements:** Node **20.x** (hard requirement — Node 24 crashes the agent child with `ERR_INTERNAL_ASSERTION`; use `nvm install 20`), a Java-edition Minecraft server (tested on Paper 1.21.x; Bedrock players can join via Geyser/Floodgate), and an **Anthropic API key**. The v2 orchestrator speaks the structured tool-calling protocol and Claude is the tested brain (Haiku planner + Sonnet coder); providers that silently drop `tools[]` (e.g. DeepSeek) only work with the legacy loop.
 
 ```bash
+git clone https://github.com/appendix0/pincercraft.git && cd pincercraft
+nvm use 20
 npm install
-cp keys.example.json keys.json   # add your API keys
-npm start                         # profile is set in settings.js
+cp keys.example.json keys.json   # add ANTHROPIC_API_KEY (and mcp_token if you use the eval loop)
 ```
 
-- Needs **Node 20**.
-- Ships an `nvidia` profile (`profiles/nvidia.json`) for the free [build.nvidia.com](https://build.nvidia.com) endpoint (Llama 3.3 70B).
-- The self-improvement loop lives in [`eval/`](eval/); the deterministic graders in [`evals/`](evals/).
+Then make `settings.js` yours — this is the part the upstream README won't tell you:
+
+- `host` / `port` / `minecraft_version` / `auth` — point at your server.
+- `only_chat_with` — your username. This is who the bot **listens** to. (Bedrock-via-Floodgate names: drop the `.` prefix.)
+- `permissions` — what each listener may make the bot **do**. Two layers, not duplicates. Default-deny for strangers; give yourself `"allow": ["!*"]`.
+- `profiles` — your bot's profile JSON (name, models). Start from [`profiles/claude.json`](profiles/claude.json).
+- `mcp.enabled` — the bot can expose its commands as MCP tools on localhost (bearer-token auth) so external agents and the eval loop can drive it. Off if you don't want that.
+
+```bash
+npm start
+```
+
+The self-improvement loop lives in [`eval/`](eval/) (`bash eval/session.sh` runs cycles; the improver only ever writes to a branch). The deterministic graders live in [`evals/`](evals/).
 
 ## Based on Mindcraft
 
