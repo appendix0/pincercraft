@@ -19,7 +19,7 @@ Static facts you should always have. Don't waste turns rediscovering these by tr
 | diamond_ore, gold_ore (overworld), emerald_ore | iron |
 | obsidian, ancient_debris, netherite_block | diamond |
 
-Mining without the right tier wastes time and drops nothing. Always check `$INVENTORY` first.
+Mining without the right tier wastes time and drops nothing. Always check your inventory first.
 
 ## Block family aliases — `!searchForBlock` recovery
 
@@ -48,7 +48,7 @@ If `!searchForBlock` returns "Could not find any X", try a sibling before reloca
 
 ## Entities ≠ blocks
 
-- **Dropped items** are entities, not blocks. `!searchForBlock("item", N)` always fails. Use `!pickupItems` (walks around and collects nearby dropped items) or `!goToCoordinates(x,y,z)` to where you died/dropped. `$STATS` shows a "Nearby dropped items" count each turn.
+- **Dropped items** are entities, not blocks. `!searchForBlock("item", N)` always fails. Use `!pickupItems` (walks around and collects nearby dropped items) or `!goToCoordinates(x,y,z)` to where you died/dropped. The live state block shows a "Nearby dropped items" count each turn.
 - Mobs are entities. `!searchForEntity("zombie", N)` works; `!searchForBlock` doesn't.
 - Players are entities. Same rule.
 
