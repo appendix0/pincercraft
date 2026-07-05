@@ -1397,6 +1397,18 @@ export async function goToGoal(bot, goal) {
     // dig_policy.js.
     applyDigPolicy(bot, destructiveMovements);
 
+    // Reversibility guard (live 2026-07-05): the destructive fallback planned a
+    // multi-block descent into a pit; with no scaffolding in the bag the drop
+    // was one-way — the bot buried itself and the session died. Climbing back
+    // out means towering, which needs scaffolding blocks. Carrying none, only
+    // make moves it can undo: cap drops at 1 block on BOTH movement sets.
+    const scaffoldCount = destructiveMovements.scafoldingBlocks
+        .reduce((n, id) => n + bot.inventory.count(id, null), 0);
+    if (scaffoldCount === 0) {
+        nonDestructiveMovements.maxDropDown = 1;
+        destructiveMovements.maxDropDown = 1;
+    }
+
     let final_movements = destructiveMovements;
 
     // Decision-phase search budget. Was 1000ms — too short for complex terrain,
@@ -1407,6 +1419,15 @@ export async function goToGoal(bot, goal) {
     if (await bot.pathfinder.getPathTo(nonDestructiveMovements, goal, pathfind_timeout).status === 'success') {
         final_movements = nonDestructiveMovements;
         log(bot, `Found non-destructive path.`);
+    }
+    else if (await bot.pathfinder.getPathTo(nonDestructiveMovements, goal, pathfind_timeout * 2).status === 'success') {
+        // Second chance with a doubled budget before reaching for the shovel: a
+        // meaningful share of historical "no walkable path" fallbacks were
+        // compute-budget misses ("Took to long" x86), not blocked terrain — and
+        // every false fallback digs scars and risks pits. 4s of extra thinking
+        // is cheaper than one destructive mistake.
+        final_movements = nonDestructiveMovements;
+        log(bot, `Found non-destructive path (second look).`);
     }
     else {
         // No walkable path within the budget — fall back to digging as a last
