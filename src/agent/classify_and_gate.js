@@ -153,7 +153,10 @@ Rate the DIFFICULTY from 1 to 10. DIFFICULTY IS ABOUT STRUCTURE, NOT SIZE:
 - A single action = 1 ("come here", "give me dirt", "kill that zombie").
 - Routine gather / craft / smelt is LOW even in bulk — it's one action repeated: "mine 64 logs"=2, "get 30 iron and smelt it"=3.
 - HIGH = genuinely multi-stage: a structure with foundation/walls/roof, multiple block types or layers, or an automated contraption: "build a watch tower"=8, "set up an iron farm"=9, "build a castle"=10.
-Reply with ONLY the integer 1-10, nothing else.
+Also extract the GOAL: if the request asks the bot to acquire or produce a countable amount of ONE item, express it as "+N item_name" (lowercase minecraft item id; if the player says "some" or gives no number, pick a sensible small N). Otherwise — movement, combat, building, chat, or giving away items already held — GOAL is none.
+Reply with EXACTLY two lines:
+DIFFICULTY: <1-10>
+GOAL: +<N> <item_name> | none
 
 Request: "${message}"`;
 }
@@ -166,6 +169,25 @@ export function parseDifficultyScore(text) {
     if (!m) return null;
     const n = parseInt(m[1], 10);
     return n >= 1 && n <= 10 ? n : null;
+}
+
+// Parse the two-line rating reply into { score, goal }. goal is the canonical
+// "+N item" delta string — the exact shape verify's finish gate and the eval
+// referee measure — or null (GOAL: none / unparseable). The goal is what lets
+// the execute-directly path mint a referee-measurable task instead of running
+// with no record at all. Fail-safe: any parse miss degrades to nulls and the
+// caller behaves exactly as before goals existed.
+export function parseDifficultyAndGoal(text) {
+    if (text == null) return { score: null, goal: null };
+    const s = String(text);
+    let score = null;
+    const ds = s.match(/DIFFICULTY:\s*(10|[1-9])\b/i);
+    if (ds) score = parseInt(ds[1], 10);
+    else score = parseDifficultyScore(s.replace(/GOAL:.*$/gim, '')); // don't let a goal count masquerade as the score
+    let goal = null;
+    const g = s.match(/GOAL:\s*\+?\s*(\d{1,3})\s+([a-z][a-z0-9_]{2,})/i);
+    if (g && parseInt(g[1], 10) >= 1) goal = `+${parseInt(g[1], 10)} ${g[2].toLowerCase()}`;
+    return { score, goal };
 }
 
 // ----------------------------------------------------------------------------

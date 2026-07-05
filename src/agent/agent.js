@@ -3,7 +3,7 @@ import { Coder } from './coder.js';
 import { VisionInterpreter } from './vision/vision_interpreter.js';
 import { Prompter } from '../models/prompter.js';
 import { initModes } from './modes.js';
-import { initBot } from '../utils/mcdata.js';
+import { initBot, getItemId } from '../utils/mcdata.js';
 import { containsCommand, commandExists, executeCommand, truncCommandMessage, isAction, blacklistCommands, findAllCommandSpans, getCommand } from './commands/index.js';
 import { ActionManager } from './action_manager.js';
 import { NPCContoller } from './npc/controller.js';
@@ -1144,13 +1144,31 @@ export class Agent {
                 // plan mode only for genuinely multi-stage work (builds /
                 // automation). Routine gather/craft scores low and just executes.
                 try {
-                    const score = await this.prompter.promptTaskDifficulty(message);
+                    const { score, goal } = await this.prompter.promptTaskDifficulty(message);
                     if (score !== null && score > PLAN_MODE_DIFFICULTY_THRESHOLD) {
                         console.log(`[plan mode] LLM difficulty ${score}/10 > ${PLAN_MODE_DIFFICULTY_THRESHOLD} → entering plan mode`);
                         this.enterPlanMode();
                         await this.history.add('system', PLAN_MODE_AUTO_NUDGE);
                     } else {
                         console.log(`[plan mode] LLM difficulty ${score}/10 → executing directly`);
+                        // Referee coverage for the execute-directly path: casual
+                        // asks used to run with no task record — no end_factor,
+                        // no verify gate, invisible to the referee and the DB.
+                        // When the rater extracted a countable goal, mint the
+                        // task so the whole measurement stack engages (snapshot,
+                        // auto-finish at +N, ef= in queue.log). Unknown item ids
+                        // are dropped — a bogus id could never auto-finish.
+                        if (goal && getItemId(goal.split(' ')[1])) {
+                            const res = this.task_queue.addTask(message, goal);
+                            if (res.ok) {
+                                console.log(`[auto-task] #${res.task.id} ef="${goal}" (direct execution, referee-measurable)`);
+                                await this.history.add('system', `[auto-task] Queued task #${res.task.id} for this request (done when: ${goal}). Work THIS task — don't re-add it; it finishes automatically when the target is met.`);
+                            } else {
+                                console.log(`[auto-task] skipped: ${res.message}`);
+                            }
+                        } else if (goal) {
+                            console.log(`[auto-task] skipped: unknown item in goal "${goal}"`);
+                        }
                     }
                 } catch (e) {
                     // Fail safe: rating failed → just execute (don't force plan mode).

@@ -4,7 +4,7 @@ import { getCommandDocs } from '../agent/commands/index.js';
 import { SkillLibrary } from "../agent/library/skill_library.js";
 import { stringifyTurns } from '../utils/text.js';
 import { getCommand } from '../agent/commands/index.js';
-import { buildDifficultyRatingPrompt, parseDifficultyScore } from '../agent/classify_and_gate.js';
+import { buildDifficultyRatingPrompt, parseDifficultyAndGoal } from '../agent/classify_and_gate.js';
 import settings from '../agent/settings.js';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -447,14 +447,16 @@ export class Prompter {
     // LLM-judged plan-mode gate: rate how hard a player request is (1-10) so the
     // agent can enter plan mode only for genuinely multi-stage work. Difficulty
     // is a judgment, not a regex-measurable fact — the LLM owns the score, the
-    // agent owns the threshold. Minimal one-off call (empty turns), returns the
-    // integer or null if unparseable.
+    // agent owns the threshold. Minimal one-off call (empty turns), returns
+    // { score, goal }, both null if unparseable.
     async promptTaskDifficulty(message) {
         await this.checkCooldown();
         const prompt = buildDifficultyRatingPrompt(message);
         const res = await this.chat_model.sendRequest([], prompt);
         this._recordUsage('difficulty', this.chat_model);
-        return parseDifficultyScore(res);
+        // { score, goal } — goal is the canonical "+N item" acquisition target
+        // when the request is countable, else null. Same call, no extra tokens.
+        return parseDifficultyAndGoal(res);
     }
 
     async promptVision(messages, imageBuffer) {
