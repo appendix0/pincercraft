@@ -168,9 +168,19 @@ const modes_list = [
                 say(agent, 'I\'m stuck!');
                 this.stuck_time = 0;
                 execute(this, agent, async () => {
-                    const crashTimeout = setTimeout(() => { agent.cleanKill("Got stuck and couldn't get unstuck") }, 10000);
+                    // Upstream killed the PROCESS here if moveAway didn't finish
+                    // in 10s — in a dug pit that's guaranteed death → disconnect
+                    // mid-session (hit live 2026-07-05). Owner rule: never
+                    // reboot-to-fix; tell the player honestly and stay online.
+                    const bailTimeout = setTimeout(() => {
+                        agent.requestInterrupt();
+                        const t = agent.task_queue?.tasks?.find(x => x.status === 'in_progress');
+                        if (t) agent.task_queue.cancelTask(t.id);
+                        const p = bot.entity.position;
+                        say(agent, `I'm stuck at ${Math.round(p.x)}, ${Math.round(p.y)}, ${Math.round(p.z)} and can't free myself — help me out or give me a new task.`);
+                    }, 10000);
                     await skills.moveAway(bot, 5);
-                    clearTimeout(crashTimeout);
+                    clearTimeout(bailTimeout);
                     say(agent, 'I\'m free.');
                 });
             }

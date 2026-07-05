@@ -51,9 +51,14 @@ export const queryList = [
             res += `\- Current Action: ${action}`;
 
 
-            let players = world.getNearbyPlayerNames(bot);
             let bots = convoManager.getInGameAgents().filter(b => b !== agent.name);
-            players = players.filter(p => !bots.includes(p));
+            // Include DISTANCE: a bare "nearby" (radius 16) read as "next to
+            // you" to the LLM, which then claimed proximity from 12+ blocks
+            // away (live 2026-07-05). The model can only be honest about
+            // facts it's actually given.
+            let players = world.getNearbyPlayers(bot)
+                .filter(p => !bots.includes(p.entity.username))
+                .map(p => `${p.entity.username} (${p.distance.toFixed(1)} blocks away)`);
 
             res += '\n- Nearby Human Players: ' + (players.length > 0 ? players.join(', ') : 'None.');
             res += '\n- Nearby Bot Players: ' + (bots.length > 0 ? bots.join(', ') : 'None.');
