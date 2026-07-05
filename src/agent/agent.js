@@ -477,12 +477,21 @@ export class Agent {
         this._stuckWatcher = setInterval(() => {
             if (killed || !this.alive || !this.bot || !this.bot.entity || !this.bot.entity.position) return;
             const p = this.bot.entity.position;
-            samples.push({ x: p.x, y: p.y, z: p.z });
+            const moving = !!(this.bot.pathfinder?.isMoving?.());
+            samples.push({ x: p.x, y: p.y, z: p.z, moving });
             if (samples.length > WINDOW) samples.shift();
             if (samples.length < WINDOW) return;
 
             const label = this.actions?.currentActionLabel || '';
             if (!MOTION_ACTIONS.has(label)) return;
+
+            // Stuck = the pathfinder TRIED to move and the body didn't. Motion
+            // actions have legitimately stationary phases — givePlayer's toss/
+            // delta-wait next to the player (live false-positive 2026-07-05:
+            // watchdog interrupted a give mid-toss), adjacent combat, in-place
+            // digging. If the pathfinder was idle for the whole window, nothing
+            // is wedged — leave it to the loop guard / LLM.
+            if (!samples.some(s => s.moving)) return;
 
             const first = samples[0];
             let maxDrift = 0;
@@ -1159,12 +1168,23 @@ export class Agent {
                         // auto-finish at +N, ef= in queue.log). Unknown item ids
                         // are dropped — a bogus id could never auto-finish.
                         if (goal && getItemId(goal.split(' ')[1])) {
-                            const res = this.task_queue.addTask(message, goal);
-                            if (res.ok) {
-                                console.log(`[auto-task] #${res.task.id} ef="${goal}" (direct execution, referee-measurable)`);
-                                await this.history.add('system', `[auto-task] Queued task #${res.task.id} for this request (done when: ${goal}). Work THIS task — don't re-add it; it finishes automatically when the target is met.`);
+                            // Proprioception guard (live finding, task #277):
+                            // "get me 5 oaks" while holding 43 oak_log is a
+                            // DELIVERY, not an acquisition — minting "+5"
+                            // makes the referee measure the wrong criterion.
+                            // Stock covers the ask → same as GOAL: none.
+                            const [, nStr, goalItem] = goal.match(/^\+(\d+)\s+(\S+)$/) || [];
+                            const held = this.inventory_manager?.count?.(goalItem) ?? 0;
+                            if (held >= parseInt(nStr, 10)) {
+                                console.log(`[auto-task] skipped: already hold ${held} ${goalItem} — delivery ask, not acquisition (v1 unmeasurable)`);
                             } else {
-                                console.log(`[auto-task] skipped: ${res.message}`);
+                                const res = this.task_queue.addTask(message, goal);
+                                if (res.ok) {
+                                    console.log(`[auto-task] #${res.task.id} ef="${goal}" (direct execution, referee-measurable)`);
+                                    await this.history.add('system', `[auto-task] Queued task #${res.task.id} for this request (done when: ${goal}). Work THIS task — don't re-add it; it finishes automatically when the target is met.`);
+                                } else {
+                                    console.log(`[auto-task] skipped: ${res.message}`);
+                                }
                             }
                         } else if (goal) {
                             console.log(`[auto-task] skipped: unknown item in goal "${goal}"`);
