@@ -195,6 +195,17 @@ export function getNearestEntityWhere(bot, predicate, maxDistance=16) {
     return bot.nearestEntity(entity => predicate(entity) && bot.entity.position.distanceTo(entity.position) < maxDistance);
 }
 
+// Item name of a dropped-item entity, or null. getDroppedItem() reads version-
+// dependent metadata and can throw on partially-synced entities, so guard it —
+// callers use this inside entity-scan predicates.
+export function droppedItemName(entity) {
+    try {
+        return entity?.getDroppedItem?.()?.name ?? null;
+    } catch {
+        return null;
+    }
+}
+
 
 export function getNearbyPlayers(bot, maxDistance) {
     if (maxDistance == null) maxDistance = 16;

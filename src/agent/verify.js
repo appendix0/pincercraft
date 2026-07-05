@@ -165,6 +165,19 @@ export function parseEndFactorTarget(task) {
     return { item: c.item, count: c.count };
 }
 
+// Item names the idle item_collecting mode may walk to and pick up while this
+// task runs — same parser as the finish gate, so pickup targeting and
+// verification can't drift. [] when there is no task or the criterion isn't
+// item-shaped: the mode stays hands-off (vanilla touch-pickup still works),
+// per the owner rule "only collect targeted drops, not every nearby drop".
+export function taskCollectTargets(task) {
+    if (!task || !task.endFactor) return [];
+    const c = parseEndFactorCriterion(task.endFactor);
+    if (!c) return [];
+    if (c.kind === 'multi') return c.items.slice();
+    return [c.item];
+}
+
 // Snapshot the baseline count for a delta-style end_factor at task start, so
 // verifyEndFactor can later confirm the gain is from THIS run. No-op for
 // non-delta criteria. Called from the queue 'start' hook (agent._onQueueChange).

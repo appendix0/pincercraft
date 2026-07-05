@@ -1,5 +1,6 @@
 import * as skills from './library/skills.js';
 import * as world from './library/world.js';
+import * as verify from './verify.js';
 import * as mc from '../utils/mcdata.js';
 import settings from './settings.js'
 import convoManager from './conversation.js';
@@ -231,7 +232,7 @@ const modes_list = [
     },
     {
         name: 'item_collecting',
-        description: 'Collect nearby items when idle.',
+        description: 'Collect dropped items matching the current task goal when idle.',
         interrupts: ['action:followPlayer'],
         on: true,
         active: false,
@@ -240,7 +241,17 @@ const modes_list = [
         prev_item: null,
         noticed_at: -1,
         update: async function (agent) {
-            let item = world.getNearestEntityWhere(agent.bot, entity => entity.name === 'item', 8);
+            // Only chase drops the active task is actually FOR (owner rule:
+            // "only collect targeted drops, not every nearby drop"). Without a
+            // matching target this mode stays idle — untargeted pickups also
+            // ping-ponged with the tidyJunk reflex (pick up dirt → toss → pick
+            // up the toss → …). Vanilla touch-pickup for handoffs is unaffected.
+            const targets = verify.taskCollectTargets(agent.task_queue?.tasks?.find(t => t.status === 'in_progress'));
+            if (targets.length === 0) {
+                this.noticed_at = -1;
+                return;
+            }
+            let item = world.getNearestEntityWhere(agent.bot, entity => entity.name === 'item' && targets.includes(world.droppedItemName(entity)), 8);
             let empty_inv_slots = agent.bot.inventory.emptySlotCount();
             if (item && item !== this.prev_item && await world.isClearPath(agent.bot, item) && empty_inv_slots > 1) {
                 if (this.noticed_at === -1) {
@@ -250,7 +261,7 @@ const modes_list = [
                     say(agent, `Picking up item!`);
                     this.prev_item = item;
                     execute(this, agent, async () => {
-                        await skills.pickupNearbyItems(agent.bot);
+                        await skills.pickupNearbyItems(agent.bot, 8, targets);
                     });
                     this.noticed_at = -1;
                 }

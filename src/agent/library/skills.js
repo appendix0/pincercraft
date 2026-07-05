@@ -577,16 +577,17 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     return collected > 0;
 }
 
-export async function pickupNearbyItems(bot, distance=8) {
+export async function pickupNearbyItems(bot, distance=8, itemNames=null) {
     /**
      * Pick up all nearby dropped items, walking to each in turn.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
      * @param {number} distance, the radius to sweep for dropped items. Defaults to 8.
+     * @param {string[]} itemNames, optional allowlist — only sweep drops of these items. Default all.
      * @returns {Promise<boolean>} true if the items were picked up, false otherwise.
      * @example
      * await skills.pickupNearbyItems(bot, 32);
      **/
-    const getNearestItem = bot => bot.nearestEntity(entity => entity.name === 'item' && bot.entity.position.distanceTo(entity.position) < distance);
+    const getNearestItem = bot => bot.nearestEntity(entity => entity.name === 'item' && (!itemNames || itemNames.includes(world.droppedItemName(entity))) && bot.entity.position.distanceTo(entity.position) < distance);
     let nearestItem = getNearestItem(bot);
     let pickedUp = 0;
     while (nearestItem) {
