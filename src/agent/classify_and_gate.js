@@ -90,19 +90,17 @@ const COMPLEXITY_PATTERNS = [
 
 const MEMORY_REQUEST_PATTERNS = /\b(remember|don'?t forget|note that|save (this|that)|from now on|always|never|keep in mind|my name is|i (like|prefer|hate|live|work)|every time|each time|going forward|next time)\b/i;
 
-export const TASK_REQUEST_NUDGE = '[task request detected] Your first action this turn MUST be one or more !addTask(description, end_factor) calls — one per step, in execution order, including the final "tell the player" step. Only AFTER all !addTask calls may you execute the first task. Do not call any other command first.';
+export const TASK_REQUEST_NUDGE = '[task request detected] Decompose BEFORE acting: your first action this turn MUST be !addTask(description, end_factor) calls — one per step, in execution order, including the final "tell the player" step. Rules: (1) descriptions are short objective imperatives ("Get 4 coal", "Craft 16 torches") — never the player\'s words verbatim; (2) for any craft, consult CAPABILITIES and queue one acquisition task per missing ingredient BEFORE the craft task — e.g. "make me 16 torches" → !addTask("Get 4 coal", "+4 coal"), !addTask("Get 4 sticks", "+4 stick"), !addTask("Craft 16 torches", "+16 torch"); (3) every end_factor is observable — "+N item" whenever countable. Post the numbered plan to chat. Only AFTER all !addTask calls may you execute the first task. Do not call any other command first.';
 export const MEMORY_REQUEST_NUDGE = '[memory cue detected] This message contains a fact worth keeping across sessions. Call !remember(topic, content) with a kebab-case topic slug — either now, or as the first step of your plan if you also have a task to do. Do not skip this. For exact coordinates use !rememberHere instead.';
 
 // Strong multi-step verbs ("build", "set up", "automate", "construct") imply
 // a plan all by themselves — no additional complexity signal needed.
 const MULTI_STEP_VERBS = /\b(build|construct|set up|setup|automate|farm)\b/i;
 
-// detectTaskRequest still gates the !addTask nudge (encourages queue use even
-// for "go get iron"). It does NOT gate plan-mode auto-entry anymore — use
-// detectPlanRequest for that. The split is intentional per
-// feedback_pincercraft_no_plan_mode_for_simple: routine multi-step requests
-// should just execute, only EXPLICITLY plan-flavored language enters plan
-// mode.
+// detectTaskRequest = "clearly a NEW multi-step work order" — used for the
+// plan-supersede check (a fresh complex request while a plan is pending kills
+// the old plan). The !addTask decomposition nudge is gated by the broader
+// looksActionable instead (2026-07-06): every actionable ask decomposes.
 export function detectTaskRequest(message) {
     if (!message || message.length < 4) return false;
     if (MULTI_STEP_VERBS.test(message)) return true;
@@ -123,22 +121,19 @@ export function detectPlanRequest(message) {
 }
 
 // ----------------------------------------------------------------------------
-// 1b. LLM-judged plan-mode entry. "Is this hard enough to need a decomposed plan
-//     before touching a block?" is a JUDGMENT, not a regex-measurable fact — a
-//     verb/quantity pattern mis-rates it (it called "mine 64 logs" complex on the
-//     number alone). So the LLM rates difficulty 1-10 and CODE owns the
-//     threshold. Per feedback_pincercraft_llm_led_smarts + the deterministic-
-//     state-authority boundary (facts→code, judgment→LLM).
+// 1b. Actionability gate for the decomposition nudge. The LLM difficulty
+//     rating (1-10, plan mode when >7) that used to live here was REMOVED
+//     2026-07-06: it routed everything scoring ≤7 around the decomposition
+//     machinery into ONE monolithic auto-minted task, so the per-step
+//     deterministic stack (craft preflight, +N auto-finish, loop guard) had
+//     nothing to grip — torch episode #285 died that way. Now EVERY actionable
+//     ask gets TASK_REQUEST_NUDGE and decomposes into per-step tasks with
+//     observable end_factors; only explicit planning language (detectPlanRequest)
+//     enters approval-wait plan mode.
 // ----------------------------------------------------------------------------
 
-// Enter plan mode when the LLM's difficulty score EXCEEDS this (so 8+ plans).
-// Tunable policy constant, NOT a measure of difficulty.
-export const PLAN_MODE_DIFFICULTY_THRESHOLD = 7;
-
-// Permissive "is it worth spending a difficulty-rating call?" gate — NOT a
-// difficulty measure. Broad on purpose: a false positive just costs one cheap
-// rating that scores low. Greetings/acks/questions with no action verb are
-// skipped so plain chat never triggers a rating call.
+// Broad on purpose: a false positive just queues a one-step task. Greetings/
+// acks/questions with no action verb are skipped so plain chat never nudges.
 const ACTIONABLE_VERBS = /\b(mine|craft|build|construct|make|get|bring|fetch|give|smelt|gather|find|collect|hand|deliver|cook|grab|harvest|chop|dig|place|set ?up|automate|farm|kill|fight|plant|brew|enchant|repair|fill|clear|create|assemble)\b/i;
 export function looksActionable(message) {
     if (!message || message.length < 3) return false;
@@ -146,61 +141,6 @@ export function looksActionable(message) {
 }
 
 // The rating prompt. Difficulty = STRUCTURE (stages / block-types / layers),
-// NOT size — a bulk gather is one action repeated, so it stays low.
-export function buildDifficultyRatingPrompt(message) {
-    return `Decide whether a Minecraft bot should enter PLAN MODE — break a job into ordered steps before doing anything — for this player request.
-Rate the DIFFICULTY from 1 to 10. DIFFICULTY IS ABOUT STRUCTURE, NOT SIZE:
-- A single action = 1 ("come here", "give me dirt", "kill that zombie").
-- Routine gather / craft / smelt is LOW even in bulk — it's one action repeated: "mine 64 logs"=2, "get 30 iron and smelt it"=3.
-- HIGH = genuinely multi-stage: a structure with foundation/walls/roof, multiple block types or layers, or an automated contraption: "build a watch tower"=8, "set up an iron farm"=9, "build a castle"=10.
-Also extract the GOAL: if the request asks the bot to acquire or produce a countable amount of ONE item, express it as "+N item_name" (lowercase minecraft item id; if the player says "some" or gives no number, pick a sensible small N). Otherwise — movement, combat, building, chat, or giving away items already held — GOAL is none.
-Also write a TITLE: a short objective restatement of the job for the task log, imperative mood, no filler ("Go make an iron sword for me" → "Make an iron sword"). If there is no job, TITLE is none.
-Reply with EXACTLY three lines:
-DIFFICULTY: <1-10>
-GOAL: +<N> <item_name> | none
-TITLE: <short imperative> | none
-
-Request: "${message}"`;
-}
-
-// Parse an integer 1-10 from the rater's reply; null if unparseable (caller fails
-// safe to "execute directly" rather than forcing plan mode on garbage).
-export function parseDifficultyScore(text) {
-    if (text == null) return null;
-    const m = String(text).match(/\b(10|[1-9])\b/);
-    if (!m) return null;
-    const n = parseInt(m[1], 10);
-    return n >= 1 && n <= 10 ? n : null;
-}
-
-// Parse the three-line rating reply into { score, goal, title }. goal is the
-// canonical "+N item" delta string — the exact shape verify's finish gate and
-// the eval referee measure — or null (GOAL: none / unparseable). The goal is
-// what lets the execute-directly path mint a referee-measurable task instead
-// of running with no record at all. title is an objective imperative
-// restatement of the job ("Make an iron sword") used as the minted task's
-// description instead of the verbatim player message — or null, in which case
-// the mint falls back to the raw message. Fail-safe: any parse miss degrades
-// to nulls and the caller behaves exactly as before goals/titles existed.
-export function parseDifficultyAndGoal(text) {
-    if (text == null) return { score: null, goal: null, title: null };
-    const s = String(text);
-    let score = null;
-    const ds = s.match(/DIFFICULTY:\s*(10|[1-9])\b/i);
-    if (ds) score = parseInt(ds[1], 10);
-    else score = parseDifficultyScore(s.replace(/GOAL:.*$/gim, '').replace(/TITLE:.*$/gim, '')); // don't let goal/title digits masquerade as the score
-    let goal = null;
-    const g = s.match(/GOAL:\s*\+?\s*(\d{1,3})\s+([a-z][a-z0-9_]{2,})/i);
-    if (g && parseInt(g[1], 10) >= 1) goal = `+${parseInt(g[1], 10)} ${g[2].toLowerCase()}`;
-    let title = null;
-    const t = s.match(/TITLE:\s*(.+)/i);
-    if (t) {
-        const cleaned = t[1].trim().replace(/^["']|["']$/g, '').trim();
-        if (cleaned && !/^none$/i.test(cleaned)) title = cleaned.slice(0, 80);
-    }
-    return { score, goal, title };
-}
-
 // ----------------------------------------------------------------------------
 // 1c. Death handler (P2). On death the bot STOPS everything (action + plan +
 //     task auto-resume) and, if a player is directing it, asks this exact
@@ -373,7 +313,7 @@ export const THIN_DECOMPOSITION_NUDGE = (estimate, queuedTaskId) => {
 export function nudgesForUserMessage(message, { self_prompt = false, from_other_bot = false } = {}) {
     if (self_prompt || from_other_bot) return [];
     const out = [];
-    if (detectTaskRequest(message)) out.push(TASK_REQUEST_NUDGE);
+    if (looksActionable(message)) out.push(TASK_REQUEST_NUDGE);
     if (detectMemoryRequest(message)) out.push(MEMORY_REQUEST_NUDGE);
     const sizeEst = estimateTaskSize(message);
     if (sizeEst.blocks >= SIZE_DECOMP_THRESHOLD) out.push(SIZE_DECOMP_NUDGE(sizeEst));

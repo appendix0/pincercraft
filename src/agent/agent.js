@@ -3,7 +3,7 @@ import { Coder } from './coder.js';
 import { VisionInterpreter } from './vision/vision_interpreter.js';
 import { Prompter } from '../models/prompter.js';
 import { initModes } from './modes.js';
-import { initBot, getItemId } from '../utils/mcdata.js';
+import { initBot } from '../utils/mcdata.js';
 import { containsCommand, commandExists, executeCommand, truncCommandMessage, isAction, blacklistCommands, findAllCommandSpans, getCommand } from './commands/index.js';
 import { ActionManager } from './action_manager.js';
 import { NPCContoller } from './npc/controller.js';
@@ -36,8 +36,6 @@ import {
     isPathFailure,
     detectTaskRequest,
     detectPlanRequest,
-    looksActionable,
-    PLAN_MODE_DIFFICULTY_THRESHOLD,
     deathChoiceQuestion,
     detectPlanApproval,
     detectPlanRejection,
@@ -1148,63 +1146,17 @@ export class Agent {
                 }
             } else if (detectPlanRequest(message)) {
                 // Fast path: explicit planning language ("make a plan", "step by
-                // step", "first … then") → plan, no need to rate it.
+                // step", "first … then") → approval-wait plan mode.
                 this.enterPlanMode();
                 await this.history.add('system', PLAN_MODE_AUTO_NUDGE);
-            } else if (looksActionable(message)) {
-                // Difficulty is a JUDGMENT, not a regex-measurable fact (a verb/
-                // quantity pattern mis-rated "mine 64 logs" as complex). So the
-                // LLM rates the request 1-10 and code owns the threshold: enter
-                // plan mode only for genuinely multi-stage work (builds /
-                // automation). Routine gather/craft scores low and just executes.
-                try {
-                    const { score, goal, title } = await this.prompter.promptTaskDifficulty(message);
-                    if (score !== null && score > PLAN_MODE_DIFFICULTY_THRESHOLD) {
-                        console.log(`[plan mode] LLM difficulty ${score}/10 > ${PLAN_MODE_DIFFICULTY_THRESHOLD} → entering plan mode`);
-                        this.enterPlanMode();
-                        await this.history.add('system', PLAN_MODE_AUTO_NUDGE);
-                    } else {
-                        console.log(`[plan mode] LLM difficulty ${score}/10 → executing directly`);
-                        // Referee coverage for the execute-directly path: casual
-                        // asks used to run with no task record — no end_factor,
-                        // no verify gate, invisible to the referee and the DB.
-                        // When the rater extracted a countable goal, mint the
-                        // task so the whole measurement stack engages (snapshot,
-                        // auto-finish at +N, ef= in queue.log). Unknown item ids
-                        // are dropped — a bogus id could never auto-finish.
-                        if (goal && getItemId(goal.split(' ')[1])) {
-                            // Proprioception guard (live finding, task #277):
-                            // "get me 5 oaks" while holding 43 oak_log is a
-                            // DELIVERY, not an acquisition — minting "+5"
-                            // makes the referee measure the wrong criterion.
-                            // Stock covers the ask → same as GOAL: none.
-                            const [, nStr, goalItem] = goal.match(/^\+(\d+)\s+(\S+)$/) || [];
-                            const held = this.inventory_manager?.count?.(goalItem) ?? 0;
-                            if (held >= parseInt(nStr, 10)) {
-                                console.log(`[auto-task] skipped: already hold ${held} ${goalItem} — delivery ask, not acquisition (v1 unmeasurable)`);
-                            } else {
-                                // Objective title from the rater ("Make an iron
-                                // sword"), not the verbatim player message —
-                                // it's what queue.log, the heartbeat, and the
-                                // episode recorder display. Raw message is the
-                                // fallback when the TITLE line didn't parse.
-                                const res = this.task_queue.addTask(title || message, goal);
-                                if (res.ok) {
-                                    console.log(`[auto-task] #${res.task.id} ef="${goal}" (direct execution, referee-measurable)`);
-                                    await this.history.add('system', `[auto-task] Queued task #${res.task.id} for this request (done when: ${goal}). Work THIS task — don't re-add it; it finishes automatically when the target is met.`);
-                                } else {
-                                    console.log(`[auto-task] skipped: ${res.message}`);
-                                }
-                            }
-                        } else if (goal) {
-                            console.log(`[auto-task] skipped: unknown item in goal "${goal}"`);
-                        }
-                    }
-                } catch (e) {
-                    // Fail safe: rating failed → just execute (don't force plan mode).
-                    console.warn('[plan mode] difficulty rating failed, executing directly:', e?.message || e);
-                }
             }
+            // The LLM difficulty rating (1-10, plan mode when >7, else a single
+            // monolithic auto-minted task) that used to live here was REMOVED
+            // 2026-07-06: the mint's "work THIS task, don't re-add" countermanded
+            // TASK_REQUEST_NUDGE's decomposition, so ≤7 requests bypassed the
+            // per-step deterministic stack entirely (torch episode #285). Every
+            // actionable ask now decomposes via nudgesForUserMessage above into
+            // per-step tasks with observable end_factors.
         }
         this.history.save();
 
