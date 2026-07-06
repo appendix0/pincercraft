@@ -1158,7 +1158,7 @@ export class Agent {
                 // plan mode only for genuinely multi-stage work (builds /
                 // automation). Routine gather/craft scores low and just executes.
                 try {
-                    const { score, goal } = await this.prompter.promptTaskDifficulty(message);
+                    const { score, goal, title } = await this.prompter.promptTaskDifficulty(message);
                     if (score !== null && score > PLAN_MODE_DIFFICULTY_THRESHOLD) {
                         console.log(`[plan mode] LLM difficulty ${score}/10 > ${PLAN_MODE_DIFFICULTY_THRESHOLD} → entering plan mode`);
                         this.enterPlanMode();
@@ -1183,7 +1183,12 @@ export class Agent {
                             if (held >= parseInt(nStr, 10)) {
                                 console.log(`[auto-task] skipped: already hold ${held} ${goalItem} — delivery ask, not acquisition (v1 unmeasurable)`);
                             } else {
-                                const res = this.task_queue.addTask(message, goal);
+                                // Objective title from the rater ("Make an iron
+                                // sword"), not the verbatim player message —
+                                // it's what queue.log, the heartbeat, and the
+                                // episode recorder display. Raw message is the
+                                // fallback when the TITLE line didn't parse.
+                                const res = this.task_queue.addTask(title || message, goal);
                                 if (res.ok) {
                                     console.log(`[auto-task] #${res.task.id} ef="${goal}" (direct execution, referee-measurable)`);
                                     await this.history.add('system', `[auto-task] Queued task #${res.task.id} for this request (done when: ${goal}). Work THIS task — don't re-add it; it finishes automatically when the target is met.`);

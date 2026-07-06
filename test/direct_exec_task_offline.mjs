@@ -15,17 +15,17 @@ import {
 let pass = 0;
 const ok = (label) => { console.log('  ok -', label); pass++; };
 
-// 1. The canonical two-line reply parses to score + canonical goal.
+// 1. The canonical three-line reply parses to score + canonical goal + title.
 {
-    const r = parseDifficultyAndGoal('DIFFICULTY: 3\nGOAL: +30 raw_iron');
-    assert.deepStrictEqual(r, { score: 3, goal: '+30 raw_iron' });
-    ok('two-line reply → { score: 3, goal: "+30 raw_iron" }');
+    const r = parseDifficultyAndGoal('DIFFICULTY: 3\nGOAL: +30 raw_iron\nTITLE: Mine 30 raw iron');
+    assert.deepStrictEqual(r, { score: 3, goal: '+30 raw_iron', title: 'Mine 30 raw iron' });
+    ok('three-line reply → { score: 3, goal: "+30 raw_iron", title: "Mine 30 raw iron" }');
 }
 
 // 2. GOAL: none → goal null (movement/combat/build/give asks stay unmeasured, honestly).
 {
-    assert.deepStrictEqual(parseDifficultyAndGoal('DIFFICULTY: 2\nGOAL: none'), { score: 2, goal: null });
-    assert.deepStrictEqual(parseDifficultyAndGoal('DIFFICULTY: 9\nGOAL: none'), { score: 9, goal: null });
+    assert.deepStrictEqual(parseDifficultyAndGoal('DIFFICULTY: 2\nGOAL: none'), { score: 2, goal: null, title: null });
+    assert.deepStrictEqual(parseDifficultyAndGoal('DIFFICULTY: 9\nGOAL: none'), { score: 9, goal: null, title: null });
     ok('GOAL: none → goal null (score still parsed, plan-mode gate unaffected)');
 }
 
@@ -39,17 +39,17 @@ const ok = (label) => { console.log('  ok -', label); pass++; };
 
 // 4. Old-style bare-integer reply still yields a score (model drift tolerance).
 {
-    assert.deepStrictEqual(parseDifficultyAndGoal('3'), { score: 3, goal: null });
-    assert.deepStrictEqual(parseDifficultyAndGoal('Difficulty: 9/10'), { score: 9, goal: null });
+    assert.deepStrictEqual(parseDifficultyAndGoal('3'), { score: 3, goal: null, title: null });
+    assert.deepStrictEqual(parseDifficultyAndGoal('Difficulty: 9/10'), { score: 9, goal: null, title: null });
     ok('legacy single-integer replies still parse (fail-safe compat)');
 }
 
-// 5. Garbage → both null → caller executes directly with no task, as before.
+// 5. Garbage → all null → caller executes directly with no task, as before.
 {
-    assert.deepStrictEqual(parseDifficultyAndGoal('nonsense'), { score: null, goal: null });
-    assert.deepStrictEqual(parseDifficultyAndGoal(''), { score: null, goal: null });
-    assert.deepStrictEqual(parseDifficultyAndGoal(null), { score: null, goal: null });
-    ok('garbage/empty/null → { null, null } (degrades to pre-goal behavior)');
+    assert.deepStrictEqual(parseDifficultyAndGoal('nonsense'), { score: null, goal: null, title: null });
+    assert.deepStrictEqual(parseDifficultyAndGoal(''), { score: null, goal: null, title: null });
+    assert.deepStrictEqual(parseDifficultyAndGoal(null), { score: null, goal: null, title: null });
+    ok('garbage/empty/null → { null, null, null } (degrades to pre-goal behavior)');
 }
 
 // 6. Normalization: case folds, "+" optional, zero-count rejected.
@@ -60,13 +60,25 @@ const ok = (label) => { console.log('  ok -', label); pass++; };
     ok('goal normalization: lowercase, + optional, +0 rejected');
 }
 
-// 7. The rating prompt actually asks for the two-line format.
+// 7. The rating prompt actually asks for the three-line format.
 {
     const p = buildDifficultyRatingPrompt('go get me some diamonds');
     assert.ok(p.includes('GOAL'), 'prompt mentions GOAL');
+    assert.ok(p.includes('TITLE'), 'prompt mentions TITLE');
     assert.ok(p.includes('DIFFICULTY: <1-10>'), 'prompt pins the reply format');
     assert.ok(p.includes('go get me some diamonds'), 'request embedded');
-    ok('rating prompt requests DIFFICULTY + GOAL two-line reply');
+    ok('rating prompt requests DIFFICULTY + GOAL + TITLE three-line reply');
+}
+
+// 9. TITLE parsing: objective restatement extracted; quotes stripped; "none"
+//    and digits in the title never leak into score/goal.
+{
+    const r = parseDifficultyAndGoal('DIFFICULTY: 2\nGOAL: +1 iron_sword\nTITLE: Make an iron sword');
+    assert.deepStrictEqual(r, { score: 2, goal: '+1 iron_sword', title: 'Make an iron sword' });
+    assert.strictEqual(parseDifficultyAndGoal('DIFFICULTY: 2\nGOAL: none\nTITLE: "Collect 5 dirt blocks"').title, 'Collect 5 dirt blocks');
+    assert.strictEqual(parseDifficultyAndGoal('DIFFICULTY: 2\nGOAL: none\nTITLE: none').title, null);
+    assert.strictEqual(parseDifficultyAndGoal('GOAL: none\nTITLE: Gather 64 logs').score, null, 'title digits must not masquerade as score');
+    ok('TITLE parsed (quotes stripped, none→null, digits don\'t leak into score)');
 }
 
 // 8. parseDifficultyScore itself is untouched (plan-entry test contract).

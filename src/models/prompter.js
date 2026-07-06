@@ -448,14 +448,15 @@ export class Prompter {
     // agent can enter plan mode only for genuinely multi-stage work. Difficulty
     // is a judgment, not a regex-measurable fact — the LLM owns the score, the
     // agent owns the threshold. Minimal one-off call (empty turns), returns
-    // { score, goal }, both null if unparseable.
+    // { score, goal, title }, all null if unparseable.
     async promptTaskDifficulty(message) {
         await this.checkCooldown();
         const prompt = buildDifficultyRatingPrompt(message);
         const res = await this.chat_model.sendRequest([], prompt);
         this._recordUsage('difficulty', this.chat_model);
-        // { score, goal } — goal is the canonical "+N item" acquisition target
-        // when the request is countable, else null. Same call, no extra tokens.
+        // { score, goal, title } — goal is the canonical "+N item" acquisition
+        // target when the request is countable, title an objective restatement
+        // for the task description; both null when absent. Same call.
         return parseDifficultyAndGoal(res);
     }
 
