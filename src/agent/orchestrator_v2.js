@@ -48,6 +48,7 @@
 import { getRegistry } from './tool_registry.js';
 import { checkPlayerPermission } from './permissions.js';
 import { matchesToolFilter } from './subagent_v2.js';
+import { traceToolCall } from './tool_trace.js';
 import * as world from './library/world.js';
 import settings from './settings.js';
 
@@ -341,7 +342,24 @@ export class OrchestratorV2 {
         return out;
     }
 
+    // Thin wrapper: every LLM tool call — success, error, or gate block —
+    // lands one JSONL row in bots/<name>/tool_trace.jsonl (see tool_trace.js).
     async _executeOne(toolCall, cmd) {
+        const t0 = Date.now();
+        const res = await this._executeOneInner(toolCall, cmd);
+        traceToolCall(this.agent, {
+            source: 'llm',
+            name: cmd?.name || toolCall.name,
+            args: toolCall.args,
+            outcome: !res.isError ? 'ok'
+                : String(res.content).startsWith('[loop guard]') ? 'blocked' : 'error',
+            ms: Date.now() - t0,
+            result: res.content,
+        });
+        return res;
+    }
+
+    async _executeOneInner(toolCall, cmd) {
         if (!cmd) {
             return {
                 id: toolCall.id, name: toolCall.name, isError: true,

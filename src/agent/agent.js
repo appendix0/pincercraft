@@ -9,6 +9,7 @@ import { ActionManager } from './action_manager.js';
 import { NPCContoller } from './npc/controller.js';
 import { MemoryBank } from './memory_bank.js';
 import { InventoryManager } from './inventory_manager.js';
+import { episodeStart, episodeEnd } from './tool_trace.js';
 import { SelfPrompter } from './self_prompter.js';
 import convoManager from './conversation.js';
 import { handleTranslation, handleEnglishTranslation } from '../utils/translator.js';
@@ -649,6 +650,10 @@ export class Agent {
     // sent shortly after the last add. Player sees the plan even if the LLM
     // forgot to brief it.
     _onQueueChange(kind, task) {
+        // Episode flight recorder: task start/finish/cancel bound the
+        // per-task JSONL recording (bots/<name>/episodes/<id>.jsonl).
+        if (kind === 'start') episodeStart(this, task);
+        if (kind === 'finish' || kind === 'cancel') episodeEnd(this, task, kind === 'finish' ? 'done' : 'cancelled');
         // Phase G1+G2/G4: when a subagent's task finishes, inject the
         // [subagent finished] result message into history so the planner
         // sees the outcome on its next turn. Runs before the chat-brief

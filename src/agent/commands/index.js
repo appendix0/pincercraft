@@ -2,6 +2,7 @@ import { getBlockId, getItemId } from "../../utils/mcdata.js";
 import { actionsList } from './actions.js';
 import { queryList } from './queries.js';
 import { checkPlayerPermission } from '../permissions.js';
+import { traceToolCall } from '../tool_trace.js';
 
 let suppressNoDomainWarning = true;
 
@@ -288,7 +289,9 @@ export async function executeCommand(agent, message) {
             // and self-defense always run.
             const survival = resolve(command.isSurvival);
             if (!planSafe && !survival) {
-                return `[plan mode] Execute blocked for ${command.name}. You're in plan mode — only memory, queue, observation, and chat commands run. Post the plan to chat via !addTask, wait for player approval, then call !exitPlanMode (or the player saying "ok"/"yes"/"go" auto-exits).`;
+                const msg = `[plan mode] Execute blocked for ${command.name}. You're in plan mode — only memory, queue, observation, and chat commands run. Post the plan to chat via !addTask, wait for player approval, then call !exitPlanMode (or the player saying "ok"/"yes"/"go" auto-exits).`;
+                traceToolCall(agent, { source: 'text', name: command.name, args: parsed.args, outcome: 'blocked', ms: 0, result: msg });
+                return msg;
             }
             if (survival && !planSafe) {
                 console.log(`[plan mode] survival bypass: ${command.name}`);
@@ -310,8 +313,15 @@ export async function executeCommand(agent, message) {
                 console.warn(`checkPermissions threw for ${command.name}:`, e?.message || e);
             }
         }
-        const result = await command.perform(agent, ...parsed.args);
-        return result;
+        const t0 = Date.now();
+        try {
+            const result = await command.perform(agent, ...parsed.args);
+            traceToolCall(agent, { source: 'text', name: command.name, args: parsed.args, outcome: 'ok', ms: Date.now() - t0, result });
+            return result;
+        } catch (e) {
+            traceToolCall(agent, { source: 'text', name: command.name, args: parsed.args, outcome: 'error', ms: Date.now() - t0, result: String(e?.message || e) });
+            throw e;
+        }
     }
 }
 

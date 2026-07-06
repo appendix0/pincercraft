@@ -201,6 +201,10 @@ export class TaskQueue {
         t.status = STATUS.DONE;
         t.finishedAt = Date.now();
         this._log('finish', t);
+        // The onChange contract (constructor comment) always promised a
+        // 'finish' kind but nothing fired it — the followup-drain and
+        // subagent-finalize listeners in agent._onQueueChange were dead.
+        this._fire('finish', t);
         // Plan-mode pause skips the implicit advance — if a task somehow ran
         // into plan mode, finishing it shouldn't slide the next pending into
         // in_progress behind the player's back.
@@ -231,6 +235,7 @@ export class TaskQueue {
         this._recentCancels.push({description: t.description.toLowerCase(), ts: Date.now()});
         this._persist();
         this._log('cancel', t);
+        this._fire('cancel', t); // same contract gap as finishTask above
         return {ok: true, message: `Cancelled task #${t.id}: ${t.description}`, task: t};
     }
 
