@@ -407,7 +407,10 @@ async function execute(mode, agent, func, timeout=-1) {
             if (active) regrounding += ` You were working task #${active.id}: "${active.description}"${active.endFactor ? ` (done when: ${active.endFactor})` : ''}.`;
             const counts = world.getInventoryCounts(agent.bot);
             const invStr = Object.entries(counts).map(([n, c]) => `${n} x${c}`).join(', ') || 'empty';
-            regrounding += ` Your inventory RIGHT NOW: ${invStr}. Re-check the end_factor against this before any claim — never tell the player you have or finished something your inventory does not show. Then resume.`;
+            const resumeTail = agent._awaitingDeathChoice
+                ? 'Do NOT resume anything — you died and already asked the player whether to retrieve your items or forget them. Stand still and wait for their answer.'
+                : 'Then resume.';
+            regrounding += ` Your inventory RIGHT NOW: ${invStr}. Re-check the end_factor against this before any claim — never tell the player you have or finished something your inventory does not show. ${resumeTail}`;
             // Kill/hit goals leave no inventory trace, so the line above can't
             // catch a confabulated "I killed it". Add live ground truth: the
             // target is almost always still standing right there.

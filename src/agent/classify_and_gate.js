@@ -14,7 +14,7 @@
 const INTERRUPT_COMMANDS = ['!stop', '!halt', '!cancel'];
 // Natural-language stop intents. Word-boundary so "stopped by the lake" or
 // "I waited an hour" don't trigger. Matched on the full lowercased message.
-const INTERRUPT_PHRASES = /\b(stop everything|stop please|stop now|please stop|just stop|halt|abort|cancel that|nevermind|never mind|hold on|hold up|pause that)\b/i;
+const INTERRUPT_PHRASES = /\b(stop everything|stop please|stop now|please stop|just stop|halt|abort|cancel that|nevermind|never mind|forget ?(about )?it|hold on|hold up|pause that)\b/i;
 // Standalone single-word stops must start the message: "stop", "stop.", "wait!"
 const STANDALONE_STOP = /^(stop|wait|pause|cancel)\b/i;
 
@@ -42,6 +42,24 @@ export function classifyInput(input) {
     if (STANDALONE_STOP.test(msg.trim())) return 'interrupt';
 
     return 'followup';
+}
+
+// Player stop-intents come in two strengths, and the difference is what happens
+// to the task queue. A hard stop ("stop", "abort", "cancel that") means kill the
+// whole plan — the !stop command semantics. A soft pause ("wait", "hold on")
+// means stand still but keep the plan parked. Code applies the queue effect
+// deterministically at enqueue time; relying on the LLM to emit !stop left the
+// in_progress task alive for the drive loop to resurrect (the "stop doesn't
+// unpin" bug).
+const HARD_STOP_START = /^(stop|halt|abort|cancel)\b/i;
+const HARD_STOP_PHRASES = /\b(stop everything|stop now|please stop|stop please|just stop|cancel that|nevermind|never mind|forget ?(about )?it)\b/i;
+export function stopIntentStrength(message) {
+    const msg = (message || '').trim();
+    if (!msg) return null;
+    if (INTERRUPT_COMMANDS.some(kw => msg.toLowerCase().includes(kw))) return 'hard';
+    if (HARD_STOP_START.test(msg) || HARD_STOP_PHRASES.test(msg)) return 'hard';
+    if (STANDALONE_STOP.test(msg) || INTERRUPT_PHRASES.test(msg)) return 'soft';
+    return null;
 }
 
 // P0 (say-do gap): decide what a mid-task side-chat reply should DO with the

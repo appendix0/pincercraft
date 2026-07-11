@@ -32,6 +32,7 @@ import { RulebookLectern } from './rulebook_lectern.js';
 import {
     classifyInput,
     classifySideChatReply,
+    stopIntentStrength,
     nudgesForUserMessage,
     isPathFailure,
     detectTaskRequest,
@@ -551,6 +552,9 @@ export class Agent {
         let i = 0;
         this._heartbeat = setInterval(() => {
             if (!this.alive || !this.task_queue) return;
+            // Don't chat "Still on it" while the bot is deliberately NOT on it
+            // (death-choice wait, plan-mode approval wait) — that's a lie.
+            if (this._awaitingDeathChoice || this.planMode === true) return;
             const active = this.task_queue.tasks.find(t => t.status === 'in_progress');
             if (!active) return;
             const phrase = PHRASES[i++ % PHRASES.length];
@@ -875,6 +879,23 @@ export class Agent {
         const mode = classifyInput(input);
         input.mode = mode;
         if (mode === 'interrupt') {
+            // Code-owned stop reflex: the preempt below kills the current run,
+            // but the task queue decides whether the bot gets back up — an
+            // in_progress task is resurrected by the drive loop ~15s later
+            // (the "stop doesn't unpin" bug). Apply the queue effect here
+            // deterministically instead of hoping the LLM emits !stop:
+            // hard stop wipes the plan, soft pause parks the active task.
+            if (input.kind === 'player_chat' && this.task_queue) {
+                const strength = stopIntentStrength(input.message);
+                if (strength === 'hard') {
+                    const r = this.task_queue.cancelAllPending();
+                    if (r.count > 0) console.log(`[stop reflex] hard stop — cancelled ${r.count} task(s)`);
+                } else if (strength === 'soft') {
+                    const t = this.task_queue.demoteActive();
+                    if (t) console.log(`[stop reflex] soft pause — parked task #${t.id}`);
+                }
+                if (strength) { try { this.actions.cancelResume(); } catch {} }
+            }
             this._preemptCurrentRun(input);
             return;
         }
@@ -1586,10 +1607,16 @@ export class Agent {
                     // suppressed (no task auto-resume) until the player answers;
                     // their reply clears the flag (see enqueue).
                     this._awaitingDeathChoice = true;
+                    // Deterministic body-stop: the enqueue below preempts the
+                    // run queue, but the action manager keeps a resume slot
+                    // that bot.on('idle') re-arms after the respawn — that's
+                    // how a dead bot asked "retrieve or forget?" and then
+                    // walked straight back to the mine. Kill the slot.
+                    try { this.actions.cancelResume(); } catch {}
                     try { this.openChat(deathChoiceQuestion(death_pos_text)); } catch {}
                     this.enqueue({
                         source: 'system',
-                        message: `${lostNote} You have ALREADY asked the player out loud: "(1) go retrieve my lost items, or (2) forget it and wait for another task?". Take NO action and do NOT resume your task — just wait silently for their answer. When they answer: (1)/retrieve/"go get it" → !goToRememberedPlace("last_death_position") then !pickupItems; (2)/forget/"leave it" → !cancelTask the dead task and wait for a new one. If they instead give a different instruction, do that.`,
+                        message: `${lostNote} You have ALREADY asked the player out loud: "(1) go retrieve my lost items, or (2) forget it and wait for another task?". Take NO action and do NOT resume your task — just wait silently for their answer. When they answer: (1)/retrieve/"go get it" → !goToRememberedPlace("last_death_position") then !pickupItems; (2)/forget/"leave it" → !stop (clears the dead task AND every queued step of the same request), then wait for a new one. If they instead give a different instruction, do that.`,
                         kind: 'game_event_critical',
                     });
                 }
@@ -1600,7 +1627,10 @@ export class Agent {
             this.bot.pathfinder.stop(); // clear any lingering pathfinder
             this.bot.modes.unPauseAll();
             setTimeout(() => {
-                if (this.isIdle()) {
+                // Never auto-resume while waiting for the player's death
+                // choice — the respawn fires 'idle', and resuming here is
+                // the say-do gap (asked "retrieve or forget?", then moved).
+                if (this.isIdle() && !this._awaitingDeathChoice) {
                     this.actions.resumeAction();
                 }
             }, 1000);

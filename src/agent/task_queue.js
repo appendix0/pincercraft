@@ -239,6 +239,18 @@ export class TaskQueue {
         return {ok: true, message: `Cancelled task #${t.id}: ${t.description}`, task: t};
     }
 
+    // Park the active task without cancelling it (soft player pause: "wait",
+    // "hold on"). A pending task is dormant — the drive loop only nudges
+    // in_progress — until the player re-directs (!startTask or a new ask).
+    demoteActive() {
+        const t = this.tasks.find(x => x.status === STATUS.IN_PROGRESS);
+        if (!t) return null;
+        t.status = STATUS.PENDING;
+        this._persist();
+        this._log('demote', t);
+        return t;
+    }
+
     // Wipe everything not yet finished. Called by !stop so the player's mental
     // model ("stop = stop everything") matches reality. Done tasks stay so they
     // remain visible in history. Fires a 'cancel' event for each so any
