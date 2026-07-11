@@ -1621,10 +1621,18 @@ export class Agent {
                     // how a dead bot asked "retrieve or forget?" and then
                     // walked straight back to the mine. Kill the slot.
                     try { this.actions.cancelResume(); } catch {}
+                    // Structural stand-down: park the active task so NOTHING is
+                    // in_progress — the drive loop and heartbeat go quiet because
+                    // there is nothing to drive, not because a flag muzzles them.
+                    // The flag above still gates idle-resume and the re-ground
+                    // tail; the player's answer decides the task's fate
+                    // (retrieve → !startTask re-pins it; forget → !stop wipes it).
+                    let parked = null;
+                    try { parked = this.task_queue?.demoteActive() ?? null; } catch {}
                     try { this.openChat(deathChoiceQuestion(death_pos_text)); } catch {}
                     this.enqueue({
                         source: 'system',
-                        message: `${lostNote} You have ALREADY asked the player out loud: "(1) go retrieve my lost items, or (2) forget it and wait for another task?". Take NO action and do NOT resume your task — just wait silently for their answer. When they answer: (1)/retrieve/"go get it" → !goToRememberedPlace("last_death_position") then !pickupItems; (2)/forget/"leave it" → !stop (clears the dead task AND every queued step of the same request), then wait for a new one. If they instead give a different instruction, do that.`,
+                        message: `${lostNote} Your active task${parked ? ` (#${parked.id}: ${parked.description})` : ''} has been PARKED — it is no longer running. You have ALREADY asked the player out loud: "(1) go retrieve my lost items, or (2) forget it and wait for another task?". Take NO action — just wait silently for their answer. When they answer: (1)/retrieve/"go get it" → !goToRememberedPlace("last_death_position") then !pickupItems${parked ? `, then !startTask(${parked.id}) to resume the parked task` : ''}; (2)/forget/"leave it" → !stop (clears the parked task AND every queued step of the same request), then wait for a new one. If they instead give a different instruction, do that.`,
                         kind: 'game_event_critical',
                     });
                 }
