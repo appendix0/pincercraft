@@ -49,6 +49,7 @@ import { getRegistry } from './tool_registry.js';
 import { checkPlayerPermission } from './permissions.js';
 import { matchesToolFilter } from './subagent_v2.js';
 import { traceToolCall } from './tool_trace.js';
+import { verifyEndFactor } from './verify.js';
 import * as world from './library/world.js';
 import settings from './settings.js';
 
@@ -129,6 +130,11 @@ export class OrchestratorV2 {
         // (live: kept smelting/crafting to HARD_CAP after saying "pausing
         // what I'm on"), so code owns this reflex. Cleared at invoke start.
         this._parkRequested = null;
+        // HARD_CAP circuit-breaker state: { taskId, fingerprint, count }.
+        // One capped invoke on a busy task is normal; consecutive caps on the
+        // SAME task with the SAME end-factor observation mean it isn't
+        // converging, no matter how sensible each round looked.
+        this._capStrikes = null;
     }
 
     // Stop the in-flight invoke loop at the next boundary: before the next
@@ -312,6 +318,47 @@ export class OrchestratorV2 {
             this.history.push({ role: 'tool_result', toolResults: results });
         }
         console.warn(`[orch] hit HARD_CAP=${12}; parking to avoid infinite loop`);
+        this._onHardCap();
+    }
+
+    // Two consecutive HARD_CAPs on the same task with zero end-factor movement
+    // means the task isn't converging (live: "get string by killing spiders"
+    // in a peaceful world — 24 individually-sensible rounds, no string).
+    // Without this the drive re-nudges the task forever: cap → park → idle →
+    // nudge → fresh budget → cap. Cancel it in code and tell the owner.
+    _onHardCap() {
+        const q = this.agent?.task_queue;
+        const active = q?.tasks?.find(t => t.status === 'in_progress');
+        if (!active) { this._capStrikes = null; return; }
+        // Progress fingerprint: verifyEndFactor returns `observed` when met,
+        // `reason` (with live counts embedded) when not. Identical string
+        // across two caps = nothing moved. Non-programmatic factors yield a
+        // stable null, so raw cap count carries the decision there.
+        let fingerprint = null;
+        try {
+            const ef = verifyEndFactor(this.agent, active);
+            fingerprint = ef?.observed ?? ef?.reason ?? null;
+        } catch (e) { console.warn('[cap-breaker] verifyEndFactor threw:', e?.message || e); }
+        const prev = this._capStrikes;
+        if (prev && prev.taskId === active.id && prev.fingerprint === fingerprint) {
+            prev.count += 1;
+        } else {
+            this._capStrikes = { taskId: active.id, fingerprint, count: 1 };
+        }
+        if (this._capStrikes.count < 2) return;
+        this._capStrikes = null;
+        console.warn(`[cap-breaker] task #${active.id} capped twice with no progress — cancelling and asking the owner`);
+        try { q.cancelTask(active.id); } catch (e) {
+            console.warn('[cap-breaker] cancel failed:', e?.message || e);
+            return;
+        }
+        try {
+            this.agent.history?.add?.('system',
+                `[cap-breaker] Task #${active.id} ("${active.description}") was cancelled by code: two full tool budgets ran with no progress toward the end factor. It is likely not achievable right now. Do not re-add it unless the player asks; if they ask why, explain what was blocking it.`);
+        } catch {}
+        try {
+            this.agent.openChat?.(`Calling it — "${active.description}" went nowhere after two full attempts, so I cancelled it. Might not be doable right now. Say the word if you want me to try another way.`);
+        } catch {}
     }
 
     // Tools advertised to the LLM this turn. Plan-mode filter +
