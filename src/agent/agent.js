@@ -33,6 +33,7 @@ import {
     classifyInput,
     classifySideChatReply,
     stopIntentStrength,
+    installServerCommandGuard,
     nudgesForUserMessage,
     isPathFailure,
     detectTaskRequest,
@@ -202,6 +203,11 @@ export class Agent {
         // bot.memory_bank to read last_death_position, failing lint in a loop.
         this.bot.agent = this;
 
+        // Server-command guard: block prompt-injected "/op"-style commands at
+        // the bot.chat / _client.chat choke points, deterministically. See
+        // installServerCommandGuard for the mechanism and the /skin raw path.
+        installServerCommandGuard(this.bot);
+
         // Connection Handler
         const onDisconnect = (event, reason) => {
             if (this._disconnectHandled) return;
@@ -256,10 +262,12 @@ export class Agent {
             serverProxy.login();
             
             // Set skin for profile, requires Fabric Tailor. (https://modrinth.com/mod/fabrictailor)
+            // Uses the raw handle — the only sanctioned command call site; the
+            // chat guard blocks "/" on every LLM/Coder-reachable path.
             if (this.prompter.profile.skin)
-                this.bot.chat(`/skin set URL ${this.prompter.profile.skin.model} ${this.prompter.profile.skin.path}`);
+                this.bot._rawCommandChat(`/skin set URL ${this.prompter.profile.skin.model} ${this.prompter.profile.skin.path}`);
             else
-                this.bot.chat(`/skin clear`);
+                this.bot._rawCommandChat(`/skin clear`);
         });
 		const spawnTimeoutDuration = settings.spawn_timeout;
         const spawnTimeout = setTimeout(() => {

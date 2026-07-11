@@ -62,6 +62,47 @@ export function stopIntentStrength(message) {
     return null;
 }
 
+// Server-command guard: a leading "/" in outbound chat executes as a server
+// command with the bot's permissions, so a prompt-injected "/op X" must die in
+// code — never rely on the LLM declining. bot.chat is the choke point every
+// sender funnels through (openChat/LLM replies, Coder-generated code, skills);
+// bot._client.chat is the layer below it, reachable by Coder code directly.
+// Both are ASSIGNED by mineflayer plugins on the tick after createBot, so we
+// intercept the properties: the setter captures whatever implementation lands,
+// the getter always hands out the guarded version. The only sanctioned command
+// path is bot._rawCommandChat (code-owned static strings, e.g. /skin at login),
+// which sets a bypass flag for the synchronous call chain underneath it.
+export function installServerCommandGuard(bot, log = console.warn) {
+    let inRaw = false;
+    const isCommand = (msg) => typeof msg === 'string' && msg.trimStart().startsWith('/');
+
+    const intercept = (obj, prop) => {
+        let real = typeof obj[prop] === 'function' ? obj[prop].bind(obj) : null;
+        const guarded = (msg, ...rest) => {
+            if (isCommand(msg) && !inRaw) {
+                log(`[chat guard] blocked outbound server command via ${prop}: ${msg}`);
+                return;
+            }
+            if (real) return real(msg, ...rest);
+            log(`[chat guard] ${prop} not attached yet, dropping: ${msg}`);
+        };
+        Object.defineProperty(obj, prop, {
+            configurable: true,
+            enumerable: true,
+            get() { return guarded; },
+            set(fn) { real = fn; },
+        });
+    };
+
+    intercept(bot, 'chat');
+    if (bot._client) intercept(bot._client, 'chat');
+
+    bot._rawCommandChat = (msg) => {
+        inRaw = true;
+        try { return bot.chat(msg); } finally { inRaw = false; }
+    };
+}
+
 // P0 (say-do gap): decide what a mid-task side-chat reply should DO with the
 // commands it emits. A body-touching (non concurrency-safe) command means the
 // player gave a TASK-RELATED directive while the bot was busy ("go get the
