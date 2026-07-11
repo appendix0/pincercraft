@@ -40,14 +40,27 @@ export class AgentProcess {
             }
 
             if (code !== 0 && signal !== 'SIGINT') {
-                // agent must run for at least 10 seconds before restarting
+                let delay = 10000;
                 if (Date.now() - last_restart < 10000) {
-                    console.error(`Agent process exited too quickly and will not be restarted.`);
-                    return;
+                    // Fast exit (crashed within 10s of spawning): back off, and
+                    // hand the service to systemd (Restart=on-failure) rather
+                    // than lingering as a live process with no agent inside —
+                    // reconcile trusts `systemctl is-active`, so a zombie parent
+                    // pins the bot down until someone restarts it by hand.
+                    this.fast_exit_count = (this.fast_exit_count || 0) + 1;
+                    if (this.fast_exit_count >= 5) {
+                        console.error(`Agent process crash-looping (${this.fast_exit_count} fast exits) — exiting so systemd restarts the service.`);
+                        process.exit(1);
+                    }
+                    delay = Math.min(10000 * 2 ** this.fast_exit_count, 300000);
+                    console.error(`Agent process exited too quickly; retrying in ${delay / 1000}s (fast exit ${this.fast_exit_count}/5).`);
+                } else {
+                    this.fast_exit_count = 0;
+                    console.log('Restarting agent in 10s...');
                 }
-                console.log('Restarting agent...');
-                this.start(true, 'Agent process restarted.', count_id, this.port);
-                last_restart = Date.now();
+                setTimeout(() => {
+                    this.start(true, 'Agent process restarted.', count_id);
+                }, delay);
             }
         });
     
