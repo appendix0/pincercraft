@@ -14,7 +14,10 @@
 const INTERRUPT_COMMANDS = ['!stop', '!halt', '!cancel'];
 // Natural-language stop intents. Word-boundary so "stopped by the lake" or
 // "I waited an hour" don't trigger. Matched on the full lowercased message.
-const INTERRUPT_PHRASES = /\b(stop everything|stop please|stop now|please stop|just stop|halt|abort|cancel that|nevermind|never mind|forget ?(about )?it|hold on|hold up|pause that)\b/i;
+// "stand by" only when NOT followed by a place/person ("go stand by the
+// chest" is a position instruction, not a halt). "told/asked you to stop"
+// is the frustrated repeat of an earlier stop — hard.
+const INTERRUPT_PHRASES = /\b(stop everything|stop please|stop now|please stop|just stop|halt|abort|cancel that|nevermind|never mind|forget ?(about )?it|hold on|hold up|pause that|standby|stand down|stand by(?!\s+(?:the|my|your|that|this|a|an|me|him|her)\b)|(?:told|telling|asked|asking|tell|ask) you to stop)\b/i;
 // Standalone single-word stops must start the message: "stop", "stop.", "wait!"
 const STANDALONE_STOP = /^(stop|wait|pause|cancel)\b/i;
 
@@ -52,7 +55,7 @@ export function classifyInput(input) {
 // in_progress task alive for the drive loop to resurrect (the "stop doesn't
 // unpin" bug).
 const HARD_STOP_START = /^(stop|halt|abort|cancel)\b/i;
-const HARD_STOP_PHRASES = /\b(stop everything|stop now|please stop|stop please|just stop|cancel that|nevermind|never mind|forget ?(about )?it)\b/i;
+const HARD_STOP_PHRASES = /\b(stop everything|stop now|please stop|stop please|just stop|cancel that|nevermind|never mind|forget ?(about )?it|(?:told|telling|asked|asking|tell|ask) you to stop)\b/i;
 export function stopIntentStrength(message) {
     const msg = (message || '').trim();
     if (!msg) return null;

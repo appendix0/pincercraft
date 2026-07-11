@@ -105,6 +105,9 @@ export const actionsList = [
             await agent.actions.stop();
             agent.clearBotLogs();
             agent.actions.cancelResume();
+            // !stop can arrive via the side-chat safe path while an orchestrator
+            // invoke is mid-loop; parking that loop is part of stopping.
+            try { agent.orchestrator?.requestPark?.('!stop'); } catch {}
             agent.bot.emit('idle');
             let msg = 'Agent stopped.';
             // Stop = stop EVERYTHING. Wipe the task queue too — the player's

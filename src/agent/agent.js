@@ -947,6 +947,10 @@ export class Agent {
         this.run_queue.abortCurrent();
         this.run_queue.clear();
         this.requestInterrupt();
+        // Body stop above doesn't stop the BRAIN: an in-flight orchestrator
+        // invoke keeps issuing tools after an interrupted result. Park it in
+        // code so "pausing what I'm on" is true the moment it's said.
+        try { this.orchestrator?.requestPark?.(`preempt by ${nextInput.source}`); } catch {}
         this.run_queue.push(nextInput);
     }
 

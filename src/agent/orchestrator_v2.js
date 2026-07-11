@@ -122,6 +122,20 @@ export class OrchestratorV2 {
         // delegates isLongRunning tools to backgroundTasks instead of awaiting
         // them. Set externally by the agent during construction.
         this.backgroundTasks = null;
+        // Deterministic park: set via requestPark() when a player directive
+        // (preempt, !stop, mid-invoke message) must stop the invoke loop.
+        // requestInterrupt() alone kills the body but not the brain — the LLM
+        // seeing an "interrupted" tool result reliably keeps issuing tools
+        // (live: kept smelting/crafting to HARD_CAP after saying "pausing
+        // what I'm on"), so code owns this reflex. Cleared at invoke start.
+        this._parkRequested = null;
+    }
+
+    // Stop the in-flight invoke loop at the next boundary: before the next
+    // LLM round, and between serial tool executions (skipped calls still get
+    // paired results). No-op when no invoke is in flight.
+    requestPark(reason = 'player directive') {
+        this._parkRequested = reason;
     }
 
     // Public entry point. Caller does NOT await the invoke loop — fire and
@@ -137,6 +151,7 @@ export class OrchestratorV2 {
             // and this queued message drains next. Non-user events (checkpoints,
             // bg/mode) keep the old queue-and-wait behavior.
             if (event.type === 'user_message') {
+                this.requestPark('player message arrived mid-invoke');
                 try { this.agent?.requestInterrupt?.(); } catch { /* best-effort */ }
             }
             return;
@@ -254,11 +269,19 @@ export class OrchestratorV2 {
     }
 
     async _invokeUntilParked() {
+        // Each invoke serves a fresh event; a park aimed at a previous invoke
+        // (already consumed, or whose triggering message this invoke is now
+        // serving) must not kill this one.
+        this._parkRequested = null;
         // Hard cap on iterations as a safety net (real fix is the LLM
         // emitting no more toolCalls). Tune lower than the legacy
         // for(i<max_responses) which was effectively unbounded.
         const HARD_CAP = 12;
         for (let i = 0; i < HARD_CAP; i++) {
+            if (this._parkRequested) {
+                console.warn(`[orch] parked deterministically: ${this._parkRequested}`);
+                return;
+            }
             const tools = this.activeTools();
             const system = typeof this.getSystemPrompt === 'function' ? await this.getSystemPrompt() : '';
             const resp = await this.promptWithTools(this.history, system, tools);
@@ -329,6 +352,13 @@ export class OrchestratorV2 {
         const parallelResults = await Promise.all(safe.map(({ tc, cmd }) => this._executeOne(tc, cmd)));
         const serialResults = [];
         for (const { tc, cmd } of serial) {
+            if (this._parkRequested) {
+                serialResults.push({
+                    id: tc.id, name: tc.name, isError: true,
+                    content: `[parked] Skipped — ${this._parkRequested} stopped this run before the call executed.`,
+                });
+                continue;
+            }
             serialResults.push(await this._executeOne(tc, cmd));
         }
         // Preserve original call order in the returned array
