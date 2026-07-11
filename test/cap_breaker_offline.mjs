@@ -53,7 +53,11 @@ const mkCappingOrch = (agent) => new OrchestratorV2(agent, {
     await orch.handleEvent({ type: 'user_message', source: 'system', content: '[drive] nudge' });
     assert.deepStrictEqual(cancelled, [299], `second no-progress cap must cancel #299, got ${JSON.stringify(cancelled)}`);
     assert(said.length === 1 && said[0].includes('Get 2 string'), 'owner is told in chat');
-    assert(noted.length === 1 && noted[0].includes('[cap-breaker]'), 'LLM history gets the cap-breaker note');
+    // The note must land in the ORCHESTRATOR's own history (what the LLM
+    // reads next invoke) — agent.history is archival and never prompted.
+    assert(orch.history.some(h => h.role === 'user' && String(h.content).includes('[cap-breaker]')),
+        'LLM-visible history gets the cap-breaker note');
+    assert(noted.length === 0, 'archival agent.history is not used for the note');
     assert(orch._capStrikes === null, 'strikes reset after the break');
     ok('second no-progress HARD_CAP → task cancelled in code + owner told');
 }

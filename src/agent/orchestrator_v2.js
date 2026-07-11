@@ -71,6 +71,11 @@ const LOOP_GUARD_MSG = (name) => `[loop guard] ${name} just ran with no change t
 // gets nowhere. N=3: two no-progress attempts are tolerated, the third blocked.
 const NO_PROGRESS_STREAK_LIMIT = 3;
 
+// "Not found nearby" threshold: a search that comes up empty at or beyond
+// this range means the target genuinely isn't around — stop and ask the
+// player instead of tooling up for a hunt with no quarry (owner rule).
+const SEARCH_MISS_WIDE = 256;
+
 // Flatten an orchestrator neutral turn into the { role, content:string } shape
 // that promptCompact → stringifyTurns expects. tool_result turns map to a
 // user-side line; assistant tool calls are rendered compactly so the summary
@@ -352,12 +357,45 @@ export class OrchestratorV2 {
             console.warn('[cap-breaker] cancel failed:', e?.message || e);
             return;
         }
-        try {
-            this.agent.history?.add?.('system',
-                `[cap-breaker] Task #${active.id} ("${active.description}") was cancelled by code: two full tool budgets ran with no progress toward the end factor. It is likely not achievable right now. Do not re-add it unless the player asks; if they ask why, explain what was blocking it.`);
-        } catch {}
+        // Own-history note (agent.history is archival — the LLM never sees it):
+        // lands after this invoke's tool_result rows, read on the next invoke.
+        this.history.push({
+            role: 'user',
+            content: `[cap-breaker] Task #${active.id} ("${active.description}") was cancelled by code: two full tool budgets ran with no progress toward the end factor. It is likely not achievable right now. Do not re-add it unless the player asks; if they ask why, explain what was blocking it.`,
+        });
         try {
             this.agent.openChat?.(`Calling it — "${active.description}" went nowhere after two full attempts, so I cancelled it. Might not be doable right now. Say the word if you want me to try another way.`);
+        } catch {}
+    }
+
+    // "Not found nearby" reflex (owner rule 2026-07-11): an empty search is a
+    // fact the LLM reliably shrugs off (live: "no spider in 128 blocks" on a
+    // peaceful world → 24-round sword yak-shave instead of asking). With a
+    // task in progress: a miss below the wide threshold gets a corrective
+    // appended to the tool result (one wide search, then stop); a miss at
+    // >=SEARCH_MISS_WIDE parks the task in code (drive goes structurally
+    // silent), parks the invoke, and asks the player — ask first, then act.
+    // Skips the water-search fallback line ("...blocks, looking for...") —
+    // only a sentence-final "blocks." is a terminal miss.
+    _searchMissReflex(res) {
+        if (!res || res.isError) return;
+        const m = /Could not find any ([\w:]+) (?:in|within) (\d+) blocks\./.exec(String(res.content ?? ''));
+        if (!m) return;
+        const q = this.agent?.task_queue;
+        const active = q?.tasks?.find(t => t.status === 'in_progress');
+        if (!active) return;
+        const [, target, rangeStr] = m;
+        const range = Number(rangeStr);
+        if (range < SEARCH_MISS_WIDE) {
+            res.content += `\n[search miss] No ${target} within ${range} blocks. If the task needs it, search ONCE at ${SEARCH_MISS_WIDE}; an empty ${SEARCH_MISS_WIDE}-block search stops the task and asks the player.`;
+            return;
+        }
+        try { q.demoteActive?.(); } catch (e) { console.warn('[search miss] demote failed:', e?.message || e); }
+        this.requestPark(`search miss: no ${target} within ${range} blocks`);
+        console.warn(`[search miss] no ${target} within ${range} blocks → parked task #${active.id}, asking the owner`);
+        res.content += `\n[search miss] No ${target} within ${range} blocks — code parked task #${active.id} and asked the player. Take NO further action until they answer: "go look for it" → !startTask(${active.id}) then explore, "drop it" → !cancelTask(${active.id}).`;
+        try {
+            this.agent.openChat?.(`Can't find any ${target} within ${range} blocks. Parked "${active.description}" — want me to go exploring for it, or should I drop it?`);
         } catch {}
     }
 
@@ -424,6 +462,7 @@ export class OrchestratorV2 {
     async _executeOne(toolCall, cmd) {
         const t0 = Date.now();
         const res = await this._executeOneInner(toolCall, cmd);
+        this._searchMissReflex(res);
         traceToolCall(this.agent, {
             source: 'llm',
             name: cmd?.name || toolCall.name,
