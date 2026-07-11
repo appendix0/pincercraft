@@ -28,6 +28,20 @@ function nearestBlockToRef(agent, predicate, maxDistance, ref) {
 }
 
 
+// An interrupted action used to return undefined, which the v2 orchestrator
+// rendered as a fake "<cmd> ok" — swallowing whatever the action logged
+// before the interrupt (live 2026-07-11: two 256-block "Could not find
+// any..." results lost to the stuck-watchdog's self-unstick, blinding the
+// search-miss reflex and telling the LLM a killed search succeeded). Keep
+// the accumulated output, honestly marked. Timeouts keep their own message.
+export function interruptedAware(code_return) {
+    if (code_return.interrupted && !code_return.timedout) {
+        const out = (code_return.message || '').trim();
+        return out ? `[interrupted] ${out}` : '[interrupted] Action was interrupted before producing output.';
+    }
+    return code_return.message;
+}
+
 function runAsAction (actionFn, resume = false, timeout = -1) {
     let actionLabel = null;  // Will be set on first use
 
@@ -42,9 +56,7 @@ function runAsAction (actionFn, resume = false, timeout = -1) {
             await actionFn(agent, ...args);
         };
         const code_return = await agent.actions.runAction(`action:${actionLabel}`, actionFnWithAgent, { timeout, resume });
-        if (code_return.interrupted && !code_return.timedout)
-            return;
-        return code_return.message;
+        return interruptedAware(code_return);
     }
     // Step 2: mark so the tool_registry can derive isLongRunning without
     // each command entry having to declare it. Anything wrapped via
@@ -287,7 +299,7 @@ export const actionsList = [
                 async () => { await skills.giveToPlayer(agent.bot, item_name, player_name, num); },
                 { timeout: -1, resume: false },
             );
-            const result = code_return.interrupted && !code_return.timedout ? undefined : code_return.message;
+            const result = interruptedAware(code_return);
             // giveToPlayer logs "<player> received <item>" when the player
             // collected the drop, or "Gave N <item> (dropped at their feet)"
             // when the items left the bot's inventory at the player but weren't
@@ -336,7 +348,7 @@ export const actionsList = [
                 async () => { await skills.consume(agent.bot, item_name); },
                 { timeout: -1, resume: false },
             );
-            return code_return.interrupted && !code_return.timedout ? undefined : code_return.message;
+            return interruptedAware(code_return);
         }
     },
     {
@@ -370,7 +382,7 @@ export const actionsList = [
                 async () => { await skills.putInChest(agent.bot, item_name, num); },
                 { timeout: -1, resume: false },
             );
-            return code_return.interrupted && !code_return.timedout ? undefined : code_return.message;
+            return interruptedAware(code_return);
         }
     },
     {
@@ -396,7 +408,7 @@ export const actionsList = [
                 async () => { await skills.takeFromChest(agent.bot, item_name, num); },
                 { timeout: -1, resume: false },
             );
-            return code_return.interrupted && !code_return.timedout ? undefined : code_return.message;
+            return interruptedAware(code_return);
         }
     },
     {
@@ -430,7 +442,7 @@ export const actionsList = [
                     await skills.goToPosition(agent.bot, start_loc.x, start_loc.y, start_loc.z, 0);
                 },
                 { timeout: -1, resume: false },
-            ).then(cr => cr.interrupted && !cr.timedout ? undefined : cr.message);
+            ).then(interruptedAware);
         }
     },
     {
@@ -487,7 +499,7 @@ export const actionsList = [
                 async () => { await skills.craftRecipe(agent.bot, recipe_name, num); },
                 { timeout: -1, resume: false },
             );
-            return code_return.interrupted && !code_return.timedout ? undefined : code_return.message;
+            return interruptedAware(code_return);
         }
     },
     {
