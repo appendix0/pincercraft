@@ -384,7 +384,9 @@ export const actionsList = [
             if (agent.inventory_manager?.redundantAcquire(item_name)) {
                 const msg = `Already have ${item_name} — not opening the chest.`;
                 try { agent.openChat(msg); } catch {}
-                return msg;
+                // "[chest blocked]" marks this as a gate bounce (streak-neutral
+                // in the orchestrator's loop guard), matching [give/eat blocked].
+                return `[chest blocked] ${msg}`;
             }
             const code_return = await agent.actions.runAction(
                 'action:takeFromChest',
@@ -466,7 +468,7 @@ export const actionsList = [
             if (agent.inventory_manager?.redundantAcquire(recipe_name)) {
                 const msg = `Already have a ${recipe_name} — no need to craft another.`;
                 try { agent.openChat(msg); } catch {}
-                return msg;
+                return `[craft blocked] ${msg}`;
             }
             // Deterministic preflight (Claude Code-style precondition gate): never
             // attempt a craft the bot can't afford. Bounce it with a structured
@@ -475,7 +477,7 @@ export const actionsList = [
             const pf = agent.inventory_manager?.craftPreflight(recipe_name, num);
             if (pf && pf.ok === false) {
                 try { agent.openChat(pf.corrective); } catch {}
-                return pf.corrective;
+                return `[craft blocked] ${pf.corrective}`;
             }
             const code_return = await agent.actions.runAction(
                 'action:craftRecipe',

@@ -128,4 +128,43 @@ const ok = (label) => { console.log('  ok -', label); pass++; };
     ok('D: progress mid-streak resets the counter (legit recovery not cut off)');
 }
 
+// --- Gate bounces are streak-neutral (the demo-1 bootstrap deadlock fix) ---
+{
+    let invItems = [{ name: 'stick', count: 2 }];
+    const bot = { inventory: { get slots() { return invItems; } } };
+    const agent = { bot, last_sender: 'system' };
+    const tc = (args) => ({ id: Math.random().toString(36).slice(2), name: 'craftRecipe', args });
+
+    // A preflight bounce: corrective returned, nothing executed, inventory unchanged.
+    const craftBounce = { name: '!craftRecipe', params: { recipe_name: {}, num: {} },
+        perform: async () => '[craft blocked] Cannot craft iron_axe — short 3 iron_ingot.' };
+
+    // Three bounces with varied args used to hit the streak limit and block
+    // everything; now they must all pass through untouched.
+    const orch = new OrchestratorV2(agent, { promptWithTools: async () => ({}), getSystemPrompt: async () => '' });
+    const b1 = await orch._executeOne(tc({ recipe_name: 'iron_axe', num: 1 }), craftBounce);
+    const b2 = await orch._executeOne(tc({ recipe_name: 'iron_pickaxe', num: 1 }), craftBounce);
+    const b3 = await orch._executeOne(tc({ recipe_name: 'iron_sword', num: 1 }), craftBounce);
+    assert(!b1.isError && !b2.isError && !b3.isError,
+        `bounces must never trip the streak, got ${JSON.stringify([b1, b2, b3].map(r => r.isError))}`);
+    ok('bounce: 3 varied gate bounces in a row → streak untouched, none blocked');
+
+    // The recovery action the corrective demanded must still run after bounces.
+    const recovery = { name: '!collectBlocks', params: { type: {}, num: {} },
+        perform: async () => { invItems = [...invItems, { name: 'oak_log', count: 1 }]; return 'collected 1'; } };
+    const r = await orch._executeOne({ id: 'r', name: 'collectBlocks', args: { type: 'oak_log', num: 1 } }, recovery);
+    assert(!r.isError, `recovery after bounces must run, got ${JSON.stringify(r)}`);
+    ok('bounce: recovery action after 3 bounces runs (deadlock gone)');
+
+    // But the exact-sig ledger still stops an IDENTICAL re-bounce on the same
+    // inventory — no infinite bounce spam.
+    const orch2 = new OrchestratorV2(agent, { promptWithTools: async () => ({}), getSystemPrompt: async () => '' });
+    invItems = [{ name: 'stick', count: 2 }];
+    const s1 = await orch2._executeOne(tc({ recipe_name: 'iron_axe', num: 1 }), craftBounce);
+    const s2 = await orch2._executeOne(tc({ recipe_name: 'iron_axe', num: 1 }), craftBounce);
+    assert(!s1.isError && s2.isError && /loop guard/.test(s2.content),
+        `identical re-bounce on same inventory must still block, got ${JSON.stringify([s1, s2])}`);
+    ok('bounce: identical re-bounce on unchanged inventory → still blocked by exact-sig');
+}
+
 console.log(`\nALL PASS (${pass} checks)`);

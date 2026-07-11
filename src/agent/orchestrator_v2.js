@@ -450,8 +450,16 @@ export class OrchestratorV2 {
                 // it only blocks a re-run while nothing else has changed.
                 const madeProgress = this._inventoryHash() !== invBefore;
                 this._acqLedger.set(acqSig, madeProgress ? 'progress' : 'noprogress');
-                // Progress resets the streak; a no-op extends it toward the limit.
-                this._noProgressStreak = madeProgress ? 0 : this._noProgressStreak + 1;
+                // Gate bounces ("[craft blocked] ...", "[chest blocked] ...") are
+                // correctives, not attempts — the action never ran. The exact-sig
+                // mark above still stops an identical re-try against the same
+                // inventory, but the streak must stay untouched: bounces used to
+                // count as flails, and two of them from a poor inventory blocked
+                // the very recovery action the corrective demanded (the demo-1
+                // bootstrap deadlock, task #282).
+                const bounced = typeof result === 'string' && /^\[\w+ blocked\]/.test(result);
+                // Progress resets the streak; a real no-op extends it toward the limit.
+                if (!bounced) this._noProgressStreak = madeProgress ? 0 : this._noProgressStreak + 1;
             }
             return {
                 id: toolCall.id, name: toolCall.name, isError: false,
