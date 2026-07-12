@@ -467,7 +467,18 @@ export function findMissingToolsInPrompt(promptText, inventoryItems) {
     for (const tool of TOOL_KEYWORDS) {
         // Word-boundary match so "iron_ingot" doesn't trigger "iron_pickaxe" etc.
         const re = new RegExp(`\\b${tool}\\b`, 'i');
-        if (re.test(lower) && !have.has(tool)) missing.add(tool);
+        if (!re.test(lower) || have.has(tool)) continue;
+        // A tool named as the CRAFT TARGET is the goal, not a tool the Coder
+        // will swing — "craft a fishing_rod" got bounced 4× live (2026-07-11)
+        // as "missing: fishing_rod" while the bot stood at the crafting table
+        // with all materials. Same craft-intent window the redundant-fetch
+        // gate uses (spaced variant included — the LLM writes "fishing rod"
+        // too). An unaffordable craft still fails honestly in
+        // skills.craftRecipe — no pathfinder timeout is at stake here.
+        const toolPat = tool.replace(/_/g, '[ _]');
+        const craftTarget = new RegExp(`\\b(craft|make|create)\\b[^.]{0,40}\\b${toolPat}\\b`, 'i').test(lower);
+        if (craftTarget) continue;
+        missing.add(tool);
     }
     return Array.from(missing);
 }

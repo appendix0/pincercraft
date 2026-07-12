@@ -106,7 +106,30 @@ export async function craftRecipe(bot, itemName, num=1) {
     const requiredIngredients = mc.ingredientsFromPrismarineRecipe(recipe); //Items required to use the recipe once.
     const craftLimit = mc.calculateLimitingResource(inventory, requiredIngredients);
     
-    await bot.craft(recipe, Math.min(craftLimit.num, num), craftingTable);
+    const preCraftCount = world.getInventoryCounts(bot)[itemName] ?? 0;
+    try {
+        await bot.craft(recipe, Math.min(craftLimit.num, num), craftingTable);
+    } catch (err) {
+        if (!/missing ingredient/i.test(String(err?.message || err))) throw err;
+        // Transient mineflayer race: craft() reads window slots that lag the
+        // server right after an item pickup/give — threw "missing ingredient"
+        // 3× live (2026-07-11) with every ingredient in $INVENTORY, then
+        // succeeded untouched. Wait for a sync, check whether the craft
+        // actually landed (the torch case: crafted AND threw), else retry
+        // once; fail honestly instead of leaking the raw exception.
+        await new Promise(r => setTimeout(r, 1000));
+        if ((world.getInventoryCounts(bot)[itemName] ?? 0) <= preCraftCount) {
+            try {
+                await bot.craft(recipe, Math.min(craftLimit.num, num), craftingTable);
+            } catch (err2) {
+                if ((world.getInventoryCounts(bot)[itemName] ?? 0) <= preCraftCount) {
+                    log(bot, `Craft of ${itemName} threw "missing ingredient" twice — inventory is likely out of sync with the server. Wait a moment and try again.`);
+                    if (placedTable) await collectBlock(bot, 'crafting_table', 1);
+                    return false;
+                }
+            }
+        }
+    }
     if(craftLimit.num<num) log(bot, `Not enough ${craftLimit.limitingResource} to craft ${num}, crafted ${craftLimit.num}. You now have ${world.getInventoryCounts(bot)[itemName]} ${itemName}.`);
     else log(bot, `Successfully crafted ${itemName}, you now have ${world.getInventoryCounts(bot)[itemName]} ${itemName}.`);
     if (placedTable) {
