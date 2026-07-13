@@ -5,6 +5,9 @@
 # script. Run it again (or `/loop eval/loop.sh`) for the next cycle.
 #
 # Env knobs:  MODE=explore|bench  WATCH_TIMEOUT=900  TASKGIVER_BUDGET=0.50  IMPROVER_BUDGET=2.00
+#             RUN_ANALYZER=0 RUN_IMPROVER=0  — measurement-only cycles (e.g. the
+#             referee-agreement run: task + referee verdict + DB row, no LLM
+#             diagnosis and no fix branch).
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; cd "$ROOT"
@@ -13,6 +16,8 @@ MODE="${MODE:-explore}"
 WATCH_TIMEOUT="${WATCH_TIMEOUT:-900}"
 TASKGIVER_BUDGET="${TASKGIVER_BUDGET:-0.50}"
 IMPROVER_BUDGET="${IMPROVER_BUDGET:-2.00}"
+RUN_ANALYZER="${RUN_ANALYZER:-1}"
+RUN_IMPROVER="${RUN_IMPROVER:-1}"
 
 # The three loop agents (task-giver, analyzer, improver) run through the `claude`
 # CLI on the Claude subscription (OAuth in ~/.claude/.credentials.json), NOT the
@@ -113,6 +118,7 @@ echo "$M" >> "$EVAL/metrics.jsonl"
 printf '%s' "$M" | node -e 'const m=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(`  outcome=${m.outcome} turns=${m.turns} block_ops=${m.work.block_ops} tok/op=${m.tokens_per_block_op} in/turn=${m.avg_input_per_turn} cache_hit=${m.cache_hit_ratio} ~$${m.est_cost_usd}`)'
 
 # ── 4. analyze (read-only) ─────────────────────────────────────────────────
+if [ "$RUN_ANALYZER" = 1 ]; then
 sed -n "${LSTART},${LEND}p" "$BOTLOG" > "$SLICE"
 if [ "$(wc -l < "$SLICE")" -gt 600 ]; then
   { head -150 "$SLICE"; echo "...[trimmed middle]..."; tail -450 "$SLICE"; } > "$SLICE.t" && mv "$SLICE.t" "$SLICE"
@@ -132,6 +138,10 @@ $M
 
 ## bot.log slice (lines $LSTART–$LEND)
 $(cat "$SLICE")" --output-format text > "$DIAG"
+else
+  DIAG=/dev/null
+  say "analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label"
+fi
 
 # ── 4b. log the attempt to pincercraft_evals.db ────────────────────────────
 PROG=$(grep -oE 'PROGRESS_SCORE=[0-9.]+'        "$DIAG" | head -1 | cut -d= -f2)
@@ -160,6 +170,10 @@ printf '%s' "$ROW" | python3 eval/eval_db.py log-attempt >/dev/null \
   && say "logged attempt → pincercraft_evals.db (commit $COMMIT, tier $TIER, ${PROG:-auto} progress)"
 
 # ── 5. improve (branch only, never merge) ──────────────────────────────────
+if [ "$RUN_IMPROVER" != 1 ]; then
+  say "improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label $TASKID <0|1> [notes])"
+  exit 0
+fi
 BR="improve/task-$TASKID-$(date +%H%M%S)"
 say "improver drafting a fix on branch $BR …"
 claude -p "$(cat "$EVAL/prompts/improver.md")
