@@ -45,5 +45,5 @@ Happy to answer anything about the referee design or where the LLM still fails w
 
 - "Isn't this just function calling / structured output?" → No: structured output constrains the *format* of claims; the referee ignores claims entirely and measures state deltas. Different trust boundary.
 - "Why not just use a better model?" → We measured with ⟦model⟧; the gap is a loop-design problem — any model that self-reports completion unverified will drift. Numbers in the dataset.
-- "N is small" → True — dataset and methodology are public precisely so the N can grow; referee agreement with blind human labels is ⟦A/6⟧.
-- "Cherry-picked?" → Every attempt in the campaign window is in the ledger, failures included; `label_source` column shows which were referee-measured.
+- "N is small" → True — dataset and methodology are public precisely so the N can grow; the referee was calibrated against blind human labels before the trial (⟦A/6⟧ agreement).
+- "Cherry-picked?" → Every attempt in the field-trial window is in the ledger, failures included; `label_source` column shows which were referee-measured.

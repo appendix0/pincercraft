@@ -3,8 +3,8 @@
 **Ring 1, artifact #1. Human sends.** This goes first — everything else links it.
 
 Pre-send checklist:
-- [ ] Two-arm campaign done; every `⟦…⟧` replaced with a number that traces to a DB row
-- [ ] Referee-agreement labels done (6 human labels)
+- [ ] Field Trial done; every `⟦…⟧` replaced with a number that traces to a DB row
+- [ ] Referee Calibration done (~6 human-verified attempts)
 - [ ] Receipt doc + HF dataset links live
 - [ ] Re-check #800/#780 are still open; adjust the opener if they've moved
 - [ ] `grep ⟦ docs/publish/upstream-issue.md` returns nothing
@@ -21,7 +21,7 @@ We wanted to know how big that problem actually is, so we measured it on our for
 
 **Setup:** every task attempt snapshots inventory before, re-measures after, and a deterministic referee labels success from the world-state delta — the model's own "done!" doesn't count. Attempts land in a SQLite ledger with both labels (what the model claimed vs. what the world showed).
 
-**Result:** across ⟦N⟧ referee-labeled attempts, the model claimed completion on ⟦X%⟧ but the world-state delta confirmed only ⟦Y%⟧ — a ⟦Z⟧-point say-do gap. (Referee sanity check: ⟦A/6⟧ agreement with blind human labels on live attempts.) The single funniest row: asked to *gather 32 cobblestone* while already holding 37, the bot declared done in five seconds having moved zero blocks — and an LLM grader scored it a success. The delta check fails it: gained 0, needed 32.
+**Result:** across ⟦N⟧ referee-labeled attempts, the model claimed completion on ⟦X%⟧ but the world-state delta confirmed only ⟦Y%⟧ — a ⟦Z⟧-point say-do gap. (Referee calibration: ⟦A/6⟧ agreement with blind human labels on live attempts.) The single funniest row: asked to *gather 32 cobblestone* while already holding 37, the bot declared done in five seconds having moved zero blocks — and an LLM grader scored it a success. The delta check fails it: gained 0, needed 32.
 
 Full traces (episode JSONLs + referee verdicts + human gold labels) are published as a dataset: ⟦HF link⟧. A worked before/after on one task is here: [receipt doc](https://github.com/appendix0/pincercraft/blob/develop/docs/receipts/2026-07-12-search-miss-before-after.md).
 

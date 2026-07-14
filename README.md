@@ -68,7 +68,7 @@ The referee exists because we caught the old honor system red-handed: eval cycle
 
 For a worked before/after with real transcripts — the same impossible task with and without the harness — see [the search-miss receipt](docs/receipts/2026-07-12-search-miss-before-after.md).
 
-A full benchmark table — success rate and token cost across difficulty tiers, referee-labeled, harness vs. ablated — is the current campaign; it goes here when the numbers exist. We're not going to hand-wave the one section the fork is named after.
+A full benchmark table — success rate and token cost across difficulty tiers, referee-labeled, harness on vs. off — comes from the field trial now underway; it goes here when the numbers exist. We're not going to hand-wave the one section the fork is named after.
 
 ## Stock Mindcraft vs PincerCraft
 
