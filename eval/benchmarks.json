@@ -1,17 +1,53 @@
 [
     {
         "tier": "1",
-        "description": "Mine 32 cobblestone: dig down/around with a pickaxe and break stone (stone drops cobblestone)",
-        "end_factor": "at least 32 cobblestone in inventory"
+        "description": "Mine 16 NEW cobblestone this run: dig down/around with a pickaxe and break stone (stone drops cobblestone)",
+        "end_factor": "+16 cobblestone in inventory (net gain this run)"
+    },
+    {
+        "tier": "1",
+        "description": "Chop 6 NEW oak logs this run from naturally growing oak trees in open/neutral ground",
+        "end_factor": "+6 oak_log in inventory (net gain this run)"
+    },
+    {
+        "tier": "1",
+        "description": "Collect 8 NEW dirt this run by breaking surface dirt/grass blocks in open/neutral ground",
+        "end_factor": "+8 dirt in inventory (net gain this run)"
     },
     {
         "tier": "2",
-        "description": "Build a solid 5x5 cobblestone platform, one block high, at your current standing position",
-        "end_factor": "a 5x5 (25-block) cobblestone platform exists where the bot was standing"
+        "description": "Craft 16 NEW oak planks this run, chopping oak logs first if needed",
+        "end_factor": "+16 oak_planks in inventory (net gain this run)"
+    },
+    {
+        "tier": "2",
+        "description": "Craft 12 NEW sticks this run, gathering logs and crafting planks as needed",
+        "end_factor": "+12 stick in inventory (net gain this run)"
+    },
+    {
+        "tier": "2",
+        "description": "Craft 1 NEW furnace this run, mining the 8 cobblestone for it as needed",
+        "end_factor": "+1 furnace in inventory (net gain this run)"
     },
     {
         "tier": "3",
-        "description": "Craft 8 torches, gathering or converting coal/charcoal and sticks as needed",
-        "end_factor": "at least 8 torch in inventory"
+        "description": "Craft 8 NEW torches this run, gathering or converting coal/charcoal and sticks as needed",
+        "end_factor": "+8 torch in inventory (net gain this run)"
+    },
+    {
+        "tier": "3",
+        "description": "Craft 1 NEW stone pickaxe this run, gathering wood, sticks, and cobblestone as needed",
+        "end_factor": "+1 stone_pickaxe in inventory (net gain this run)"
+    },
+    {
+        "tier": "3",
+        "description": "Craft 3 NEW ladders this run, gathering wood and crafting the 7 sticks as needed",
+        "end_factor": "+3 ladder in inventory (net gain this run)"
+    },
+    {
+        "tier": "3",
+        "description": "Build a solid 5x5 cobblestone platform, one block high, at your current standing position",
+        "end_factor": "a 5x5 (25-block) cobblestone platform exists where the bot was standing",
+        "note": "deliberately NOT inventory-shaped: referee falls back to honor_system, keeping one measured example of the label_source split until the phase-2 block-scan referee lands"
     }
 ]
