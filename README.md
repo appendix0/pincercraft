@@ -14,14 +14,17 @@
 
 <p align="center">
   <a href="https://appendix0.github.io/pincercraft-site/">Site</a> ·
-  <a href="https://github.com/kolbytn/mindcraft">Upstream</a> ·
+  <a href="https://github.com/mindcraft-bots/mindcraft">Upstream</a> ·
   <a href="docs/agent-blueprint.md">Design</a> ·
+  <a href="docs/receipts/">Receipts</a> ·
   <a href="docs/CHANGELOG.md">Changelog</a>
 </p>
 
+<!-- DEMO SLOT: 30–60s GIF goes here when recorded (storyboard: docs/receipts/2026-07-12-search-miss-before-after.md) -->
+
 ---
 
-Stock Mindcraft hands an LLM a pickaxe and hopes. The model guesses its own inventory, "remembers" tools it isn't holding, declares victory over tasks it never finished, and re-prompts itself straight into a rate limit.
+Stock Mindcraft hands an LLM a pickaxe and hopes. The model guesses its own inventory, "remembers" tools it isn't holding, declares victory over tasks it never finished, and re-prompts itself straight into a rate limit. We caught ours declaring a *gather 32 cobblestone* task done in five seconds — it hadn't moved; it already owned 37 and figured that counted.
 
 PincerCraft fixes that with one rule:
 
@@ -29,23 +32,35 @@ PincerCraft fixes that with one rule:
 
 Inventory counts, *"can I mine this?"*, the recipe gap, *"is this task actually done?"* — computed every turn and handed to the model. It doesn't get to guess. That's the discipline of a coding agent like Claude Code — check the ground truth before you act, gate anything destructive, plan before you execute — pointed at a Minecraft bot.
 
-## What makes it different
+## The five features that matter
 
-🧠 **It can't lie to itself.** The hard facts — inventory counts, *"can I mine this?"*, the recipe gap, whether a task is actually finished — are computed in code every turn and handed to the model. So when it reaches for a diamond axe with zero diamonds, the bot catches it before the swing, points it at the wooden one, and carries on. The LLM owns the plan; it never gets to guess the facts. → [`live_state.js`](src/agent/live_state.js), [`verify.js`](src/agent/verify.js)
+### 1. It can't lie to itself
 
-⚡ **It thinks, then shuts up.** Stock Mindcraft re-prompts the model on every new line and bursts itself straight into a rate limit. PincerCraft wakes the model only when something actually changed — a chat message, a finished action, a mob with bad intentions — then parks until the next one. Cheaper, calmer, and no more "my brain disconnected." → [`orchestrator_v2.js`](src/agent/orchestrator_v2.js)
+The hard facts — inventory counts, *"can I mine this?"*, the recipe gap, whether a task is finished — are computed in code every turn and injected into the model's context. So when it reaches for a diamond axe with zero diamonds, the bot catches it before the swing, points it at the wooden one, and carries on. Deterministic reflexes handle the reflex-shaped failures too: an empty wide search parks the task and asks the player instead of looping, and a non-converging task hits a hard-cap circuit-breaker instead of your API bill. → [`live_state.js`](src/agent/live_state.js), [`verify.js`](src/agent/verify.js)
 
-📋 **It plans before it digs.** Talk to it mid-task and your words slot into a queue instead of starting a race. Hand it something big and it breaks the job into steps, posts the plan to chat, and waits for your "go" before touching a single block. Small stuff just runs — planning is reserved for builds that actually need it.
+### 2. A referee that doesn't take the bot's word
 
-📖 **Players write house rules. Nobody rewrites the constitution.** The bot's conduct comes in two parts. The staple Code of Conduct — no griefing, no chest theft, protect the owner's base — ships in [`CLAUDE.md`](CLAUDE.md) and is never written at runtime. House rules live in a writable book on a lectern *inside Minecraft*: edit the book in vanilla MC and the bot re-reads it within ~2 seconds, no restart. On conflict, the constitution wins — we know, because someone put a book on the lectern that said "You are Groot" and it replaced the bot's entire personality for two weeks. Now it can't. → [`coc.js`](src/agent/coc.js), [`rulebook_lectern.js`](src/agent/rulebook_lectern.js)
+Task success is measured, not claimed: snapshot inventory before, re-measure after, label from the world-state delta. The bot's own "done!" counts for nothing. Every attempt lands in a SQLite ledger with tokens, wall clock, failure mode, and who labeled it — referee or honor system. This is the feature the fork is named for, and it exists because the honor system failed a live audit ([receipts below](#receipts)). → [`eval/referee.mjs`](eval/referee.mjs)
 
-🔁 **It grades itself — and the grader doesn't take its word.** An eval loop invents tasks, runs them, and labels success with a deterministic referee that snapshots inventory before the task and re-measures after. The bot's own "done!" doesn't count; the world state does. When the loop finds a weak spot it drafts a fix to `src/` on a branch and stops for human review — nothing merges itself. → [`eval/referee.mjs`](eval/referee.mjs), [`eval/loop.sh`](eval/loop.sh)
+### 3. It grades itself and drafts its own patches
+
+A closed eval loop invents tasks, runs them, referee-labels the outcomes, finds the weak spot, and drafts a fix to `src/` — **on a branch, stopped for human review**. Nothing merges itself. The loop is how most of the fixes in the [changelog](docs/CHANGELOG.md) were found. → [`eval/`](eval/)
+
+### 4. It thinks, then shuts up
+
+Stock Mindcraft re-prompts the model on every chat line and bursts itself into rate limits. PincerCraft's orchestrator wakes the model only on real events — a message, a finished action, a mob with bad intentions — then parks. Mid-task requests slot into a queue instead of starting a race, and big asks get decomposed into a plan posted to chat for your "go" before it touches a block. Cheaper, calmer, no more "my brain disconnected." → [`orchestrator_v2.js`](src/agent/orchestrator_v2.js)
+
+### 5. Players write house rules inside Minecraft
+
+Conduct comes in two parts. The staple Code of Conduct — no griefing, no chest theft, protect the owner's base — ships in [`CLAUDE.md`](CLAUDE.md) and is never written at runtime. House rules live in a writable book on a lectern *in the world*: edit it in vanilla Minecraft and the bot re-reads it within ~2 seconds, no restart. On conflict, the constitution wins — we know, because someone once put "You are Groot" on the lectern and it replaced the bot's entire personality for two weeks. Now it can't. → [`coc.js`](src/agent/coc.js), [`rulebook_lectern.js`](src/agent/rulebook_lectern.js)
 
 ## Receipts
 
 The referee exists because we caught the old honor system red-handed: eval cycle 2 asked the bot to *gather 32 cobblestone*, it already held 37, declared done in five seconds having moved zero blocks — and the LLM grader scored it a success. The deterministic delta check fails it: gained 0, needed 32. That disagreement is the whole thesis in one row of the database.
 
-Every attempt now lands in a SQLite ledger (`task_attempts`: tokens, wall clock, failure mode, and `label_source` — whether the referee measured it or it fell back to the honor system). A full benchmark table — success rate and token cost across difficulty tiers, referee-labeled — is the current campaign; it goes here when the numbers exist. We're not going to hand-wave the one section the fork is named after.
+For a worked before/after with real transcripts — the same impossible task with and without the harness — see [the search-miss receipt](docs/receipts/2026-07-12-search-miss-before-after.md).
+
+A full benchmark table — success rate and token cost across difficulty tiers, referee-labeled, harness vs. ablated — is the current campaign; it goes here when the numbers exist. We're not going to hand-wave the one section the fork is named after.
 
 ## Stock Mindcraft vs PincerCraft
 
@@ -85,7 +100,7 @@ The self-improvement loop lives in [`eval/`](eval/) (`bash eval/session.sh` runs
 
 ## Based on Mindcraft
 
-This is a fork of [kolbytn/mindcraft](https://github.com/kolbytn/mindcraft), which provides the core integration of LLMs with Minecraft via [Mineflayer](https://prismarinejs.github.io/mineflayer/). All credit for the foundation goes to the Mindcraft authors. License is MIT, preserved verbatim — see [LICENSE](LICENSE).
+This is a fork of [mindcraft-bots/mindcraft](https://github.com/mindcraft-bots/mindcraft) (formerly kolbytn/mindcraft), which provides the core integration of LLMs with Minecraft via [Mineflayer](https://prismarinejs.github.io/mineflayer/). All credit for the foundation goes to the Mindcraft authors. License is MIT, preserved verbatim — see [LICENSE](LICENSE).
 
 To pull upstream updates:
 
