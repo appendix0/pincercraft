@@ -34,25 +34,33 @@ Inventory counts, *"can I mine this?"*, the recipe gap, *"is this task actually 
 
 ## The five features that matter
 
-### 1. It can't lie to itself
+### 1. The deterministic layer — code owns every fact
 
-The hard facts — inventory counts, *"can I mine this?"*, the recipe gap, whether a task is finished — are computed in code every turn and injected into the model's context. So when it reaches for a diamond axe with zero diamonds, the bot catches it before the swing, points it at the wooden one, and carries on. Deterministic reflexes handle the reflex-shaped failures too: an empty wide search parks the task and asks the player instead of looping, and a non-converging task hits a hard-cap circuit-breaker instead of your API bill. → [`live_state.js`](src/agent/live_state.js), [`verify.js`](src/agent/verify.js)
+The flagship, and the reason the fork exists. Everything the bot *believes* is computed in code and handed to the model; everything the bot *claims* is measured back against the world. The LLM plans — it never gets to guess a fact or grade its own work.
 
-### 2. A referee that doesn't take the bot's word
+**1-1 · Perception.** Inventory counts, *"can I mine this?"*, the recipe gap, health, time of day — recomputed every turn and injected into the model's context. The model reads the world; it doesn't imagine it. → [`live_state.js`](src/agent/live_state.js)
 
-Task success is measured, not claimed: snapshot inventory before, re-measure after, label from the world-state delta. The bot's own "done!" counts for nothing. Every attempt lands in a SQLite ledger with tokens, wall clock, failure mode, and who labeled it — referee or honor system. This is the feature the fork is named for, and it exists because the honor system failed a live audit ([receipts below](#receipts)). → [`eval/referee.mjs`](eval/referee.mjs)
+**1-2 · Gates.** Impossible actions bounce before the swing: reach for a diamond axe with zero diamonds and the preflight check catches it, points the bot at the wooden one, and carries on. Crafting without ingredients, mining without the right tool — rejected with the fix attached, not discovered mid-failure. → [`verify.js`](src/agent/verify.js)
 
-### 3. It grades itself and drafts its own patches
+**1-3 · Reflexes.** Failure shapes that don't deserve an LLM round get hard-coded responses: an empty wide search parks the task and asks the player instead of looping (it once spent 24 rounds hunting spiders on a peaceful world — never again), a broken tool re-equips, a full inventory gets handled before it blocks the task.
 
-A closed eval loop invents tasks, runs them, referee-labels the outcomes, finds the weak spot, and drafts a fix to `src/` — **on a branch, stopped for human review**. Nothing merges itself. The loop is how most of the fixes in the [changelog](docs/CHANGELOG.md) were found. → [`eval/`](eval/)
+**1-4 · The referee.** Task success is measured, not claimed: snapshot inventory before, re-measure after, label from the world-state delta. The bot's own "done!" counts for nothing. Every attempt lands in a SQLite ledger with tokens, wall clock, failure mode, and who labeled it — referee or honor system ([receipts below](#receipts)). → [`eval/referee.mjs`](eval/referee.mjs)
 
-### 4. It thinks, then shuts up
+### 2. It thinks, then shuts up
 
-Stock Mindcraft re-prompts the model on every chat line and bursts itself into rate limits. PincerCraft's orchestrator wakes the model only on real events — a message, a finished action, a mob with bad intentions — then parks. Mid-task requests slot into a queue instead of starting a race, and big asks get decomposed into a plan posted to chat for your "go" before it touches a block. Cheaper, calmer, no more "my brain disconnected." → [`orchestrator_v2.js`](src/agent/orchestrator_v2.js)
+Stock Mindcraft re-prompts the model on every chat line and bursts itself into rate limits. PincerCraft's orchestrator wakes the model only on real events — a message, a finished action, a mob with bad intentions — then parks. Mid-task requests slot into a queue instead of starting a race, and big asks get decomposed into a plan posted to chat for your "go" before it touches a block. Calmer, and no more "my brain disconnected." → [`orchestrator_v2.js`](src/agent/orchestrator_v2.js)
 
-### 5. Players write house rules inside Minecraft
+### 3. Loop guards and caching — the token savers
+
+The mechanisms that keep the API bill boring. A circuit-breaker cancels any task that stops converging (12 rounds on the same fingerprint and it's done — no more $100 of "discussing nonsense"). The prompt is laid out cache-first: the static system block and tools sit before the cache breakpoint, per-turn live state goes in a separate uncached block after it, so the expensive prefix is read from cache on every wake instead of re-billed. And the orchestrator's own history auto-compacts before it can grow unbounded. → [`claude.js`](src/models/claude.js), [`orchestrator_v2.js`](src/agent/orchestrator_v2.js)
+
+### 4. Players write house rules inside Minecraft
 
 Conduct comes in two parts. The staple Code of Conduct — no griefing, no chest theft, protect the owner's base — ships in [`CLAUDE.md`](CLAUDE.md) and is never written at runtime. House rules live in a writable book on a lectern *in the world*: edit it in vanilla Minecraft and the bot re-reads it within ~2 seconds, no restart. On conflict, the constitution wins — we know, because someone once put "You are Groot" on the lectern and it replaced the bot's entire personality for two weeks. Now it can't. → [`coc.js`](src/agent/coc.js), [`rulebook_lectern.js`](src/agent/rulebook_lectern.js)
+
+### 5. Appendix: a self-improvement loop, open for study
+
+A closed eval loop invents tasks (easy first, ramping on clean successes), runs them, referee-labels the outcomes, finds the weak spot, and drafts a fix to `src/` — **on a branch, stopped for human review**. Nothing merges itself. The loop is how most of the fixes in the [changelog](docs/CHANGELOG.md) were found, and it's why the repo doubles as a case study: every attempt it ever made is in the ledger, episode traces included, failures and all. → [`eval/`](eval/)
 
 ## Receipts
 
