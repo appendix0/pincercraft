@@ -1,10 +1,10 @@
 <h1 align="center">PincerCraft</h1>
 
 <p align="center">
-  <img src="banner.webp" alt="PincerCraft — a Minecraft bot that can't lie to itself" width="640">
+  <img src="banner.webp" alt="PincerCraft — code owns the facts, the LLM owns the plan" width="640">
 </p>
 
-<p align="center"><b>A Minecraft bot that can't lie to itself.</b><br>A Mindcraft fork rebuilt Claude-Code-style: a deterministic harness under the LLM.</p>
+<p align="center"><b>Code owns the facts. The LLM owns the plan.</b><br>A Minecraft agent with a deterministic backbone — a Mindcraft fork rebuilt Claude-Code-style.</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT">
