@@ -24,7 +24,7 @@ I run an LLM Minecraft bot (a Mindcraft fork). The moment that started all of th
 
 So I stopped letting the model grade its own homework. Every task attempt now snapshots inventory before, re-measures after, and a deterministic referee labels success from the world-state delta. Measured over ⟦N⟧ attempts: the model claimed completion on ⟦X%⟧, the world confirmed ⟦Y%⟧.
 
-That number reshaped the whole bot. The design rule became: code owns the facts (inventory, "can I mine this?", recipe gaps, completion), the LLM only owns the plan — basically what coding agents like Claude Code do with typechecks and tests, pointed at Minecraft. Deterministic reflexes catch the dumb loops (it once spent 24 LLM rounds hunting spiders on a peaceful-mode world where spiders can't spawn — now an empty search parks the task and asks the player).
+That number reshaped the whole bot. The design rule became: code owns the facts (inventory, "can I mine this?", recipe gaps, completion), the LLM only owns the plan — basically what coding agents do with typechecks and tests, pointed at Minecraft. Deterministic reflexes catch the dumb loops (it once spent 24 LLM rounds hunting spiders on a peaceful-mode world where spiders can't spawn — now an empty search parks the task and asks the player).
 
 Everything's measurable on purpose: episode traces, referee verdicts, and human gold labels are published as a dataset (⟦HF link⟧), and there's a worked before/after of the same impossible task with and without the harness in the repo.
 

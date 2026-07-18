@@ -23,7 +23,7 @@ We run a fork of Mindcraft (LLM Minecraft bot). For months it *felt* unreliable,
 
 Result across ⟦N⟧ referee-labeled attempts: claimed ⟦X%⟧, verified ⟦Y%⟧ — a ⟦Z⟧-point gap. Funniest single row: told to gather 32 cobblestone while already holding 37, it declared done in 5 seconds without moving. An LLM grader passed it. The delta check didn't (gained 0, needed 32).
 
-The fix wasn't a better model — it was a harness. Claude-Code-style: code owns the facts (inventory, reachability, recipe gaps, completion), the LLM only plans. Deterministic reflexes catch the reflex-shaped failures (searching for mobs that can't spawn on peaceful, non-converging tasks burning tokens), and an event-driven loop replaces re-prompt-on-every-chat-line.
+The fix wasn't a better model — it was a harness, built the way coding agents are built: code owns the facts (inventory, reachability, recipe gaps, completion), the LLM only plans. Deterministic reflexes catch the reflex-shaped failures (searching for mobs that can't spawn on peaceful, non-converging tasks burning tokens), and an event-driven loop replaces re-prompt-on-every-chat-line.
 
 The harness pattern is model-agnostic — swap the brain, keep the referee. And the problem isn't Minecraft-shaped either: open-world, long-horizon tasks are where agent stacks fall apart in general — Minecraft just makes the failures cheap to measure. The same say-do gap waits for agents acting in the real, physical world.
 

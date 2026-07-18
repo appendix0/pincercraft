@@ -4,7 +4,7 @@
   <img src="banner.webp" alt="PincerCraft — code owns the facts, the LLM owns the plan" width="640">
 </p>
 
-<p align="center"><b>Code owns the facts. The LLM owns the plan.</b><br>A Minecraft agent with a deterministic backbone — a Mindcraft fork rebuilt Claude-Code-style.</p>
+<p align="center"><b>Code owns the facts. The LLM owns the plan.</b><br>A Minecraft agent with a deterministic backbone, built for open-world, long-horizon tasks. A Mindcraft fork.</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT">
@@ -85,7 +85,7 @@ A full benchmark table — success rate and token cost across difficulty tiers, 
 
 ## Setup
 
-**Requirements:** Node **20.x** (hard requirement — Node 24 crashes the agent child with `ERR_INTERNAL_ASSERTION`; use `nvm install 20`), a Java-edition Minecraft server (tested on Paper 1.21.x; Bedrock players can join via Geyser/Floodgate), and an **Anthropic API key**. The v2 orchestrator speaks the structured tool-calling protocol and Claude is the tested brain (Haiku planner + Sonnet coder); providers that silently drop `tools[]` (e.g. DeepSeek) only work with the legacy loop.
+**Requirements:** Node **20.x** (hard requirement — Node 24 crashes the agent child with `ERR_INTERNAL_ASSERTION`; use `nvm install 20`), a Java-edition Minecraft server (tested on Paper 1.21.x; Bedrock players can join via Geyser/Floodgate), and an **Anthropic API key**. Both planning and code run **Claude Sonnet 4.6** (`model` and `code_model` in the profile). Why: the v2 orchestrator is built on structured tool calling, and Claude is the brain that's proven reliable at it — providers that silently drop `tools[]` (e.g. DeepSeek) only work with the legacy loop. And Sonnet-tier judgment is a deliberate choice: the meta-behaviors live in prompt rules the model has to actually follow, so upgrading judgment beat piling on code band-aids, while the cache-first layout and event-driven loop keep the bill sane.
 
 ```bash
 git clone https://github.com/appendix0/pincercraft.git && cd pincercraft

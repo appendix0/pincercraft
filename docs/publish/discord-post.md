@@ -19,7 +19,7 @@ Been running a Mindcraft fork for a couple months and finally measured the thing
 
 Answer: the model claimed done on ⟦X%⟧ of attempts, world-state delta confirmed ⟦Y%⟧. Best single example — asked it to gather 32 cobblestone while it already held 37; it declared victory in 5 seconds without moving. The LLM grader passed it. The inventory-delta check didn't.
 
-The fork's whole idea is Claude-Code-style: **code owns the facts (inventory, "can I mine this?", "is this actually done?"), the LLM only owns the plan.** Deterministic referee grades every task from world-state deltas, reflexes catch stuff like searching for spiders that can't spawn, and a circuit-breaker kills non-converging tasks instead of burning your API budget. Long game: agents that survive open-world, long-horizon work without lying about it — Minecraft is the arena that makes that measurable.
+The fork's whole idea: **code owns the facts (inventory, "can I mine this?", "is this actually done?"), the LLM only owns the plan** — the discipline coding agents live by, pointed at Minecraft. Deterministic referee grades every task from world-state deltas, reflexes catch stuff like searching for spiders that can't spawn, and a circuit-breaker kills non-converging tasks instead of burning your API budget. Long game: agents that survive open-world, long-horizon work without lying about it — Minecraft is the arena that makes that measurable.
 
 ⟦attach demo GIF/MP4 here⟧
 
