@@ -24,6 +24,8 @@
 
 ---
 
+Open-world, long-horizon tasks are where LLM agents fall apart: they drift off-goal, loop on broken plans, and misreport their own progress. PincerCraft is an experiment in fixing that with architecture instead of bigger models — a deterministic harness that owns the facts, guards against loops, and grades the outcomes, under an LLM that only plans. Minecraft works as the arena — open-ended, unforgiving, cheap to measure — but the agenda reaches past the game: the same failures wait for any agent that has to act in the real, physical open world.
+
 Stock Mindcraft hands an LLM a pickaxe and hopes. The model guesses its own inventory, "remembers" tools it isn't holding, declares victory over tasks it never finished, and re-prompts itself straight into a rate limit. We caught ours declaring a *gather 32 cobblestone* task done in five seconds — it hadn't moved; it already owned 37 and figured that counted.
 
 PincerCraft fixes that with one rule:
