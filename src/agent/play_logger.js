@@ -26,11 +26,13 @@ export function logPlayAttempt(agent, task) {
         // not-success with an explicit marker rather than honor-system credit.
         let success = 0;
         let failure_mode = 'unverified_play';
+        let programmatic = false;
         try {
             const v = verifyEndFactor(agent, task);
             if (v && v.programmatic) {
+                programmatic = true;
                 success = v.verified ? 1 : 0;
-                failure_mode = v.verified ? null : 'unverified_play';
+                failure_mode = v.verified ? null : 'referee_delta_short';
             }
         } catch { failure_mode = 'verify_error'; }
 
@@ -38,12 +40,15 @@ export function logPlayAttempt(agent, task) {
             ? (task.finishedAt - task.createdAt) / 1000 : 0;
 
         const row = {
+            task_id: task.id,
             task_name: task.description || '',
             difficulty_tier: 'play',
             task_set: 'play',
             task_source: 'player',
             success,
             wall_clock_seconds: wall,
+            end_factor: task.endFactor || null,
+            label_source: programmatic ? 'referee' : 'honor_system',
             timestamp: new Date().toISOString(),
         };
         if (!success && failure_mode) row.failure_mode = failure_mode;

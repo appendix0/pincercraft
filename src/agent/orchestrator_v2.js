@@ -195,6 +195,17 @@ export class OrchestratorV2 {
                     role: 'user',
                     content: event.source ? `${event.source}: ${event.content}` : event.content,
                 });
+                // Code-emitted guidance for THIS message (decomposition nudge,
+                // plan-mode nudges, …) rides in on the event — this history is
+                // the only one the LLM sees, so nudges appended only to the
+                // archival agent.history never reach the model.
+                if (Array.isArray(event.nudges) && event.nudges.length > 0) {
+                    console.log(`[nudge->orch] ${event.nudges.length} nudge(s) attached to user_message`);
+                    this.history.push({
+                        role: 'user',
+                        content: event.nudges.map(n => `[system] ${n}`).join('\n\n'),
+                    });
+                }
                 break;
             case 'bg_complete': {
                 // Surface bg-task outcome as a synthetic user turn (no

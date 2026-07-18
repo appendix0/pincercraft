@@ -22,7 +22,7 @@ import { log, validateNameFormat, handleDisconnection } from './connection_handl
 import { RunQueue } from './run_queue.js';
 import { humanizeCommand } from './command_humanizer.js';
 import { TaskQueue, pruneQueueOnStart } from './task_queue.js';
-// import { logPlayAttempt } from './play_logger.js'; // MUTED 2026-06-09 — see finish handler (gold DB supersedes)
+import { logPlayAttempt } from './play_logger.js'; // re-enabled 2026-07-18 — referee calibration needs auto attempt rows
 import { snapshotStartCounts, verifyEndFactor } from './verify.js';
 import { buildLiveStateBlock } from './live_state.js';
 import { MemoryStore } from './memory_store.js';
@@ -684,10 +684,11 @@ export class Agent {
                 console.warn('finalizeSubagent (cancel) failed:', e?.message || e);
             }
         }
-        // Auto play-attempt logging MUTED 2026-06-09: superseded by the curated,
-        // human-verified gold DB (gold_attempts table; added only on command via
-        // eval/gold_add.py). Re-enable by restoring this call + the import above.
-        // if (kind === 'finish') logPlayAttempt(this, task);
+        // Auto play-attempt logging re-enabled 2026-07-18 (was muted 2026-06-09
+        // in favor of the gold DB): referee calibration + Field Trial need every
+        // player-driven finish auto-logged with a referee label. The curated
+        // gold_attempts table is unaffected — it stays human-command-only.
+        if (kind === 'finish') logPlayAttempt(this, task);
 
         // Side-chat follow-up: when a task finishes, address any player
         // messages we deferred earlier. Synthetic system input drives the
@@ -1139,7 +1140,13 @@ export class Agent {
         }
 
         await this.history.add(source, message);
-        for (const nudge of nudgesForUserMessage(message, { self_prompt, from_other_bot })) {
+        // Nudges must ALSO reach the v2 orchestrator (its history is the only
+        // one the LLM sees — agent.history is archival). Captured here, passed
+        // into handleEvent below. Before 2026-07-18 they only landed in the
+        // archival history, so every chat-triggered nudge (incl. the decompose-
+        // every-ask machinery) was invisible to the model under v2.
+        const nudges = nudgesForUserMessage(message, { self_prompt, from_other_bot });
+        for (const nudge of nudges) {
             await this.history.add('system', nudge);
         }
         // Phase C2: plan-mode auto-trigger/auto-exit. Player intent → state.
@@ -1164,24 +1171,29 @@ export class Agent {
                         console.warn('plan-approval auto-start failed:', e?.message || e);
                     }
                     await this.history.add('system', PLAN_APPROVED_NUDGE + startMsg);
+                    nudges.push(PLAN_APPROVED_NUDGE + startMsg);
                 } else if (detectPlanRejection(message)) {
                     this.exitPlanMode();
                     await this.history.add('system', PLAN_REJECTED_NUDGE);
+                    nudges.push(PLAN_REJECTED_NUDGE);
                 } else if (detectTaskRequest(message)) {
                     // Supersede: player issued a NEW complex request while a
                     // prior plan was waiting for its decomposition. Old plan
                     // is dead — exit + re-enter for the new request.
                     console.log('[plan mode] superseded by new task request');
                     this.exitPlanMode();
-                    await this.history.add('system', '[plan superseded] Player issued a new task request before the prior plan committed. The old plan is abandoned. Rebuild the queue for what they just asked.');
+                    const superseded = '[plan superseded] Player issued a new task request before the prior plan committed. The old plan is abandoned. Rebuild the queue for what they just asked.';
+                    await this.history.add('system', superseded);
                     this.enterPlanMode();
                     await this.history.add('system', PLAN_MODE_AUTO_NUDGE);
+                    nudges.push(superseded, PLAN_MODE_AUTO_NUDGE);
                 }
             } else if (detectPlanRequest(message)) {
                 // Fast path: explicit planning language ("make a plan", "step by
                 // step", "first … then") → approval-wait plan mode.
                 this.enterPlanMode();
                 await this.history.add('system', PLAN_MODE_AUTO_NUDGE);
+                nudges.push(PLAN_MODE_AUTO_NUDGE);
             }
             // The LLM difficulty rating (1-10, plan mode when >7, else a single
             // monolithic auto-minted task) that used to live here was REMOVED
@@ -1207,6 +1219,7 @@ export class Agent {
                     type: 'user_message',
                     source,
                     content: message,
+                    nudges,
                 });
             } catch (e) {
                 console.error('[v2 orch] handleEvent failed:', e?.message || e);
