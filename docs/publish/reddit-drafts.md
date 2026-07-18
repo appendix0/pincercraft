@@ -25,7 +25,7 @@ Result across ⟦N⟧ referee-labeled attempts: claimed ⟦X%⟧, verified ⟦Y%
 
 The fix wasn't a better model — it was a harness. Claude-Code-style: code owns the facts (inventory, reachability, recipe gaps, completion), the LLM only plans. Deterministic reflexes catch the reflex-shaped failures (searching for mobs that can't spawn on peaceful, non-converging tasks burning tokens), and an event-driven loop replaces re-prompt-on-every-chat-line.
 
-The harness pattern is model-agnostic — swap the brain, keep the referee.
+The harness pattern is model-agnostic — swap the brain, keep the referee. And the problem isn't Minecraft-shaped either: open-world, long-horizon tasks are where agent stacks fall apart in general — Minecraft just makes the failures cheap to measure. The same say-do gap waits for agents acting in the real, physical world.
 
 - Dataset (episode traces + referee verdicts + human gold labels): ⟦HF link⟧
 - Worked before/after on one task: ⟦receipt doc link⟧

@@ -28,6 +28,8 @@ That number reshaped the whole bot. The design rule became: code owns the facts 
 
 Everything's measurable on purpose: episode traces, referee verdicts, and human gold labels are published as a dataset (⟦HF link⟧), and there's a worked before/after of the same impossible task with and without the harness in the repo.
 
+Zooming out: the goal was never a better Minecraft bot. Open-world, long-horizon tasks are where LLM agents fall apart, and Minecraft works as a cheap, measurable arena for exactly that — the same failure modes wait for any agent that has to act in the real, physical open world.
+
 Honest limitations: it's a fork, upstream credit is in the README; the referee covers inventory-delta tasks (gather/craft/give), not build quality; N is ⟦N⟧ and growing; Claude is the tested brain.
 
 ## Reply drafts (themes to personalize on the day)
