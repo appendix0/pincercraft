@@ -34,19 +34,12 @@ import {
     classifySideChatReply,
     stopIntentStrength,
     installServerCommandGuard,
-    nudgesForUserMessage,
+    routeUserMessage,
     isPathFailure,
-    detectTaskRequest,
-    detectPlanRequest,
     deathChoiceQuestion,
-    detectPlanApproval,
-    detectPlanRejection,
     estimateTaskSize,
     SIZE_DECOMP_THRESHOLD,
     THIN_DECOMPOSITION_NUDGE,
-    PLAN_MODE_AUTO_NUDGE,
-    PLAN_APPROVED_NUDGE,
-    PLAN_REJECTED_NUDGE,
     wantsBareHands,
 } from './classify_and_gate.js';
 // Phase H1: player slash-commands ( /init, /review, !!init ) dispatch through
@@ -688,7 +681,12 @@ export class Agent {
         // in favor of the gold DB): referee calibration + Field Trial need every
         // player-driven finish auto-logged with a referee label. The curated
         // gold_attempts table is unaffected — it stays human-command-only.
+        // Cancels count too, but only for the task that actually RAN — a
+        // cut-short task must land as a graded row (calibration probes rely on
+        // it), while queued-but-never-started tasks cleared by !stop must not
+        // spam one row each.
         if (kind === 'finish') logPlayAttempt(this, task);
+        if (kind === 'cancel' && task?.status === 'in_progress') logPlayAttempt(this, task, 'cancel');
 
         // Side-chat follow-up: when a task finishes, address any player
         // messages we deferred earlier. Synthetic system input drives the
@@ -1140,68 +1138,15 @@ export class Agent {
         }
 
         await this.history.add(source, message);
-        // Nudges must ALSO reach the v2 orchestrator (its history is the only
-        // one the LLM sees — agent.history is archival). Captured here, passed
-        // into handleEvent below. Before 2026-07-18 they only landed in the
-        // archival history, so every chat-triggered nudge (incl. the decompose-
-        // every-ask machinery) was invisible to the model under v2.
-        const nudges = nudgesForUserMessage(message, { self_prompt, from_other_bot });
+        // Guidance policy (decomposition/memory/size nudges + the plan-mode
+        // state machine) lives in classify_and_gate.routeUserMessage — one
+        // module decides WHAT to say. This file only archives the result and
+        // forwards it on the user_message event to the v2 orchestrator, whose
+        // history is the only one the LLM reads (agent.history is archival;
+        // nudges appended only there are invisible to the model).
+        const nudges = routeUserMessage(this, message, { self_prompt, from_other_bot });
         for (const nudge of nudges) {
             await this.history.add('system', nudge);
-        }
-        // Phase C2: plan-mode auto-trigger/auto-exit. Player intent → state.
-        //   - Not in plan mode + task-request detected → enter plan mode +
-        //     inject the plan-mode nudge so the LLM proposes a plan instead
-        //     of charging into !startTask.
-        //   - Already in plan mode + clear "yes/ok/go" → exit plan mode and
-        //     auto-start the first pending task (mirrors !exitPlanMode).
-        //   - Already in plan mode + clear "no/cancel/revise" → exit plan mode
-        //     and tell the LLM to listen for changes instead of executing.
-        // Bot/self-prompt messages bypass this — only human input drives plan
-        // mode transitions.
-        if (!self_prompt && !from_other_bot) {
-            if (this.planMode === true) {
-                if (detectPlanApproval(message)) {
-                    this.exitPlanMode();
-                    let startMsg = '';
-                    try {
-                        const r = this.task_queue?.startTask(null);
-                        if (r?.message) startMsg = ' ' + r.message;
-                    } catch (e) {
-                        console.warn('plan-approval auto-start failed:', e?.message || e);
-                    }
-                    await this.history.add('system', PLAN_APPROVED_NUDGE + startMsg);
-                    nudges.push(PLAN_APPROVED_NUDGE + startMsg);
-                } else if (detectPlanRejection(message)) {
-                    this.exitPlanMode();
-                    await this.history.add('system', PLAN_REJECTED_NUDGE);
-                    nudges.push(PLAN_REJECTED_NUDGE);
-                } else if (detectTaskRequest(message)) {
-                    // Supersede: player issued a NEW complex request while a
-                    // prior plan was waiting for its decomposition. Old plan
-                    // is dead — exit + re-enter for the new request.
-                    console.log('[plan mode] superseded by new task request');
-                    this.exitPlanMode();
-                    const superseded = '[plan superseded] Player issued a new task request before the prior plan committed. The old plan is abandoned. Rebuild the queue for what they just asked.';
-                    await this.history.add('system', superseded);
-                    this.enterPlanMode();
-                    await this.history.add('system', PLAN_MODE_AUTO_NUDGE);
-                    nudges.push(superseded, PLAN_MODE_AUTO_NUDGE);
-                }
-            } else if (detectPlanRequest(message)) {
-                // Fast path: explicit planning language ("make a plan", "step by
-                // step", "first … then") → approval-wait plan mode.
-                this.enterPlanMode();
-                await this.history.add('system', PLAN_MODE_AUTO_NUDGE);
-                nudges.push(PLAN_MODE_AUTO_NUDGE);
-            }
-            // The LLM difficulty rating (1-10, plan mode when >7, else a single
-            // monolithic auto-minted task) that used to live here was REMOVED
-            // 2026-07-06: the mint's "work THIS task, don't re-add" countermanded
-            // TASK_REQUEST_NUDGE's decomposition, so ≤7 requests bypassed the
-            // per-step deterministic stack entirely (torch episode #285). Every
-            // actionable ask now decomposes via nudgesForUserMessage above into
-            // per-step tasks with observable end_factors.
         }
         this.history.save();
 

@@ -203,19 +203,28 @@ def log_regime(name, rag_version, commit_hash, note, path=DB_PATH):
 
 def ingest_jsonl(jsonl_path, path=DB_PATH):
     """Load newline-delimited attempt rows (written by play_logger.js) into the
-    DB, then truncate the file so a re-run doesn't duplicate. Returns count."""
-    if not os.path.exists(jsonl_path):
-        return 0
-    with open(jsonl_path) as f:
-        lines = [ln for ln in f if ln.strip()]
+    DB. The file is atomically renamed BEFORE reading (the bot's appendFileSync
+    recreates the original path), so a row appended mid-ingest can never be
+    lost to the old read-then-truncate race. A leftover claim from a crashed
+    ingest is consumed first. Returns count."""
+    claimed = jsonl_path + ".ingesting"
     n = 0
-    for ln in lines:
-        try:
-            log_attempt(json.loads(ln), path)
-            n += 1
-        except Exception as e:
-            print(f"ingest: skipped bad line ({e})", file=sys.stderr)
-    open(jsonl_path, "w").close()  # consumed
+    for source in ("leftover", "fresh"):
+        if source == "fresh":
+            if not os.path.exists(jsonl_path):
+                break
+            os.replace(jsonl_path, claimed)  # atomic claim
+        if not os.path.exists(claimed):
+            continue
+        with open(claimed) as f:
+            lines = [ln for ln in f if ln.strip()]
+        for ln in lines:
+            try:
+                log_attempt(json.loads(ln), path)
+                n += 1
+            except Exception as e:
+                print(f"ingest: skipped bad line ({e})", file=sys.stderr)
+        os.remove(claimed)  # consumed
     return n
 
 

@@ -28,7 +28,7 @@ def head():
 def latest_attempt(con, task_id):
     return con.execute(
         'SELECT attempt_id, task_id, task_name, success, label_source, failure_mode, timestamp '
-        'FROM task_attempts WHERE task_id=? ORDER BY attempt_id DESC LIMIT 1',
+        'FROM task_attempts WHERE task_id=? ORDER BY rowid DESC LIMIT 1',
         (str(task_id),)).fetchone()
 
 def label(task_id, success, notes):

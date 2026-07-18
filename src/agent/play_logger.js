@@ -16,7 +16,7 @@ import { verifyEndFactor } from './verify.js';
 const CYCLE_FLAG = path.resolve('./.runtime/cycle_active');
 const PLAY_LOG = path.resolve('./eval/play_attempts.jsonl');
 
-export function logPlayAttempt(agent, task) {
+export function logPlayAttempt(agent, task, kind = 'finish') {
     try {
         if (!task) return;
         if (fs.existsSync(CYCLE_FLAG)) return; // eval session -> loop.sh owns logging
@@ -25,14 +25,18 @@ export function logPlayAttempt(agent, task) {
         // honesty bar the eval gate uses. Unverifiable finishes are recorded as
         // not-success with an explicit marker rather than honor-system credit.
         let success = 0;
-        let failure_mode = 'unverified_play';
+        let failure_mode = kind === 'cancel' ? 'cancelled_play' : 'unverified_play';
         let programmatic = false;
         try {
             const v = verifyEndFactor(agent, task);
             if (v && v.programmatic) {
                 programmatic = true;
                 success = v.verified ? 1 : 0;
-                failure_mode = v.verified ? null : 'referee_delta_short';
+                // A cancelled task graded short is 'cancelled_play' (the player
+                // cut it off), not a false-done; a finished-but-short one is
+                // the referee catching a bad claim.
+                failure_mode = v.verified ? null
+                    : (kind === 'cancel' ? 'cancelled_play' : 'referee_delta_short');
             }
         } catch { failure_mode = 'verify_error'; }
 

@@ -385,6 +385,50 @@ export function nudgesForUserMessage(message, { self_prompt = false, from_other_
     return out;
 }
 
+// The single entry point for chat-triggered guidance: pure nudges above PLUS
+// the plan-mode state machine (enter/exit/supersede), which both reads and
+// mutates agent plan state and emits its own nudges. Returns the full ordered
+// nudge list for this message. The caller (agent.js) archives the list into
+// agent.history and forwards it on the user_message event to the v2
+// orchestrator — the only history the LLM reads. Policy lives HERE; agent.js
+// and the orchestrator only transport and render.
+export function routeUserMessage(agent, message, { self_prompt = false, from_other_bot = false } = {}) {
+    const nudges = nudgesForUserMessage(message, { self_prompt, from_other_bot });
+    // Only human input drives plan-mode transitions.
+    if (self_prompt || from_other_bot) return nudges;
+    if (agent.planMode === true) {
+        if (detectPlanApproval(message)) {
+            agent.exitPlanMode();
+            let startMsg = '';
+            try {
+                const r = agent.task_queue?.startTask(null);
+                if (r?.message) startMsg = ' ' + r.message;
+            } catch (e) {
+                console.warn('plan-approval auto-start failed:', e?.message || e);
+            }
+            nudges.push(PLAN_APPROVED_NUDGE + startMsg);
+        } else if (detectPlanRejection(message)) {
+            agent.exitPlanMode();
+            nudges.push(PLAN_REJECTED_NUDGE);
+        } else if (detectTaskRequest(message)) {
+            // Supersede: player issued a NEW complex request while a prior
+            // plan was waiting for its decomposition. Old plan is dead —
+            // exit + re-enter for the new request.
+            console.log('[plan mode] superseded by new task request');
+            agent.exitPlanMode();
+            nudges.push('[plan superseded] Player issued a new task request before the prior plan committed. The old plan is abandoned. Rebuild the queue for what they just asked.');
+            agent.enterPlanMode();
+            nudges.push(PLAN_MODE_AUTO_NUDGE);
+        }
+    } else if (detectPlanRequest(message)) {
+        // Explicit planning language ("make a plan", "step by step",
+        // "first … then") → approval-wait plan mode.
+        agent.enterPlanMode();
+        nudges.push(PLAN_MODE_AUTO_NUDGE);
+    }
+    return nudges;
+}
+
 // ----------------------------------------------------------------------------
 // 3. Side-chat command gating — runs per parsed command in the mid-task chat
 //    path. Body-touching commands are deferred until the running task ends;
