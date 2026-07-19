@@ -898,10 +898,18 @@ export class Agent {
                 const strength = stopIntentStrength(input.message);
                 if (strength === 'hard') {
                     const r = this.task_queue.cancelAllPending();
-                    if (r.count > 0) console.log(`[stop reflex] hard stop — cancelled ${r.count} task(s)`);
+                    if (r.count > 0) {
+                        console.log(`[stop reflex] hard stop — cancelled ${r.count} task(s)`);
+                        // A stop must never go unacknowledged — the preempt can
+                        // kill the run before the LLM gets a word out.
+                        try { this.openChat(`Stopped — cancelled ${r.count} task(s).`); } catch {}
+                    }
                 } else if (strength === 'soft') {
                     const t = this.task_queue.demoteActive();
-                    if (t) console.log(`[stop reflex] soft pause — parked task #${t.id}`);
+                    if (t) {
+                        console.log(`[stop reflex] soft pause — parked task #${t.id}`);
+                        try { this.openChat(`Paused #${t.id}: ${t.description}. Say the word to resume.`); } catch {}
+                    }
                 }
                 if (strength) { try { this.actions.cancelResume(); } catch {} }
             }
