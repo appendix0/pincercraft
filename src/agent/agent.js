@@ -578,6 +578,13 @@ export class Agent {
         this._lastDriveNudgeForTask = null;
         this._lastDriveNudgeTs = 0;
         this._driveLoop = setInterval(() => {
+            // Wedge tracer: one line a minute of the gate state — every gate
+            // below returns silently, so a wedged bot is indistinguishable from
+            // a quiet one in the log (field-trial runs 4-5: heartbeats only,
+            // zero turns, no clue which gate was eating the ticks).
+            if ((this._driveTraceN = (this._driveTraceN || 0) + 1) % 6 === 0) {
+                console.log(`[drive-trace] state=${this.run_queue?.state} depth=${this.run_queue?.depth} plan=${this.planMode} death=${this._awaitingDeathChoice} executing=${!!this.actions?.executing} active=#${this.task_queue?.tasks?.find(t => t.status === 'in_progress')?.id ?? '-'}`);
+            }
             if (!this.alive || !this.task_queue) return;
             if (this.planMode === true) return; // plan mode is "wait for player approval", don't auto-drive
             if (this._awaitingDeathChoice) return; // died — stopped, waiting for the player's retrieve/forget choice
