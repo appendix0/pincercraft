@@ -14,7 +14,7 @@
 
 import * as world from './library/world.js';
 import * as mc from '../utils/mcdata.js';
-import { parseEndFactorTarget } from './verify.js';
+import { parseEndFactorTarget, parseEndFactorCriterion } from './verify.js';
 import { harnessOn } from './harness_mode.js';
 
 const NEARBY_BLOCK_CAP = 10;
@@ -156,16 +156,31 @@ export function taskProgressLine(agent, inv) {
     const tasks = agent?.task_queue?.tasks || [];
     const active = tasks.find(t => String(t.status).includes('progress'));
     if (!active) return null;
-    const target = parseEndFactorTarget(active); // {item, count} or null
-    if (!target) return null;
-    const have = inv[target.item] || 0;
+    const c = parseEndFactorCriterion(active.endFactor);
+    if (!c || c.kind === 'multi') return null;
+    const have = inv[c.item] || 0;
     const id = active.id != null ? `#${active.id} ` : '';
-    if (have >= target.count) {
-        return `TASK PROGRESS ${id}${target.item}: ${have}/${target.count} — TARGET MET. Call !finishTask now (do not gather more).`;
+    // Delta/loss criteria measure THIS RUN's change from the start snapshot —
+    // same math as the finish gate. Reporting the absolute count against a
+    // delta target told a bot holding 38 cobblestone "38/16 — TARGET MET" on
+    // a "+16 NEW" task from turn one (field-trial run 2, task #336): it
+    // stopped gathering while the finish gate correctly refused the claim.
+    if (c.kind === 'delta' || c.kind === 'loss') {
+        const base = typeof active.startItemCount === 'number' ? active.startItemCount : 0;
+        const moved = c.kind === 'delta' ? have - base : base - have;
+        const verb = c.kind === 'delta' ? 'gained' : 'given away';
+        if (moved >= c.count) {
+            return `TASK PROGRESS ${id}${c.item}: ${verb} ${moved}/${c.count} this task — TARGET MET. Call !finishTask now (do not gather more).`;
+        }
+        return `TASK PROGRESS ${id}${c.item}: ${verb} ${moved}/${c.count} this task (hold ${have}, started with ${base}) — ${c.count - moved} more to go. `
+            + `This count is authoritative; items held before the task do NOT count. Do NOT !finishTask until ${verb.split(' ')[0]} reaches ${c.count}.`;
     }
-    const need = target.count - have;
-    return `TASK PROGRESS ${id}${target.item}: ${have}/${target.count} — ${need} more to go. `
-        + `This count is authoritative; do NOT !finishTask until it reaches ${target.count}.`;
+    if (have >= c.count) {
+        return `TASK PROGRESS ${id}${c.item}: ${have}/${c.count} — TARGET MET. Call !finishTask now (do not gather more).`;
+    }
+    const need = c.count - have;
+    return `TASK PROGRESS ${id}${c.item}: ${have}/${c.count} — ${need} more to go. `
+        + `This count is authoritative; do NOT !finishTask until it reaches ${c.count}.`;
 }
 
 /**
