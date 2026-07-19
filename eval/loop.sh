@@ -43,6 +43,9 @@ curl -sf -m 5 -X POST http://127.0.0.1:8765/mcp -H "Authorization: Bearer $TOKEN
 say "preflight ok — MCP reachable, mode=$MODE"
 
 # ── 1. give a task ─────────────────────────────────────────────────────────
+# Pre-add referee baseline: read BEFORE the task exists, so an instantly
+# completable task can't outrace its own snapshot (run-3 false-FAIL race).
+node eval/referee.mjs preinv >/dev/null 2>&1 || true
 QSTART=$(wc -l < "$QLOG")
 if [ "$MODE" = bench ]; then
   N=$(node -e 'process.stdout.write(String(require("./eval/benchmarks.json").length))')

@@ -104,12 +104,34 @@ async function readInventoryJson() {
 
 // ── subcommands ──────────────────────────────────────────────────────────────
 
+// Pre-add baseline: capture the inventory BEFORE the task-giver is invoked,
+// so a task the bot can complete instantly (materials on hand) can't finish
+// before the baseline exists. Field-trial run 3, task #341: +24 sticks crafted
+// within ~4s of the add — the post-add snapshot already contained the result
+// and the referee measured +0 on a genuinely completed task (false FAIL).
+async function preinv() {
+    const inventory = await readInventoryJson();
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.writeFileSync(path.join(STATE_DIR, 'pre.json'), JSON.stringify({ inventory, ts: Date.now() }));
+    process.stdout.write('ok\n');
+}
+
 async function snapshot(id) {
     const task = extractTaskFromLog(fs.readFileSync(QLOG, 'utf8'), id);
     if (!task) throw new Error(`no add line for task #${id} in queue.log`);
-    const inventory = await readInventoryJson();
+    let inventory = await readInventoryJson();
+    let baseline = 'post-add';
+    // Adopt a fresh pre-add read as the baseline when one exists (see preinv).
+    // Staleness cap: a leftover pre.json from a crashed cycle must not become
+    // some later task's baseline.
+    const prePath = path.join(STATE_DIR, 'pre.json');
+    try {
+        const pre = JSON.parse(fs.readFileSync(prePath, 'utf8'));
+        if (Date.now() - pre.ts < 120000) { inventory = pre.inventory; baseline = 'pre-add'; }
+    } catch { /* no pre-read -> post-add baseline (biases toward false FAIL, never false pass) */ }
+    fs.rmSync(prePath, { force: true });
     fs.mkdirSync(STATE_DIR, { recursive: true });
-    const rec = { task_id: id, ...task, inventory, ts: new Date().toISOString() };
+    const rec = { task_id: id, ...task, inventory, baseline, ts: new Date().toISOString() };
     fs.writeFileSync(path.join(STATE_DIR, `${id}.json`), JSON.stringify(rec, null, 2));
     // Echo essentials so loop.sh can capture description/end_factor from here.
     process.stdout.write(JSON.stringify({ description: task.description, end_factor: task.end_factor }) + '\n');
@@ -141,12 +163,14 @@ async function judge(id, outcome) {
 // ── CLI ──────────────────────────────────────────────────────────────────────
 
 const [cmd, id, outcome] = process.argv.slice(2);
-if (cmd === 'snapshot' && id) {
+if (cmd === 'preinv') {
+    preinv().catch(e => { console.error(`referee preinv failed: ${e.message}`); process.exit(1); });
+} else if (cmd === 'snapshot' && id) {
     snapshot(id).catch(e => { console.error(`referee snapshot failed: ${e.message}`); process.exit(1); });
 } else if (cmd === 'judge' && id && outcome) {
     judge(id, outcome).then(v => process.stdout.write(JSON.stringify(v) + '\n'))
         .catch(e => { console.error(`referee judge failed: ${e.message}`); process.exit(1); });
 } else if (cmd) {
-    console.error('usage: referee.mjs snapshot <taskid> | judge <taskid> <outcome>');
+    console.error('usage: referee.mjs preinv | snapshot <taskid> | judge <taskid> <outcome>');
     process.exit(2);
 }
