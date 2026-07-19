@@ -83,6 +83,23 @@ function matchCountIncrease(text) {
     return null;
 }
 
+// Give/handover loss criteria — the inverse of matchCountIncrease:
+//   "-16 cobblestone"            (canonical, what the nudge mandates)
+//   "gave 16 cobblestone to X"
+// Returns { item, delta } or null. Verified as a DROP from task.startItemCount:
+// the items must have LEFT the bot's inventory this run. A gain-form criterion
+// on a give task grades the wrong direction entirely — calibration miss #322
+// (2026-07-19): "+16 cobblestone" on "Give 16 cobblestone" scored 0 on a
+// delivered give. Loss proves the handover on the bot's side; the give skill's
+// own delivery check guards the receiving end.
+function matchCountDecrease(text) {
+    let m = text.match(/^-\s*(\d+)\s+([a-z][a-z0-9_]*)\b/);
+    if (m) return { item: m[2], delta: parseInt(m[1], 10) };
+    m = text.match(/^gave\s+(\d+)\s+([a-z][a-z0-9_]*)\b/);
+    if (m) return { item: m[2], delta: parseInt(m[1], 10) };
+    return null;
+}
+
 // Tolerant item extractor for a VERBOSE end_factor the strict matchers can't
 // parse (e.g. "at least 30 raw_iron in inventory (currently have 19, need 30
 // more so total 49+)"). Finds the item token the LLM named — preferring the one
@@ -113,7 +130,7 @@ export function normalizeQuantityEndFactor(endFactor, playerMessage) {
     if (!endFactor) return endFactor;
     const rel = parseRelativeQuantity(playerMessage);
     if (!rel) return endFactor;
-    if (/^\s*\+|increased|\bnew\b/i.test(endFactor)) return endFactor; // already a delta
+    if (/^\s*[+-]|increased|\bnew\b/i.test(endFactor)) return endFactor; // already a delta (or a give-loss)
     const target = parseEndFactorTarget({ endFactor });
     if (target) {
         // Strict parse worked: rewrite only when it's the SAME N. A different
@@ -135,12 +152,15 @@ export function normalizeQuantityEndFactor(endFactor, playerMessage) {
 // (eval/referee.mjs), which measures against its OWN inventory snapshots —
 // shared grammar, independent measurement. Returns one of:
 //   { kind: 'delta',    item, count }  — gain of `count` since task start
+//   { kind: 'loss',     item, count }  — drop of `count` since task start (give)
 //   { kind: 'absolute', item, count }  — current inventory holds ≥ count
 //   { kind: 'multi',    items }        — each listed item present (≥1)
 //   null — not an item-count shape (e.g. "bot within 3 of p1")
 export function parseEndFactorCriterion(endFactor) {
     if (!endFactor) return null;
     const text = normalize(endFactor);
+    const dec = matchCountDecrease(text);
+    if (dec) return { kind: 'loss', item: dec.item, count: dec.delta };
     const inc = matchCountIncrease(text);
     if (inc) return { kind: 'delta', item: inc.item, count: inc.delta };
     const cnt = matchCountInInventory(text);
@@ -161,6 +181,7 @@ export function parseEndFactorTarget(task) {
     if (!task || !task.endFactor) return null;
     const c = parseEndFactorCriterion(task.endFactor);
     if (!c) return null;
+    if (c.kind === 'loss') return null; // give task — nothing to acquire
     if (c.kind === 'multi') return { item: c.items[0], count: 1 }; // primary = first listed
     return { item: c.item, count: c.count };
 }
@@ -174,6 +195,7 @@ export function taskCollectTargets(task) {
     if (!task || !task.endFactor) return [];
     const c = parseEndFactorCriterion(task.endFactor);
     if (!c) return [];
+    if (c.kind === 'loss') return []; // never pick a handed-over gift back up
     if (c.kind === 'multi') return c.items.slice();
     return [c.item];
 }
@@ -185,8 +207,9 @@ export function snapshotStartCounts(agent, task) {
     if (!task || !task.endFactor) return;
     const bot = agent?.bot;
     if (!bot) return;
-    const inc = matchCountIncrease(normalize(task.endFactor));
-    if (inc) task.startItemCount = inventoryCount(bot, inc.item);
+    const text = normalize(task.endFactor);
+    const target = matchCountIncrease(text) || matchCountDecrease(text);
+    if (target) task.startItemCount = inventoryCount(bot, target.item);
 }
 
 // Public API. Returns:
@@ -200,6 +223,19 @@ export function verifyEndFactor(agent, task) {
     const bot = agent?.bot;
     if (!bot) return { programmatic: false };
     const text = normalize(task.endFactor);
+
+    const dec = matchCountDecrease(text);
+    if (dec) {
+        const have = inventoryCount(bot, dec.item);
+        const base = typeof task.startItemCount === 'number' ? task.startItemCount : 0;
+        const dropped = base - have;
+        if (dropped >= dec.delta) return { programmatic: true, verified: true, observed: `${dec.item}-${dropped}` };
+        return {
+            programmatic: true,
+            verified: false,
+            reason: `End factor "${task.endFactor}" not met — ${dec.item} only dropped by ${dropped} this task (have ${have}, started with ${base}), need ${dec.delta} given away.`,
+        };
+    }
 
     const inc = matchCountIncrease(text);
     if (inc) {

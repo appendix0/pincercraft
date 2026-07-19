@@ -57,6 +57,14 @@ export function evaluateCriterion(criterion, snapInv, nowInv) {
             observed: `${criterion.item}+${gained} (have ${at(nowInv, criterion.item)}, started ${at(snapInv, criterion.item)})`,
         };
     }
+    if (criterion.kind === 'loss') {
+        const dropped = at(snapInv, criterion.item) - at(nowInv, criterion.item);
+        return {
+            verified: dropped >= criterion.count,
+            expected: `-${criterion.count} ${criterion.item}`,
+            observed: `${criterion.item}-${dropped} (have ${at(nowInv, criterion.item)}, started ${at(snapInv, criterion.item)})`,
+        };
+    }
     if (criterion.kind === 'absolute') {
         const have = at(nowInv, criterion.item);
         return {
