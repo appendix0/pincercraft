@@ -71,6 +71,23 @@ clear_queue(){
   done
 }
 
+# Bot fully in-world, not just MCP-up: commands issued pre-spawn can hang an
+# orchestrator run forever (run-4 wedge). !stats answers with a Position only
+# once spawned.
+wait_spawn(){
+  local TOKEN deadline out
+  TOKEN="$(node -e 'process.stdout.write(require("./keys.json").mcp_token||"")')"
+  deadline=$(( $(date +%s) + 180 ))
+  while :; do
+    out=$(curl -sf -m 8 -X POST http://127.0.0.1:8765/mcp \
+      -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+      -d '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"run_raw_command","arguments":{"command":"!stats"}}}' 2>/dev/null) || out=''
+    case "$out" in (*Position*) return 0;; esac
+    [ "$(date +%s)" -lt "$deadline" ] || die "bot never spawned in-world within 180s"
+    sleep 4
+  done
+}
+
 run_arm(){
   local arm="$1" i
   if [ "$arm" = off ]; then touch "$OFF_FLAG"; else rm -f "$OFF_FLAG"; fi
@@ -79,7 +96,12 @@ run_arm(){
   say "arm $arm: restarting bot (harness_off flag: $([ -f "$OFF_FLAG" ] && echo present || echo absent))"
   sudo systemctl restart daedelus404.service || die "bot restart failed"
   wait_mcp
+  wait_spawn
   clear_queue
+  # The queue's anti-churn guard rejects re-adding a just-cancelled description
+  # for thrashWindowMs (15s); benchmark descriptions repeat across runs, so an
+  # arm-start cancel of a leftover would eat cycle 1 (runs 3 & 4). Wait it out.
+  sleep 20
   say "arm $arm: bot up — running $N benchmark tasks"
   for i in $(seq 1 "$N"); do
     say "arm $arm — task $i/$N"

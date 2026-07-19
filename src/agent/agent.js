@@ -1069,17 +1069,30 @@ export class Agent {
                 continue;
             }
             this.run_queue.beginRun(input);
-            try {
-                await this._processInput(input);
-            } catch (e) {
-                if (e && e.name === 'AbortError') {
-                    // expected when an interrupt cuts the run short
-                } else {
-                    console.error('_processInput failed:', e);
-                }
-            } finally {
-                this.run_queue.endRun();
+            // Watchdog: a run whose await never settles (e.g. an action promise
+            // hung by a pre-spawn command) leaves state='running' forever, and
+            // the drive loop only nudges an idle lane — the bot wedges silently
+            // (field-trial run 4: 480s of heartbeats, zero LLM turns). Cap the
+            // run, reclaim the lane, and let the zombie settle harmlessly.
+            const RUN_CAP_MS = 300000;
+            let capTimer;
+            const capped = new Promise(res => { capTimer = setTimeout(() => res('__run_cap__'), RUN_CAP_MS); });
+            const runP = this._processInput(input).then(
+                () => 'done',
+                e => {
+                    if (!e || e.name !== 'AbortError') console.error('_processInput failed:', e);
+                    return 'failed';
+                },
+            );
+            const outcome = await Promise.race([runP, capped]);
+            clearTimeout(capTimer);
+            if (outcome === '__run_cap__') {
+                console.warn(`[run watchdog] run (kind=${input?.kind || input?.source || '?'}) unsettled after ${RUN_CAP_MS / 1000}s — reclaiming the run lane`);
+                try { this.run_queue.abortCurrent(); } catch {}
             }
+            // Stale-guard: only close OUR run — a capped zombie must not
+            // clobber the state of whatever run comes after it.
+            if (this.run_queue.current_input === input) this.run_queue.endRun();
         }
     }
 
