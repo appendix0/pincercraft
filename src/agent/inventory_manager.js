@@ -112,8 +112,7 @@ export class InventoryManager {
     async tidyJunk() {
         let dropped = 0;
         for (const name of this._proactiveJunkStacks()) {
-            await skills.discard(this.bot, name, -1);
-            dropped++;
+            if (await skills.discard(this.bot, name, -1)) dropped++;
         }
         return dropped;
     }

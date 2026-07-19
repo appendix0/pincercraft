@@ -595,8 +595,16 @@ export class Agent {
             // or ore pickup. When idle and near-full, drop junk to keep a slot
             // free. Discard-only (no chest navigation) so it can't collide with a
             // player command; _freeingSpace blocks the 10s tick from re-entering.
+            // Both reflexes are best-effort with a cooldown, and their `return`
+            // only skips ONE tick: a toss the bot instantly re-picks-up (or a
+            // discard that finds nothing) used to re-trigger every 10s and eat
+            // every tick before the nudge — the runs 4-6 arm-start wedge
+            // (exit=tidy, zero LLM turns for 480s).
             const inv_mgr = this.bot?.inventory_manager;
-            if (inv_mgr && !this._freeingSpace && inv_mgr.isNearFull(1)) {
+            const nowTs = Date.now();
+            if (inv_mgr && !this._freeingSpace && inv_mgr.isNearFull(1)
+                && (!this._lastSpaceReflexTs || nowTs - this._lastSpaceReflexTs > 60000)) {
+                this._lastSpaceReflexTs = nowTs;
                 this._freeingSpace = true;
                 Promise.resolve(inv_mgr.ensureSpace({ discardOnly: true }))
                     .catch(e => console.warn('[drive] space reflex failed:', e?.message || e))
@@ -608,7 +616,9 @@ export class Agent {
             // junk (granite/dirt/gravel/mob trash) before it fills the bag, so the
             // bot doesn't hoard stacks it will never use. Idle-only and gated on
             // there actually being junk; protected + task-relevant items are kept.
-            if (harnessOn() && inv_mgr && !this._freeingSpace && inv_mgr.hasProactiveJunk()) {
+            if (harnessOn() && inv_mgr && !this._freeingSpace && inv_mgr.hasProactiveJunk()
+                && (!this._lastTidyTs || nowTs - this._lastTidyTs > 120000)) {
+                this._lastTidyTs = nowTs;
                 this._freeingSpace = true;
                 Promise.resolve(inv_mgr.tidyJunk())
                     .catch(e => console.warn('[drive] tidy reflex failed:', e?.message || e))
