@@ -16,7 +16,10 @@ STATE_DIR="$ROOT/.runtime"; mkdir -p "$STATE_DIR"
 RECONCILE="/usr/local/bin/daedelus404-reconcile.sh"
 OFF_FLAG="$STATE_DIR/harness_off"
 ARMS="${ARMS:-both}"
-N=$(node -e 'console.log(require("./eval/benchmarks.json").length)')
+# process.stdout.write, NOT console.log — under FORCE_COLOR (set by some CI
+# shells) console.log wraps numbers in ANSI codes and seq silently no-ops.
+N=$(node -e 'process.stdout.write(String(require("./eval/benchmarks.json").length))')
+case "$N" in (*[!0-9]*|'') die "benchmark count came out non-numeric: '$N'";; esac
 
 say(){ printf '\n\033[1;33m■ %s\033[0m\n' "$*"; }
 die(){ printf '\033[1;31m✗ %s\033[0m\n' "$*" >&2; exit 1; }

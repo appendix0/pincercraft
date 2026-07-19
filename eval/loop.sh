@@ -45,7 +45,7 @@ say "preflight ok — MCP reachable, mode=$MODE"
 # ── 1. give a task ─────────────────────────────────────────────────────────
 QSTART=$(wc -l < "$QLOG")
 if [ "$MODE" = bench ]; then
-  N=$(node -e 'console.log(require("./eval/benchmarks.json").length)')
+  N=$(node -e 'process.stdout.write(String(require("./eval/benchmarks.json").length))')
   IDX=$(( $(wc -l < "$EVAL/metrics.jsonl") % N ))
   DESC=$(node -e "process.stdout.write(require('./eval/benchmarks.json')[$IDX].description)")
   EF=$(node -e "process.stdout.write(require('./eval/benchmarks.json')[$IDX].end_factor)")
