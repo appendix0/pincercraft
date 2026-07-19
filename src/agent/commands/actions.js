@@ -813,6 +813,11 @@ export const actionsList = [
                     // Observability: record what the end_factor check saw at finish
                     // time so a 0-ops done can be told apart from a false-done.
                     console.log(`[finishTask] #${target.id} end_factor "${target.endFactor}" — ${v && v.programmatic ? `verified (${v.observed})` : 'honor-system (unmeasurable end_factor)'}`);
+                    // Referee-verified finishes must never be silent: the drive
+                    // auto-finish path announces in chat, so this path does too.
+                    if (v && v.programmatic && v.verified) {
+                        try { agent.openChat(`Done — ${target.description} (${v.observed}).`); } catch {}
+                    }
                 } catch (e) {
                     console.warn('verifyEndFactor threw:', e?.message || e);
                 }
