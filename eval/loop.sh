@@ -49,14 +49,25 @@ node eval/referee.mjs preinv >/dev/null 2>&1 || true
 QSTART=$(wc -l < "$QLOG")
 if [ "$MODE" = bench ]; then
   N=$(node -e 'process.stdout.write(String(require("./eval/benchmarks.json").length))')
-  IDX=$(( $(wc -l < "$EVAL/metrics.jsonl") % N ))
+  # BENCH_IDX (from field_trial.sh) pins the benchmark explicitly; the
+  # metrics-count fallback repeats a benchmark forever when cycles fail
+  # without appending a row (run 6 ground 19 cycles on #9).
+  IDX="${BENCH_IDX:-$(( $(wc -l < "$EVAL/metrics.jsonl") % N ))}"
   DESC=$(node -e "process.stdout.write(require('./eval/benchmarks.json')[$IDX].description)")
   EF=$(node -e "process.stdout.write(require('./eval/benchmarks.json')[$IDX].end_factor)")
   TIER=$(node -e "process.stdout.write(String(require('./eval/benchmarks.json')[$IDX].tier))")
   say "benchmark #$IDX (tier $TIER): $DESC"
-  claude -p "Call add_task with description=\"$DESC\" and end_factor=\"$EF\". Do nothing else." \
+  # Output captured, not discarded: run 6's task-giver died 19x in a row with
+  # zero evidence because stdout went to /dev/null. Credit/usage-limit
+  # failures exit 42 so the trial runner can park everything (owner rule).
+  TG_OUT=$(claude -p "Call add_task with description=\"$DESC\" and end_factor=\"$EF\". Do nothing else." \
     --mcp-config "$MCP_CFG" --strict-mcp-config \
-    --allowedTools "mcp__pincer__add_task" --max-budget-usd "$TASKGIVER_BUDGET" --output-format text >/dev/null
+    --allowedTools "mcp__pincer__add_task" --max-budget-usd "$TASKGIVER_BUDGET" --output-format text 2>&1)
+  TG_RC=$?
+  if [ "$TG_RC" -ne 0 ] || printf '%s' "$TG_OUT" | grep -qiE 'usage limit|credit balance|out of credit|insufficient credit'; then
+    printf 'task-giver output (rc=%s):\n%s\n' "$TG_RC" "$TG_OUT" >&2
+    printf '%s' "$TG_OUT" | grep -qiE 'usage limit|credit balance|out of credit|insufficient credit' && exit 42
+  fi
 else
   say "task-giver inventing a challenge…"
   claude -p "$(cat "$EVAL/prompts/task-giver.md")
@@ -74,7 +85,13 @@ fi
 # ── 2. find the new task id, wait for start, then terminal state ───────────
 sleep 2
 TASKID=$(tail -n +$((QSTART+1)) "$QLOG" | grep -oE '#[0-9]+' | head -1 | tr -d '#')
-[ -n "$TASKID" ] || die "no new task id appeared in queue.log after task-giver"
+if [ -z "$TASKID" ]; then
+  [ -n "${TG_OUT:-}" ] && printf 'task-giver said:\n%s\n' "$TG_OUT" >&2
+  # Distinct code so the trial runner can tell "add failed" from a task that
+  # ran and timed out (both are non-zero otherwise).
+  printf '\033[1;31m✗ no new task id appeared in queue.log after task-giver\033[0m\n' >&2
+  exit 43
+fi
 
 # Referee snapshot: pre-task inventory + the task's end_factor (from the ef=
 # field on the queue.log add line). Runs right after the id appears — with

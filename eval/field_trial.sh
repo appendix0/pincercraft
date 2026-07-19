@@ -103,11 +103,25 @@ run_arm(){
   # arm-start cancel of a leftover would eat cycle 1 (runs 3 & 4). Wait it out.
   sleep 20
   say "arm $arm: bot up — running $N benchmark tasks"
+  # Failure budget: rc=42 (credit/usage-limit) parks the whole rig immediately
+  # (owner rule: park everything when the token balance hits 0); two
+  # consecutive rc=43 (task never added) parks too — run 6 burned 19 cycles
+  # re-failing the same add with the evidence discarded.
+  local addfails=0 rc
   for i in $(seq 1 "$N"); do
     say "arm $arm — task $i/$N"
-    MODE=bench TASKSET="bench_$arm" RUN_ANALYZER=0 RUN_IMPROVER=0 \
-      WATCH_TIMEOUT="${WATCH_TIMEOUT:-480}" bash eval/loop.sh \
-      || say "arm $arm task $i: loop.sh non-zero (timeout/cancel) — row still logged, continuing"
+    MODE=bench BENCH_IDX=$((i-1)) TASKSET="bench_$arm" RUN_ANALYZER=0 RUN_IMPROVER=0 \
+      WATCH_TIMEOUT="${WATCH_TIMEOUT:-480}" bash eval/loop.sh
+    rc=$?
+    case "$rc" in
+      0)  addfails=0 ;;
+      42) die "task-giver hit the usage/credit limit — parking the rig" ;;
+      43) addfails=$((addfails+1))
+          [ "$addfails" -ge 2 ] && die "task-giver failed to add a task $addfails times in a row — parking the rig"
+          say "arm $arm task $i: task never added (rc=43) — retry budget $addfails/2" ;;
+      *)  addfails=0
+          say "arm $arm task $i: loop.sh rc=$rc (timeout/cancel) — row still logged, continuing" ;;
+    esac
     clear_queue
   done
   say "arm $arm complete"

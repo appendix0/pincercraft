@@ -583,13 +583,13 @@ export class Agent {
             // a quiet one in the log (field-trial runs 4-5: heartbeats only,
             // zero turns, no clue which gate was eating the ticks).
             if ((this._driveTraceN = (this._driveTraceN || 0) + 1) % 6 === 0) {
-                console.log(`[drive-trace] state=${this.run_queue?.state} depth=${this.run_queue?.depth} plan=${this.planMode} death=${this._awaitingDeathChoice} executing=${!!this.actions?.executing} active=#${this.task_queue?.tasks?.find(t => t.status === 'in_progress')?.id ?? '-'}`);
+                console.log(`[drive-trace] state=${this.run_queue?.state} depth=${this.run_queue?.depth} plan=${this.planMode} death=${this._awaitingDeathChoice} executing=${!!this.actions?.executing} active=#${this.task_queue?.tasks?.find(t => t.status === 'in_progress')?.id ?? '-'} exit=${this._driveExit ?? '-'} freeing=${!!this._freeingSpace} playerAge=${this._lastPlayerInputTs ? Math.round((Date.now() - this._lastPlayerInputTs) / 1000) + 's' : '-'}`);
             }
-            if (!this.alive || !this.task_queue) return;
-            if (this.planMode === true) return; // plan mode is "wait for player approval", don't auto-drive
-            if (this._awaitingDeathChoice) return; // died — stopped, waiting for the player's retrieve/forget choice
-            if (this.run_queue?.state !== 'idle') return;
-            if (this.run_queue?.depth > 0) return;
+            if (!this.alive || !this.task_queue) { this._driveExit = 'alive'; return; }
+            if (this.planMode === true) { this._driveExit = 'plan'; return; } // plan mode is "wait for player approval", don't auto-drive
+            if (this._awaitingDeathChoice) { this._driveExit = 'death'; return; } // died — stopped, waiting for the player's retrieve/forget choice
+            if (this.run_queue?.state !== 'idle') { this._driveExit = 'state'; return; }
+            if (this.run_queue?.depth > 0) { this._driveExit = 'depth'; return; }
             // Inventory-space reflex (deterministic, no LLM): a clogged inventory
             // silently breaks a chest fetch (the pickaxe re-fetch loop), a give,
             // or ore pickup. When idle and near-full, drop junk to keep a slot
@@ -601,6 +601,7 @@ export class Agent {
                 Promise.resolve(inv_mgr.ensureSpace({ discardOnly: true }))
                     .catch(e => console.warn('[drive] space reflex failed:', e?.message || e))
                     .finally(() => { this._freeingSpace = false; });
+                this._driveExit = 'space';
                 return; // next tick re-evaluates with freed space
             }
             // Proactive tidy reflex (deterministic, no LLM): drop genuinely-useless
@@ -612,10 +613,11 @@ export class Agent {
                 Promise.resolve(inv_mgr.tidyJunk())
                     .catch(e => console.warn('[drive] tidy reflex failed:', e?.message || e))
                     .finally(() => { this._freeingSpace = false; });
+                this._driveExit = 'tidy';
                 return; // next tick re-evaluates with a cleaner bag
             }
             const active = this.task_queue.tasks.find(t => t.status === 'in_progress');
-            if (!active) return;
+            if (!active) { this._driveExit = 'noactive'; return; }
             // Deterministic task-end: if the end_factor is a countable inventory
             // target that's already satisfied, finish the task in CODE — don't
             // wait for the LLM to notice (the bot wandered for minutes holding 20
@@ -630,19 +632,22 @@ export class Agent {
                     const res = this.task_queue.finishTask(active.id);
                     this.history.add('system', `[auto-finish] ${res.message}`);
                 } catch (e) { console.warn('[drive] auto-finish failed:', e?.message || e); }
+                this._driveExit = 'autofinish';
                 return;
             }
             const now = Date.now();
-            if (this._lastPlayerInputTs && (now - this._lastPlayerInputTs) < 15000) return;
-            if (this._lastDriveNudgeForTask === active.id && (now - this._lastDriveNudgeTs) < 30000) return;
+            if (this._lastPlayerInputTs && (now - this._lastPlayerInputTs) < 15000) { this._driveExit = 'player'; return; }
+            if (this._lastDriveNudgeForTask === active.id && (now - this._lastDriveNudgeTs) < 30000) { this._driveExit = 'dedupe30'; return; }
             // Dedupe: if a drive_tick for any task is already queued, don't
             // stack another. Under rate-limiting the queue would otherwise
             // pile up nudges that each cost ~8K tokens to process.
             const queued = this.run_queue?.queuedInputs || [];
             if (queued.some(q => q.kind === 'drive_tick')) {
                 console.log('[drive] skipping nudge — one already queued');
+                this._driveExit = 'queued';
                 return;
             }
+            this._driveExit = 'nudged';
             this._lastDriveNudgeForTask = active.id;
             this._lastDriveNudgeTs = now;
             console.log(`[drive] queue idle, nudging task #${active.id}`);
