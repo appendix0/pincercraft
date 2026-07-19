@@ -23,6 +23,7 @@ import { RunQueue } from './run_queue.js';
 import { humanizeCommand } from './command_humanizer.js';
 import { TaskQueue, pruneQueueOnStart } from './task_queue.js';
 import { logPlayAttempt } from './play_logger.js'; // re-enabled 2026-07-18 — referee calibration needs auto attempt rows
+import { harnessOn } from './harness_mode.js';
 import { snapshotStartCounts, verifyEndFactor } from './verify.js';
 import { buildLiveStateBlock } from './live_state.js';
 import { MemoryStore } from './memory_store.js';
@@ -599,7 +600,7 @@ export class Agent {
             // junk (granite/dirt/gravel/mob trash) before it fills the bag, so the
             // bot doesn't hoard stacks it will never use. Idle-only and gated on
             // there actually being junk; protected + task-relevant items are kept.
-            if (inv_mgr && !this._freeingSpace && inv_mgr.hasProactiveJunk()) {
+            if (harnessOn() && inv_mgr && !this._freeingSpace && inv_mgr.hasProactiveJunk()) {
                 this._freeingSpace = true;
                 Promise.resolve(inv_mgr.tidyJunk())
                     .catch(e => console.warn('[drive] tidy reflex failed:', e?.message || e))
@@ -614,7 +615,7 @@ export class Agent {
             // diamonds before the nudge made it finishTask). Same parser/count
             // the verify gate uses, so the two never disagree. Non-countable
             // criteria (programmatic:false) fall through to the normal nudge.
-            const ef = verifyEndFactor(this, active);
+            const ef = harnessOn() ? verifyEndFactor(this, active) : { programmatic: false };
             if (ef.programmatic && ef.verified) {
                 console.log(`[drive] end_factor met (${ef.observed}) → auto-finishing #${active.id} deterministically`);
                 try { this.openChat(`Done — ${active.description} (${ef.observed}).`); } catch {}
@@ -641,7 +642,11 @@ export class Agent {
             try {
                 this.enqueue({
                     source: 'system',
-                    message: `[drive] Task #${active.id} (${active.description}) is in_progress and the action queue is idle. Issue the next concrete command to advance it. If the end_factor (${active.endFactor || 'unset'}) has been observed, call !finishTask. If the task no longer makes sense, !cancelTask and explain to the player.`,
+                    // OFF arm gets a stock-style reminder: no end_factor echo,
+                    // no verify coaching — completion is the model's own call.
+                    message: harnessOn()
+                        ? `[drive] Task #${active.id} (${active.description}) is in_progress and the action queue is idle. Issue the next concrete command to advance it. If the end_factor (${active.endFactor || 'unset'}) has been observed, call !finishTask. If the task no longer makes sense, !cancelTask and explain to the player.`
+                        : `[drive] Task #${active.id} (${active.description}) is in_progress and the action queue is idle. Continue working on it; call !finishTask when you consider it complete, or !cancelTask if it no longer makes sense.`,
                     kind: 'drive_tick',
                 });
             } catch (e) { console.warn('[drive] enqueue failed:', e?.message || e); }

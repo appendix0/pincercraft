@@ -165,7 +165,7 @@ ROW=$(node -e '
   if (!success) row.failure_mode = v.referee_failure_mode || fmode || outcome;
   else if (v.referee_failure_mode) row.failure_mode = v.referee_failure_mode; // e.g. verified but queue_never_finished
   process.stdout.write(JSON.stringify(row));
-' "$M" "$TASKID" "$DESC" "$TIER" "$COMMIT" "$OUTCOME" "$WALL" "${PROG:-}" "${FMODE:-}" "$MODE" "$VERDICT" "${EF:-}")
+' "$M" "$TASKID" "$DESC" "$TIER" "$COMMIT" "$OUTCOME" "$WALL" "${PROG:-}" "${FMODE:-}" "${TASKSET:-$MODE}" "$VERDICT" "${EF:-}")
 printf '%s' "$ROW" | python3 eval/eval_db.py log-attempt >/dev/null \
   && say "logged attempt → pincercraft_evals.db (commit $COMMIT, tier $TIER, ${PROG:-auto} progress)"
 
