@@ -681,12 +681,14 @@ export class Agent {
         // in favor of the gold DB): referee calibration + Field Trial need every
         // player-driven finish auto-logged with a referee label. The curated
         // gold_attempts table is unaffected — it stays human-command-only.
-        // Cancels count too, but only for the task that actually RAN — a
+        // Cancels count too, but only for a task that actually RAN — a
         // cut-short task must land as a graded row (calibration probes rely on
         // it), while queued-but-never-started tasks cleared by !stop must not
-        // spam one row each.
+        // spam one row each. startedAt (stamped on every in_progress
+        // transition) catches tasks the stop reflex parked back to 'pending'
+        // before the cancel — those ran too and must not vanish silently.
         if (kind === 'finish') logPlayAttempt(this, task);
-        if (kind === 'cancel' && task?.status === 'in_progress') logPlayAttempt(this, task, 'cancel');
+        if (kind === 'cancel' && (task?.status === 'in_progress' || task?.startedAt)) logPlayAttempt(this, task, 'cancel');
 
         // Side-chat follow-up: when a task finishes, address any player
         // messages we deferred earlier. Synthetic system input drives the

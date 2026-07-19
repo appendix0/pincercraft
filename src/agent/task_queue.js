@@ -166,6 +166,7 @@ export class TaskQueue {
         const endHint = ` Done when: ${endFactor}.`;
         if (!hasActive && !this._paused()) {
             task.status = STATUS.IN_PROGRESS;
+            task.startedAt = Date.now();
             this._persist();
             this._log('add+start', task);
             this._fire('add', task);
@@ -186,6 +187,7 @@ export class TaskQueue {
         if (t.status === STATUS.DONE) return {ok: false, message: `Task #${t.id} is already done.`};
         for (const o of this.tasks) if (o.status === STATUS.IN_PROGRESS && o.id !== t.id) o.status = STATUS.PENDING;
         t.status = STATUS.IN_PROGRESS;
+        if (!t.startedAt) t.startedAt = Date.now();
         this._persist();
         this._log('start', t);
         this._fire('start', t);
@@ -211,6 +213,7 @@ export class TaskQueue {
         const next = this._paused() ? null : this.tasks.find(x => x.status === STATUS.PENDING);
         if (next) {
             next.status = STATUS.IN_PROGRESS;
+            next.startedAt = Date.now();
             this._persist();
             this._log('auto-start', next);
             this._fire('start', next);
