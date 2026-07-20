@@ -25,6 +25,6 @@ The fork's whole idea: **code owns the facts (inventory, "can I mine this?", "is
 
 - Measured writeup + offer of a small upstream PR: ⟦upstream issue link⟧
 - Repo (MIT, same as upstream): https://github.com/appendix0/pincercraft
-- Raw traces if you want to check my math: ⟦HF dataset link⟧
+- Raw traces if you want to check my math: https://huggingface.co/datasets/Appendix0/pincercraft-say-do-gap
 
 Huge thanks to the Mindcraft folks — all of this stands on their foundation. Happy to answer anything about the harness.

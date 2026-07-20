@@ -27,7 +27,7 @@ The fix wasn't a better model — it was a harness, built the way coding agents 
 
 The harness pattern is model-agnostic — swap the brain, keep the referee. And the problem isn't Minecraft-shaped either: open-world, long-horizon tasks are where agent stacks fall apart in general — Minecraft just makes the failures cheap to measure. The same say-do gap waits for agents acting in the real, physical world.
 
-- Dataset (episode traces + referee verdicts + human gold labels): ⟦HF link⟧
+- Dataset (episode traces + referee verdicts + human gold labels): https://huggingface.co/datasets/Appendix0/pincercraft-say-do-gap
 - Worked before/after on one task: https://github.com/appendix0/pincercraft/blob/develop/docs/receipts/2026-07-12-search-miss-before-after.md
 - Repo (MIT): https://github.com/appendix0/pincercraft
 

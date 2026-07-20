@@ -26,7 +26,7 @@ So I stopped letting the model grade its own homework. Every task attempt now sn
 
 That number reshaped the whole bot. The design rule became: code owns the facts (inventory, "can I mine this?", recipe gaps, completion), the LLM only owns the plan — basically what coding agents do with typechecks and tests, pointed at Minecraft. Deterministic reflexes catch the dumb loops (it once spent 24 LLM rounds hunting spiders on a peaceful-mode world where spiders can't spawn — now an empty search parks the task and asks the player).
 
-Everything's measurable on purpose: episode traces, referee verdicts, and human gold labels are published as a dataset (⟦HF link⟧), and there's a worked before/after of the same impossible task with and without the harness in the repo.
+Everything's measurable on purpose: episode traces, referee verdicts, and human gold labels are published as a dataset (https://huggingface.co/datasets/Appendix0/pincercraft-say-do-gap), and there's a worked before/after of the same impossible task with and without the harness in the repo.
 
 Zooming out: the goal was never a better Minecraft bot. Open-world, long-horizon tasks are where LLM agents fall apart, and Minecraft works as a cheap, measurable arena for exactly that — the same failure modes wait for any agent that has to act in the real, physical open world.
 
