@@ -70,7 +70,26 @@ The referee exists because we caught the old honor system red-handed: eval cycle
 
 For a worked before/after with real transcripts — the same impossible task with and without the harness — see [the search-miss receipt](docs/receipts/2026-07-12-search-miss-before-after.md).
 
-A full benchmark table — success rate and token cost across difficulty tiers, referee-labeled, harness on vs. off — comes from the field trial now underway; it goes here when the numbers exist. We're not going to hand-wave the one section the fork is named after.
+### Field Trial v1 — harness on vs. harness off (2026-07-19)
+
+The promised benchmark: the same ten fixed tasks run twice — once with the full harness, once with it ablated (raw state injection, no gates, no reflexes, no verified finishes; player-safety stays on in both arms). Every attempt referee-labeled from the world-state delta, every row in the ledger under `task_set = bench_on` / `bench_off`.
+
+| Tier | Benchmark | Harness ON | Harness OFF |
+|---|---|---|---|
+| 1 | Mine 16 cobblestone | ✅ verified | ❌ claimed done at 6s, gained 0 |
+| 1 | Chop 6 oak logs | ✅ verified | ❌ claimed at 5s, gained 0 |
+| 1 | Collect 8 dirt | ✅ verified | ❌ claimed at 5s, gained 5 of 8 |
+| 2 | Craft 16 oak planks | ✅ verified | ❌ claimed instantly, gained 0 |
+| 2 | Craft 12 sticks | ✅ verified | ❌ claimed at 5s, gained 0 |
+| 2 | Craft 1 furnace | ✅ verified | ❌ claimed at 5s, gained 0 |
+| 3 | Craft 8 torches | ✅ verified | ❌ claimed at 16s, gained 0 |
+| 3 | Craft 1 stone pickaxe | ✅ verified | ❌ claimed at 10s, gained 0 |
+| 3 | Craft 3 ladders | ✅ verified | ✅ verified |
+| 3 | 5×5 platform *(honor-system)* | "pass" — 191s of actual building | "pass" — claimed at 35s, no building |
+
+**Referee-verified success: 9/9 with the harness, 1/9 without.** Both arms *claimed* 9/9. The off-arm failure shape is uniform — declare done within seconds, referee measures nothing gained. The one honest off-arm pass (ladders) had the materials already on hand. And the platform row is the honor-system exhibit hiding in plain sight: builds have no referee coverage yet, so both arms "pass" — including the 35-second claim with zero blocks placed. That's why honor labels never make a headline here.
+
+Fine print, because receipts cut both ways: the off arm inherited a stocked inventory from the on arm's runs (an *easier* setup) and still went 1/9 — the gap is conservative. The referee itself was calibrated first: **11/12 (92%)** agreement with blind human labels across gain, loss, and cancel criteria. Token cost tells the same story — the harness arm spent ~413k input / 6.5k output tokens doing the actual work; the ablated arm spent ~318k / 2k mostly generating claims.
 
 ## Stock Mindcraft vs PincerCraft
 
