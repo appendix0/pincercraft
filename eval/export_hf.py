@@ -5,6 +5,9 @@ Writes eval/hf_export/ (gitignored):
     README.md               dataset card
     data/task_attempts.jsonl   full attempt ledger (referee + honor labels)
     data/gold_labels.jsonl     human gold labels (calibration set)
+    data/metrics.jsonl         per-task token/cache/cost metrics
+    data/code_changes.jsonl    self-improvement loop: what it changed and why
+    data/gate_decisions.jsonl  human approve/reject gate on proposed patches
     episodes/<task_id>.jsonl   per-task action traces
 
 Upload (needs an HF account; the repo name is a suggestion):
@@ -33,7 +36,8 @@ task_categories:
 
 # PincerCraft: the say-do gap, measured
 
-Task-attempt ledger, human gold labels, and per-task action traces from
+Task-attempt ledger, human gold labels, per-task action traces, token/cache
+metrics, and the self-improvement loop's change+gate ledger from
 [PincerCraft](https://github.com/appendix0/pincercraft), a Minecraft agent
 (Mindcraft fork) whose design rule is **"code owns the facts, the LLM owns
 the plan."** Every task attempt snapshots inventory before, re-measures
@@ -53,19 +57,47 @@ delta — the model's own "done!" counts for nothing.
   still went 1/9 — the gap is conservative. `bench_on_aborted_r*` sets are
   quarantined rows from aborted runs (runner bugs, fixed); keep or drop.
 
-## Files
+## Files — and which design claim each one evidences
 
-- `data/task_attempts.jsonl` — one row per task attempt. Key fields:
-  `task_id`, `task_name`, `task_set`, `success` (0/1), `label_source`
-  (`referee` = measured from world-state delta; `honor_system` =
-  unmeasurable criterion, model self-report — do not trust these, that is
-  the point of the dataset), `failure_mode` (`false_done_referee` = claimed
-  done, world disagreed), `end_factor` (the success criterion),
-  `wall_clock_seconds`, `input_tokens`/`output_tokens`, `commit_hash`.
+The agent's five pillars (see the
+[README](https://github.com/appendix0/pincercraft#the-five-features-that-matter)):
+1. deterministic layer (perception / gates / reflexes / referee),
+2. event-driven orchestrator, 3. loop guards + caching, 4. in-world rulebook,
+5. a self-improvement loop held behind a human gate.
+
+- `data/task_attempts.jsonl` — one row per task attempt; **evidences the
+  referee (pillar 1-4) and the say-do gap.** Key fields: `task_id`,
+  `task_name`, `task_set`, `success` (0/1), `label_source` (`referee` =
+  measured from world-state delta; `honor_system` = unmeasurable criterion,
+  model self-report — do not trust these, that is the point of the dataset),
+  `failure_mode` (`false_done_referee` = claimed done, world disagreed),
+  `end_factor` (the success criterion), `wall_clock_seconds`,
+  `input_tokens`/`output_tokens`, `commit_hash`.
 - `data/gold_labels.jsonl` — human labels recorded blind before/alongside
-  referee verdicts (`notes` carries the task_id mapping).
+  referee verdicts (`notes` carries the task_id mapping); **evidences the
+  referee calibration** (11/12).
+- `data/metrics.jsonl` — per-task token accounting; **evidences the
+  orchestrator + cache-first prompt layout (pillars 2-3)**: `cache_hit_ratio`
+  (mean 0.79 across 43 measured tasks — ~79% of prompt tokens read from
+  cache instead of re-billed), `billable_tokens`, `tokens_per_turn`,
+  `est_cost_usd`, cost split by convo vs. coding turns.
+- `data/code_changes.jsonl` + `data/gate_decisions.jsonl` — **evidence the
+  self-improvement loop (pillar 5)**: what the loop changed, in which files,
+  and why (20 rows) — and the human approve/reject gate its patches must
+  pass, with reasons (7 rows). Nothing merges itself.
 - `episodes/<task_id>.jsonl` — action-level trace per task: tool calls with
-  outcomes, timings, and episode start/end markers.
+  outcomes, timings, and episode start/end markers. **The reflexes (pillar
+  1-3) are visible here in the raw**: compare `episodes/299.jsonl` (before
+  the search-miss reflex: ~24 LLM rounds hunting spiders on a peaceful
+  world) with `episodes/302.jsonl` (after: two searches, then park the task
+  and ask the player). Worked narrative:
+  [the search-miss receipt](https://github.com/appendix0/pincercraft/blob/develop/docs/receipts/2026-07-12-search-miss-before-after.md).
+
+Not evidenced by rows here, by nature: the in-world rulebook (pillar 4 — a
+design feature; its receipt is the
+[Groot story](https://github.com/appendix0/pincercraft#4-players-write-house-rules-inside-minecraft))
+and per-turn perception injection (pillar 1-1 — it is in every prompt, not a
+data artifact).
 
 ## Provenance
 
@@ -98,6 +130,9 @@ def main():
     db.row_factory = sqlite3.Row
     n_att = dump_table(db, 'task_attempts', OUT / 'data' / 'task_attempts.jsonl')
     n_gold = dump_table(db, 'gold_attempts', OUT / 'data' / 'gold_labels.jsonl')
+    dump_table(db, 'code_changes', OUT / 'data' / 'code_changes.jsonl')
+    dump_table(db, 'gate_decisions', OUT / 'data' / 'gate_decisions.jsonl')
+    shutil.copy(ROOT / 'eval' / 'metrics.jsonl', OUT / 'data' / 'metrics.jsonl')
 
     n_ep = 0
     for ep in sorted((ROOT / 'bots' / 'Daedelus404' / 'episodes').glob('*.jsonl')):
