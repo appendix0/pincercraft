@@ -47,9 +47,25 @@ def main():
     shutil.copy(ROOT / 'eval' / 'metrics.jsonl', OUT / 'data' / 'metrics.jsonl')
 
     n_ep = 0
+    flat = open(OUT / 'data' / 'episode_events.jsonl', 'w')
     for ep in sorted((ROOT / 'bots' / 'Daedelus404' / 'episodes').glob('*.jsonl')):
         shutil.copy(ep, OUT / 'episodes' / ep.name)
+        for line in ep.read_text().splitlines():
+            d = json.loads(line)
+            flat.write(json.dumps({
+                'episode': ep.stem,
+                'type': d.get('type'),
+                'ts': d.get('ts'),
+                'task_id': str(d.get('task_id', '')),
+                'source': d.get('source'),
+                'name': d.get('name'),
+                'args': json.dumps(d.get('args')) if d.get('args') is not None else None,
+                'outcome': d.get('outcome'),
+                'ms': d.get('ms'),
+                'result': str(d.get('result', ''))[:2000] or None,
+            }) + '\n')
         n_ep += 1
+    flat.close()
 
     (OUT / 'README.md').write_text(CARD)
     print(f'wrote {OUT}: {n_att} attempts, {n_gold} gold labels, {n_ep} episodes')

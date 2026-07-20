@@ -24,8 +24,8 @@ configs:
     data_files: data/code_changes.jsonl
   - config_name: gate_decisions
     data_files: data/gate_decisions.jsonl
-  - config_name: episodes
-    data_files: episodes/*.jsonl
+  - config_name: episode_events
+    data_files: data/episode_events.jsonl
 ---
 
 # PincerCraft: the say-do gap, measured
@@ -60,7 +60,8 @@ print(len(gap["task_name"]))  # 8 false-done claims in the ablated arm
 ```
 
 Configs: `task_attempts`, `gold_labels`, `metrics`, `code_changes`,
-`gate_decisions`, `episodes` (one JSONL per task, action-level).
+`gate_decisions`, `episode_events` (all action traces flattened into one
+table; the raw per-task files are in `episodes/`).
 
 ## Dataset structure — and which design claim each config evidences
 
@@ -102,10 +103,13 @@ What the eval loop changed, in which files, and why — and the human
 approve/reject gate its patches must pass, with reasons. Nothing merges
 itself.
 
-### `episodes` — 87 files · the reflexes (pillar 1-3), visible in the raw
+### `episode_events` / `episodes/` — 87 traces · the reflexes (pillar 1-3), visible in the raw
 
-One JSONL per task: tool calls with `name`, `args`, `outcome`, `ms`,
-`result`, plus `episode_start`/`episode_end` markers. Compare
+One JSONL per task in `episodes/` (raw, exact); the `episode_events` config
+is the same data flattened into one browsable table (`args` JSON-encoded,
+`result` truncated to 2000 chars). Rows are tool calls with `name`, `args`,
+`outcome`, `ms`, `result`, plus `episode_start`/`episode_end` markers.
+Compare
 `episodes/299.jsonl` (before the search-miss reflex: ~24 LLM rounds hunting
 spiders on a peaceful world) with `episodes/302.jsonl` (after: two searches,
 then park the task and ask the player). Worked narrative:
