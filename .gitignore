@@ -42,3 +42,4 @@ eval/cycle*.log
 *.prototype.bak
 .runtime/
 eval/.referee/
+eval/hf_export/
