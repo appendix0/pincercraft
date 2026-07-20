@@ -21,7 +21,7 @@ We wanted to know how big that problem actually is, so we measured it on our for
 
 **Setup:** every task attempt snapshots inventory before, re-measures after, and a deterministic referee labels success from the world-state delta — the model's own "done!" doesn't count. Attempts land in a SQLite ledger with both labels (what the model claimed vs. what the world showed).
 
-**Result:** across ⟦N⟧ referee-labeled attempts, the model claimed completion on ⟦X%⟧ but the world-state delta confirmed only ⟦Y%⟧ — a ⟦Z⟧-point say-do gap. (Referee calibration: ⟦A/6⟧ agreement with blind human labels on live attempts.) The single funniest row: asked to *gather 32 cobblestone* while already holding 37, the bot declared done in five seconds having moved zero blocks — and an LLM grader scored it a success. The delta check fails it: gained 0, needed 32.
+**Result:** across 9 referee-labeled benchmark attempts with our harness ablated — i.e., trusting the model the way the stock loop does — the model claimed completion on 100% but the world-state delta confirmed only 11% (1 of 9) — an 89-point say-do gap. The same 9 tasks with the harness on verified 9/9. (Referee calibration: 11/12 = 92% agreement with blind human labels on live attempts.) The single funniest row: asked to *gather 32 cobblestone* while already holding 37, the bot declared done in five seconds having moved zero blocks — and an LLM grader scored it a success. The delta check fails it: gained 0, needed 32.
 
 Full traces (episode JSONLs + referee verdicts + human gold labels) are published as a dataset: ⟦HF link⟧. A worked before/after on one task is here: [receipt doc](https://github.com/appendix0/pincercraft/blob/develop/docs/receipts/2026-07-12-search-miss-before-after.md).
 
