@@ -10,6 +10,7 @@
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT">
   <img src="https://img.shields.io/badge/fork%20of-Mindcraft-informational" alt="Fork of Mindcraft">
   <img src="https://img.shields.io/badge/lies%20to%20itself-no-brightgreen" alt="Lies to itself: no">
+  <img src="https://img.shields.io/badge/referee--verified-9%2F9%20harness%20on%20·%201%2F9%20off-blueviolet" alt="Referee-verified: 9/9 with the harness, 1/9 without">
 </p>
 
 <p align="center">
@@ -33,6 +34,17 @@ PincerCraft fixes that with one rule:
 > **Code owns the facts. The LLM owns the plan.**
 
 Inventory counts, *"can I mine this?"*, the recipe gap, *"is this task actually done?"* — computed every turn and handed to the model. It doesn't get to guess. That's the discipline of a coding agent like Claude Code — check the ground truth before you act, gate anything destructive, plan before you execute — pointed at a Minecraft bot.
+
+## The problem, named and measured
+
+The distance between what an agent *says* it did and what the world's ledger *shows* — the **say-do gap** — is the problem this repo exists to close. We ran the same ten benchmark tasks with the harness on and off, every attempt graded by a deterministic referee from the world-state delta; the model's own "done!" counts for nothing:
+
+| | claimed "done" | the world agreed |
+|---|---|---|
+| **Harness on** | 9/9 | **9/9** |
+| **Harness off** | 9/9 | **1/9** |
+
+Same model, same tasks, same server — the only variable is whether code or the LLM owns the facts. The gap is a loop-design problem, not a model problem, which means a bigger model won't close it and a referee will. (The referee itself was calibrated against blind human labels first: 11/12, 92%.) Full table, caveats included, in [Receipts](#receipts).
 
 ## The five features that matter
 
