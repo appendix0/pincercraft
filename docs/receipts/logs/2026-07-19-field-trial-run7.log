@@ -1,0 +1,445 @@
+
+■ arm on: restarting bot (harness_off flag: absent)
+
+■ clearing lingering task #349
+
+■ arm on: bot up — running 10 benchmark tasks
+
+■ arm on — task 1/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #0 (tier 1): Mine 16 NEW cobblestone this run: dig down/around with a pickaxe and break stone (stone drops cobblestone)
+
+▸ task #350 queued: Mine 16 NEW cobblestone this run: dig down/around with a pickaxe and break stone (stone drops cobblestone)   [done when: +16 cobblestone in inventory (net gain this run)]
+
+▸ task #350 running (bot.log @ 98721) — watching for finish/cancel…
+
+▸ task #350 → done in 55s (bot.log lines 98721–98729)
+
+▸ referee: {"parseable":true,"success":true,"label_source":"referee","expected":"+16 cobblestone","observed":"cobblestone+23 (have 95, started 72)","referee_failure_mode":null}
+  outcome=done turns=3 block_ops=0 tok/op=null in/turn=9137 cache_hit=0.884 ~$0.0653
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 1, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 350 <0|1> [notes])
+
+■ arm on — task 2/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #1 (tier 1): Chop 6 NEW oak logs this run from naturally growing oak trees in open/neutral ground
+
+▸ task #351 queued: Chop 6 NEW oak logs this run from naturally growing oak trees in open/neutral ground   [done when: +6 oak_log in inventory (net gain this run)]
+
+▸ task #351 running (bot.log @ 98742) — watching for finish/cancel…
+
+▸ task #351 → done in 60s (bot.log lines 98742–98747)
+
+▸ referee: {"parseable":true,"success":true,"label_source":"referee","expected":"+6 oak_log","observed":"oak_log+10 (have 18, started 8)","referee_failure_mode":null}
+  outcome=done turns=2 block_ops=0 tok/op=null in/turn=13881 cache_hit=0.873 ~$0.0191
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 1, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 351 <0|1> [notes])
+
+■ arm on — task 3/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #2 (tier 1): Collect 8 NEW dirt this run by breaking surface dirt/grass blocks in open/neutral ground
+
+▸ task #352 queued: Collect 8 NEW dirt this run by breaking surface dirt/grass blocks in open/neutral ground   [done when: +8 dirt in inventory (net gain this run)]
+
+▸ task #352 running (bot.log @ 98754) — watching for finish/cancel…
+
+▸ task #352 → done in 30s (bot.log lines 98754–98765)
+
+▸ referee: {"parseable":true,"success":true,"label_source":"referee","expected":"+8 dirt","observed":"dirt+8 (have 8, started 0)","referee_failure_mode":null}
+  outcome=done turns=3 block_ops=0 tok/op=null in/turn=14344 cache_hit=0.845 ~$0.0339
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 1, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 352 <0|1> [notes])
+
+■ arm on — task 4/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #3 (tier 2): Craft 16 NEW oak planks this run, chopping oak logs first if needed
+
+▸ task #353 queued: Craft 16 NEW oak planks this run, chopping oak logs first if needed   [done when: +16 oak_planks in inventory (net gain this run)]
+
+▸ task #353 running (bot.log @ 98775) — watching for finish/cancel…
+
+▸ task #353 → done in 10s (bot.log lines 98775–98786)
+
+▸ referee: {"parseable":true,"success":true,"label_source":"referee","expected":"+16 oak_planks","observed":"oak_planks+20 (have 42, started 22)","referee_failure_mode":null}
+  outcome=done turns=4 block_ops=0 tok/op=null in/turn=14876 cache_hit=0.814 ~$0.052
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 2, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 353 <0|1> [notes])
+
+■ arm on — task 5/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #4 (tier 2): Craft 12 NEW sticks this run, gathering logs and crafting planks as needed
+
+▸ task #354 queued: Craft 12 NEW sticks this run, gathering logs and crafting planks as needed   [done when: +12 stick in inventory (net gain this run)]
+
+▸ task #354 running (bot.log @ 98794) — watching for finish/cancel…
+
+▸ task #354 → done in 10s (bot.log lines 98794–98803)
+
+▸ referee: {"parseable":true,"success":true,"label_source":"referee","expected":"+12 stick","observed":"stick+24 (have 52, started 28)","referee_failure_mode":null}
+  outcome=done turns=2 block_ops=0 tok/op=null in/turn=15264 cache_hit=0.794 ~$0.0285
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 2, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 354 <0|1> [notes])
+
+■ arm on — task 6/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #5 (tier 2): Craft 1 NEW furnace this run, mining the 8 cobblestone for it as needed
+
+▸ task #355 queued: Craft 1 NEW furnace this run, mining the 8 cobblestone for it as needed   [done when: +1 furnace in inventory (net gain this run)]
+
+▸ task #355 running (bot.log @ 98814) — watching for finish/cancel…
+
+▸ task #355 → done in 15s (bot.log lines 98814–98824)
+
+▸ referee: {"parseable":true,"success":true,"label_source":"referee","expected":"+1 furnace","observed":"furnace+1 (have 2, started 1)","referee_failure_mode":null}
+  outcome=done turns=4 block_ops=0 tok/op=null in/turn=15744 cache_hit=0.769 ~$0.0619
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 2, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 355 <0|1> [notes])
+
+■ arm on — task 7/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #6 (tier 3): Craft 8 NEW torches this run, gathering or converting coal/charcoal and sticks as needed
+
+▸ task #356 queued: Craft 8 NEW torches this run, gathering or converting coal/charcoal and sticks as needed   [done when: +8 torch in inventory (net gain this run)]
+
+▸ task #356 running (bot.log @ 98836) — watching for finish/cancel…
+
+▸ task #356 → done in 5s (bot.log lines 98836–98842)
+
+▸ referee: {"parseable":true,"success":true,"label_source":"referee","expected":"+8 torch","observed":"torch+8 (have 8, started 0)","referee_failure_mode":null}
+  outcome=done turns=2 block_ops=0 tok/op=null in/turn=16127 cache_hit=0.751 ~$0.0336
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 3, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 356 <0|1> [notes])
+
+■ arm on — task 8/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #7 (tier 3): Craft 1 NEW stone pickaxe this run, gathering wood, sticks, and cobblestone as needed
+
+▸ task #357 queued: Craft 1 NEW stone pickaxe this run, gathering wood, sticks, and cobblestone as needed   [done when: +1 stone_pickaxe in inventory (net gain this run)]
+
+▸ task #357 running (bot.log @ 98850) — watching for finish/cancel…
+
+▸ task #357 → done in 15s (bot.log lines 98850–98864)
+
+▸ referee: {"parseable":true,"success":true,"label_source":"referee","expected":"+1 stone_pickaxe","observed":"stone_pickaxe+1 (have 1, started 0)","referee_failure_mode":null}
+  outcome=done turns=3 block_ops=0 tok/op=null in/turn=10066 cache_hit=0.802 ~$0.0317
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 3, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 357 <0|1> [notes])
+
+■ arm on — task 9/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #8 (tier 3): Craft 3 NEW ladders this run, gathering wood and crafting the 7 sticks as needed
+
+▸ task #358 queued: Craft 3 NEW ladders this run, gathering wood and crafting the 7 sticks as needed   [done when: +3 ladder in inventory (net gain this run)]
+
+▸ task #358 running (bot.log @ 98872) — watching for finish/cancel…
+
+▸ task #358 → done in 10s (bot.log lines 98872–98881)
+
+▸ referee: {"parseable":true,"success":true,"label_source":"referee","expected":"+3 ladder","observed":"ladder+6 (have 9, started 3)","referee_failure_mode":null}
+  outcome=done turns=2 block_ops=0 tok/op=null in/turn=14016 cache_hit=0.864 ~$0.021
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 3, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 358 <0|1> [notes])
+
+■ arm on — task 10/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #9 (tier 3): Build a solid 5x5 cobblestone platform, one block high, at your current standing position
+
+▸ task #359 queued: Build a solid 5x5 cobblestone platform, one block high, at your current standing position   [done when: a 5x5 (25-block) cobblestone platform exists where the bot was standing]
+
+▸ task #359 running (bot.log @ 98890) — watching for finish/cancel…
+
+▸ task #359 → done in 191s (bot.log lines 98890–99132)
+
+▸ referee: {"parseable":false,"success":true,"label_source":"honor_system","expected":null,"observed":null,"referee_failure_mode":null,"note":"end_factor not an inventory-count shape"}
+  outcome=done turns=5 block_ops=0 tok/op=null in/turn=11905 cache_hit=0.611 ~$0.1487
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 3, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 359 <0|1> [notes])
+
+■ arm on complete
+
+■ arm off: restarting bot (harness_off flag: present)
+
+■ arm off: bot up — running 10 benchmark tasks
+
+■ arm off — task 1/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #0 (tier 1): Mine 16 NEW cobblestone this run: dig down/around with a pickaxe and break stone (stone drops cobblestone)
+
+▸ task #360 queued: Mine 16 NEW cobblestone this run: dig down/around with a pickaxe and break stone (stone drops cobblestone)   [done when: +16 cobblestone in inventory (net gain this run)]
+
+▸ task #360 running (bot.log @ 99166) — watching for finish/cancel…
+
+▸ task #360 → done in 6s (bot.log lines 99166–99168)
+
+▸ referee: {"parseable":true,"success":false,"label_source":"referee","expected":"+16 cobblestone","observed":"cobblestone+0 (have 77, started 77)","referee_failure_mode":"false_done_referee"}
+  outcome=done turns=2 block_ops=0 tok/op=null in/turn=12889 cache_hit=0.94 ~$0.0133
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 1, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 360 <0|1> [notes])
+
+■ arm off — task 2/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #1 (tier 1): Chop 6 NEW oak logs this run from naturally growing oak trees in open/neutral ground
+
+▸ task #361 queued: Chop 6 NEW oak logs this run from naturally growing oak trees in open/neutral ground   [done when: +6 oak_log in inventory (net gain this run)]
+
+▸ task #361 running (bot.log @ 99178) — watching for finish/cancel…
+
+▸ task #361 → done in 5s (bot.log lines 99178–99180)
+
+▸ referee: {"parseable":true,"success":false,"label_source":"referee","expected":"+6 oak_log","observed":"oak_log+0 (have 16, started 16)","referee_failure_mode":"false_done_referee"}
+  outcome=done turns=2 block_ops=0 tok/op=null in/turn=13104 cache_hit=0.924 ~$0.0145
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 1, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 361 <0|1> [notes])
+
+■ arm off — task 3/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #2 (tier 1): Collect 8 NEW dirt this run by breaking surface dirt/grass blocks in open/neutral ground
+
+▸ task #362 queued: Collect 8 NEW dirt this run by breaking surface dirt/grass blocks in open/neutral ground   [done when: +8 dirt in inventory (net gain this run)]
+
+▸ task #362 running (bot.log @ 99196) — watching for finish/cancel…
+
+▸ task #362 → done in 5s (bot.log lines 99196–99207)
+
+▸ referee: {"parseable":true,"success":false,"label_source":"referee","expected":"+8 dirt","observed":"dirt+5 (have 29, started 24)","referee_failure_mode":"false_done_referee"}
+  outcome=done turns=2 block_ops=0 tok/op=null in/turn=13314 cache_hit=0.91 ~$0.0157
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 1, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 362 <0|1> [notes])
+
+■ arm off — task 4/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #3 (tier 2): Craft 16 NEW oak planks this run, chopping oak logs first if needed
+
+▸ task #363 queued: Craft 16 NEW oak planks this run, chopping oak logs first if needed   [done when: +16 oak_planks in inventory (net gain this run)]
+
+▸ task #363 running (bot.log @ 99219) — watching for finish/cancel…
+
+▸ task #363 → done in 0s (bot.log lines 99219–99219)
+
+▸ referee: {"parseable":true,"success":false,"label_source":"referee","expected":"+16 oak_planks","observed":"oak_planks+0 (have 40, started 40)","referee_failure_mode":"false_done_referee"}
+  outcome=done turns=1 block_ops=0 tok/op=null in/turn=13558 cache_hit=0.893 ~$0.0081
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 2, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 363 <0|1> [notes])
+
+■ arm off — task 5/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #4 (tier 2): Craft 12 NEW sticks this run, gathering logs and crafting planks as needed
+
+▸ task #364 queued: Craft 12 NEW sticks this run, gathering logs and crafting planks as needed   [done when: +12 stick in inventory (net gain this run)]
+
+▸ task #364 running (bot.log @ 99226) — watching for finish/cancel…
+
+▸ task #364 → done in 5s (bot.log lines 99226–99231)
+
+▸ referee: {"parseable":true,"success":false,"label_source":"referee","expected":"+12 stick","observed":"stick+0 (have 29, started 29)","referee_failure_mode":"false_done_referee"}
+  outcome=done turns=2 block_ops=0 tok/op=null in/turn=13726 cache_hit=0.883 ~$0.0182
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 2, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 364 <0|1> [notes])
+
+■ arm off — task 6/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #5 (tier 2): Craft 1 NEW furnace this run, mining the 8 cobblestone for it as needed
+
+▸ task #365 queued: Craft 1 NEW furnace this run, mining the 8 cobblestone for it as needed   [done when: +1 furnace in inventory (net gain this run)]
+
+▸ task #365 running (bot.log @ 99239) — watching for finish/cancel…
+
+▸ task #365 → done in 5s (bot.log lines 99239–99243)
+
+▸ referee: {"parseable":true,"success":false,"label_source":"referee","expected":"+1 furnace","observed":"furnace+0 (have 4, started 4)","referee_failure_mode":"false_done_referee"}
+  outcome=done turns=1 block_ops=0 tok/op=null in/turn=13899 cache_hit=0.872 ~$0.0101
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 2, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 365 <0|1> [notes])
+
+■ arm off — task 7/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #6 (tier 3): Craft 8 NEW torches this run, gathering or converting coal/charcoal and sticks as needed
+
+▸ task #366 queued: Craft 8 NEW torches this run, gathering or converting coal/charcoal and sticks as needed   [done when: +8 torch in inventory (net gain this run)]
+
+▸ task #366 running (bot.log @ 99262) — watching for finish/cancel…
+
+▸ task #366 → done in 16s (bot.log lines 99262–99271)
+
+▸ referee: {"parseable":true,"success":false,"label_source":"referee","expected":"+8 torch","observed":"torch+0 (have 0, started 0)","referee_failure_mode":"false_done_referee"}
+  outcome=done turns=3 block_ops=0 tok/op=null in/turn=14264 cache_hit=0.849 ~$0.034
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 3, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 366 <0|1> [notes])
+
+■ arm off — task 8/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #7 (tier 3): Craft 1 NEW stone pickaxe this run, gathering wood, sticks, and cobblestone as needed
+
+▸ task #367 queued: Craft 1 NEW stone pickaxe this run, gathering wood, sticks, and cobblestone as needed   [done when: +1 stone_pickaxe in inventory (net gain this run)]
+
+▸ task #367 running (bot.log @ 99278) — watching for finish/cancel…
+
+▸ task #367 → done in 10s (bot.log lines 99278–99285)
+
+▸ referee: {"parseable":true,"success":false,"label_source":"referee","expected":"+1 stone_pickaxe","observed":"stone_pickaxe+0 (have 2, started 2)","referee_failure_mode":"false_done_referee"}
+  outcome=done turns=2 block_ops=0 tok/op=null in/turn=14576 cache_hit=0.831 ~$0.0235
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 3, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 367 <0|1> [notes])
+
+■ arm off — task 9/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #8 (tier 3): Craft 3 NEW ladders this run, gathering wood and crafting the 7 sticks as needed
+
+▸ task #368 queued: Craft 3 NEW ladders this run, gathering wood and crafting the 7 sticks as needed   [done when: +3 ladder in inventory (net gain this run)]
+
+▸ task #368 running (bot.log @ 99292) — watching for finish/cancel…
+
+▸ task #368 → done in 15s (bot.log lines 99292–99305)
+
+▸ referee: {"parseable":true,"success":true,"label_source":"referee","expected":"+3 ladder","observed":"ladder+6 (have 21, started 15)","referee_failure_mode":null}
+  outcome=done turns=4 block_ops=0 tok/op=null in/turn=14998 cache_hit=0.808 ~$0.0541
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 3, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 368 <0|1> [notes])
+
+■ arm off — task 10/10
+
+▸ preflight ok — MCP reachable, mode=bench
+
+▸ benchmark #9 (tier 3): Build a solid 5x5 cobblestone platform, one block high, at your current standing position
+
+▸ task #369 queued: Build a solid 5x5 cobblestone platform, one block high, at your current standing position   [done when: a 5x5 (25-block) cobblestone platform exists where the bot was standing]
+
+▸ task #369 running (bot.log @ 99312) — watching for finish/cancel…
+
+▸ task #369 → done in 35s (bot.log lines 99312–99362)
+
+▸ referee: {"parseable":false,"success":true,"label_source":"honor_system","expected":null,"observed":null,"referee_failure_mode":null,"note":"end_factor not an inventory-count shape"}
+  outcome=done turns=4 block_ops=0 tok/op=null in/turn=13041 cache_hit=0.697 ~$0.0721
+
+▸ analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label
+
+▸ logged attempt → pincercraft_evals.db (commit 8c7ac32, tier 3, auto progress)
+
+▸ improver skipped (RUN_IMPROVER=0) — CYCLE DONE (attempt logged; label it: python3 eval/agreement.py label 369 <0|1> [notes])
+
+■ arm off complete
+
+■ FIELD TRIAL DONE — summarize with:
+  python3 - <<'EOF'
+import sqlite3
+con = sqlite3.connect('pincercraft_evals.db')
+for arm in ('bench_on','bench_off'):
+    n, ok = con.execute("select count(*), sum(success) from task_attempts where task_set=?", (arm,)).fetchone()
+    print(arm, f'{ok or 0}/{n or 0}')
+EOF
+
+■ field trial ended — flags cleared, bot reconciled
