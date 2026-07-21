@@ -48,6 +48,8 @@ Same model, same tasks, same server — the only variable is whether code or the
 
 ## The five features that matter
 
+Five features, one underlying split. **System1** is the deterministic layer: perception, gates, reflexes, and the referee (§1 below), plus the loop guards in §3 — all code, all CPU, all free to run. **System2** is the LLM — invoked only to plan and to write code (§2) — the only part that costs a token. It's the same dual-process pattern physical-AI models like NVIDIA's GR00T use (fast reactive control vs. slow reasoning), applied to an agent loop instead of a robot arm: keep the fast layer in code, spend the slow layer's budget on judgment. Cache-first prompt layout (§3) keeps even that budget small — 79% of measured tokens are cache reads, not fresh billing. → [`modes.js`](src/agent/modes.js) (11 named reflexes), [`live_state.js`](src/agent/live_state.js), [`orchestrator_v2.js`](src/agent/orchestrator_v2.js)
+
 ### 1. The deterministic layer — code owns every fact
 
 The flagship, and the reason the fork exists. Everything the bot *believes* is computed in code and handed to the model; everything the bot *claims* is measured back against the world. The LLM plans — it never gets to guess a fact or grade its own work.
@@ -81,6 +83,18 @@ A closed eval loop invents tasks (easy first, ramping on clean successes), runs 
 The referee exists because we caught the old honor system red-handed: eval cycle 2 asked the bot to *gather 32 cobblestone*, it already held 37, declared done in five seconds having moved zero blocks — and the LLM grader scored it a success. The deterministic delta check fails it: gained 0, needed 32. That disagreement is the whole thesis in one row of the database.
 
 For a worked before/after with real transcripts — the same impossible task with and without the harness — see [the search-miss receipt](docs/receipts/2026-07-12-search-miss-before-after.md).
+
+### The data pyramid — how the numbers get trusted
+
+Physical-AI teams calibrate broad automated data against a small, expensive, human-verified set before trusting it at scale. Same shape here:
+
+| Tier | What | Rows | Role |
+|---|---|---|---|
+| Apex — calibration | blind human verdicts (`gold_labels`) | 23 | certifies the referee (11/12, 92% agreement) — done once |
+| Middle — scale | referee labels from world-state delta (`task_attempts`) | most of 72 | cheap, automated, trustworthy *because* calibrated |
+| Base — raw | the model's own honor-system word (`task_attempts`) | rest of 72 | the counter-exhibit — included on purpose, never headlined |
+
+Field Trial v1, below, is the pyramid's output: ten tasks, two arms, built entirely on the calibrated middle tier. All three tiers, raw: [`Appendix0/pincercraft-say-do-gap`](https://huggingface.co/datasets/Appendix0/pincercraft-say-do-gap) on Hugging Face.
 
 ### Field Trial v1 — harness on vs. harness off (2026-07-19)
 
