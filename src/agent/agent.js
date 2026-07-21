@@ -276,6 +276,7 @@ export class Agent {
                 console.log('Initializing vision intepreter...');
                 this.vision_interpreter = new VisionInterpreter(this, settings.allow_vision);
                 this.bot.inventory_manager = this.inventory_manager;
+                this.bot.memory_bank = this.memory_bank;
 
                 // wait for a bit so stats are not undefined
                 await new Promise((resolve) => setTimeout(resolve, 1000));

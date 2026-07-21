@@ -125,12 +125,13 @@ export class InventoryManager {
         // discardOnly skips the lossless chest deposit (which navigates to a
         // chest) — used by the proactive drive-loop space reflex, where
         // wandering off could collide with a player command. In-action callers
-        // keep the chest-deposit path.
-        const chest = discardOnly ? null : world.getNearestBlock(this.bot, 'chest', 32);
-        if (chest) {
+        // keep the chest-deposit path. Only ever the bot's OWN assigned chest
+        // (Code of Conduct) — never just whatever chest happens to be nearest.
+        const chestPos = discardOnly ? null : this.bot.memory_bank?.recallPlace('my-chest');
+        if (chestPos) {
             for (const name of this._junkStacks()) {
                 if (this.emptySlots() >= threshold) break;
-                await skills.putInChest(this.bot, name, -1);
+                await skills.putInChest(this.bot, name, -1, chestPos);
             }
         }
 

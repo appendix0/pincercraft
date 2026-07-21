@@ -1,6 +1,6 @@
 import * as mc from "../../utils/mcdata.js";
 import * as world from "./world.js";
-import { applyDigPolicy } from "./dig_policy.js";
+import { applyDigPolicy, isProtectedBlockName } from "./dig_policy.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
 import fs from 'fs';
@@ -547,6 +547,10 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             break;
         }
         const block = blocks[0];
+        if (isProtectedBlockName(block.name)) {
+            log(bot, `Won't collect ${block.name} — it's a base/utility block (Code of Conduct protects it).`);
+            break;
+        }
         await bot.tool.equipForBlock(block);
         if (isLiquid) {
             const bucket = bot.inventory.findInventoryItem('bucket');
@@ -652,6 +656,10 @@ export async function breakBlockAt(bot, x, y, z) {
         log(bot, `Skipping block at x:${x.toFixed(1)}, y:${y.toFixed(1)}, z:${z.toFixed(1)} because it is not loaded.`);
         return false;
     }
+    if (isProtectedBlockName(block.name)) {
+        log(bot, `Won't break ${block.name} at x:${x.toFixed(1)}, y:${y.toFixed(1)}, z:${z.toFixed(1)} — it's a base/utility block (Code of Conduct protects it).`);
+        return false;
+    }
     if (block.name !== 'air' && block.name !== 'water' && block.name !== 'lava') {
         if (bot.modes.isOn('cheat')) {
             if (useDelay) { await new Promise(resolve => setTimeout(resolve, blockPlaceDelay)); }
@@ -717,6 +725,10 @@ export async function mineBlockAt(bot, x, y, z) {
     const block = bot.blockAt(Vec3(x, y, z));
     if (!block || block.name === 'air' || block.name === 'water' || block.name === 'lava') {
         log(bot, `No solid block at x:${Math.floor(x)}, y:${Math.floor(y)}, z:${Math.floor(z)}.`);
+        return false;
+    }
+    if (isProtectedBlockName(block.name)) {
+        log(bot, `Won't mine ${block.name} — it's a base/utility block (Code of Conduct protects it).`);
         return false;
     }
     // H2 precondition (deterministic, no LLM): refuse BEFORE navigating if we
@@ -1137,19 +1149,26 @@ export async function discard(bot, itemName, num=-1) {
     return true;
 }
 
-export async function putInChest(bot, itemName, num=-1) {
+export async function putInChest(bot, itemName, num=-1, chestPos=null) {
     /**
-     * Put the given item in the nearest chest.
+     * Put the given item in the bot's assigned chest. The bot only ever opens the
+     * chest it's been assigned (memory_bank 'my-chest') — never just the nearest
+     * one (Code of Conduct: never open/take from a chest it didn't place).
      * @param {MinecraftBot} bot, reference to the minecraft bot.
      * @param {string} itemName, the item or block name to put in the chest.
      * @param {number} num, the number of items to put in the chest. Defaults to -1, which puts all items.
+     * @param {number[]} chestPos, [x, y, z] of the assigned chest. Required.
      * @returns {Promise<boolean>} true if the item was put in the chest, false otherwise.
      * @example
-     * await skills.putInChest(bot, "oak_log");
+     * await skills.putInChest(bot, "oak_log", -1, [100, 64, -200]);
      **/
-    let chest = world.getNearestBlock(bot, 'chest', 32);
-    if (!chest) {
-        log(bot, `Could not find a chest nearby.`);
+    if (!chestPos) {
+        log(bot, `No chest assigned to me — I only use the chest I've been given. Stand by it and tell me to assign it.`);
+        return false;
+    }
+    let chest = bot.blockAt(Vec3(chestPos[0], chestPos[1], chestPos[2]));
+    if (!chest || (chest.name !== 'chest' && chest.name !== 'trapped_chest')) {
+        log(bot, `My assigned chest isn't there anymore — stand by the chest you want me to use and reassign it.`);
         return false;
     }
     let item = bot.inventory.findInventoryItem(itemName);
@@ -1166,24 +1185,32 @@ export async function putInChest(bot, itemName, num=-1) {
     return true;
 }
 
-export async function takeFromChest(bot, itemName, num=-1) {
+export async function takeFromChest(bot, itemName, num=-1, chestPos=null) {
     /**
-     * Take the given item from the nearest chest, potentially from multiple slots.
+     * Take the given item from the bot's assigned chest, potentially from multiple
+     * slots. The bot only ever opens the chest it's been assigned (memory_bank
+     * 'my-chest') — never just the nearest one (Code of Conduct: never open/take
+     * from a chest it didn't place).
      * @param {MinecraftBot} bot, reference to the minecraft bot.
      * @param {string} itemName, the item or block name to take from the chest.
      * @param {number} num, the number of items to take from the chest. Defaults to -1, which takes all items.
+     * @param {number[]} chestPos, [x, y, z] of the assigned chest. Required.
      * @returns {Promise<boolean>} true if the item was taken from the chest, false otherwise.
      * @example
-     * await skills.takeFromChest(bot, "oak_log");
+     * await skills.takeFromChest(bot, "oak_log", -1, [100, 64, -200]);
      * **/
-    let chest = world.getNearestBlock(bot, 'chest', 32);
-    if (!chest) {
-        log(bot, `Could not find a chest nearby.`);
+    if (!chestPos) {
+        log(bot, `No chest assigned to me — I only use the chest I've been given. Stand by it and tell me to assign it.`);
+        return false;
+    }
+    let chest = bot.blockAt(Vec3(chestPos[0], chestPos[1], chestPos[2]));
+    if (!chest || (chest.name !== 'chest' && chest.name !== 'trapped_chest')) {
+        log(bot, `My assigned chest isn't there anymore — stand by the chest you want me to use and reassign it.`);
         return false;
     }
     await goToPosition(bot, chest.position.x, chest.position.y, chest.position.z, 2);
     const chestContainer = await bot.openContainer(chest);
-    
+
     // Find all matching items in the chest
     let matchingItems = chestContainer.containerItems().filter(item => item.name === itemName);
     if (matchingItems.length === 0) {
@@ -1212,17 +1239,24 @@ export async function takeFromChest(bot, itemName, num=-1) {
     return totalTaken > 0;
 }
 
-export async function viewChest(bot) {
+export async function viewChest(bot, chestPos=null) {
     /**
-     * View the contents of the nearest chest.
+     * View the contents of the bot's assigned chest. The bot only ever opens the
+     * chest it's been assigned (memory_bank 'my-chest') — never just the nearest
+     * one (Code of Conduct: never open/take from a chest it didn't place).
      * @param {MinecraftBot} bot, reference to the minecraft bot.
+     * @param {number[]} chestPos, [x, y, z] of the assigned chest. Required.
      * @returns {Promise<boolean>} true if the chest was viewed, false otherwise.
      * @example
-     * await skills.viewChest(bot);
+     * await skills.viewChest(bot, [100, 64, -200]);
      * **/
-    let chest = world.getNearestBlock(bot, 'chest', 32);
-    if (!chest) {
-        log(bot, `Could not find a chest nearby.`);
+    if (!chestPos) {
+        log(bot, `No chest assigned to me — I only use the chest I've been given. Stand by it and tell me to assign it.`);
+        return false;
+    }
+    let chest = bot.blockAt(Vec3(chestPos[0], chestPos[1], chestPos[2]));
+    if (!chest || (chest.name !== 'chest' && chest.name !== 'trapped_chest')) {
+        log(bot, `My assigned chest isn't there anymore — stand by the chest you want me to use and reassign it.`);
         return false;
     }
     await goToPosition(bot, chest.position.x, chest.position.y, chest.position.z, 2);

@@ -365,7 +365,7 @@ export const actionsList = [
     },
     {
         name: '!putInChest',
-        description: 'Put the given item in the nearest chest.',
+        description: 'Put the given item in my assigned chest. If no chest is assigned, asks the owner to assign one first (does NOT use the nearest chest).',
         isLongRunning: true,
         params: {
             'item_name': { type: 'ItemName', description: 'The name of the item to put in the chest.' },
@@ -378,9 +378,15 @@ export const actionsList = [
             if (gate && !gate.ok) {
                 return `[put blocked] ${gate.corrective}`;
             }
+            const chestPos = agent.memory_bank.recallPlace('my-chest');
+            if (!chestPos) {
+                // "[chest blocked]" marks this as a gate bounce (streak-neutral
+                // in the orchestrator's loop guard), matching [give/eat blocked].
+                return `[chest blocked] No chest assigned to me — I only use chests I own (Code of Conduct). Stand by the chest you want me to use and tell me to assign it.`;
+            }
             const code_return = await agent.actions.runAction(
                 'action:putInChest',
-                async () => { await skills.putInChest(agent.bot, item_name, num); },
+                async () => { await skills.putInChest(agent.bot, item_name, num, chestPos); },
                 { timeout: -1, resume: false },
             );
             return interruptedAware(code_return);
@@ -388,7 +394,7 @@ export const actionsList = [
     },
     {
         name: '!takeFromChest',
-        description: 'Take the given items from the nearest chest.',
+        description: 'Take the given items from my assigned chest. If no chest is assigned, asks the owner to assign one first (does NOT use the nearest chest).',
         params: {
             'item_name': { type: 'ItemName', description: 'The name of the item to take.' },
             'num': { type: 'int', description: 'The number of items to take.', domain: [1, Number.MAX_SAFE_INTEGER] }
@@ -404,9 +410,13 @@ export const actionsList = [
                 // in the orchestrator's loop guard), matching [give/eat blocked].
                 return `[chest blocked] ${msg}`;
             }
+            const chestPos = agent.memory_bank.recallPlace('my-chest');
+            if (!chestPos) {
+                return `[chest blocked] No chest assigned to me — I only use chests I own (Code of Conduct). Stand by the chest you want me to use and tell me to assign it.`;
+            }
             const code_return = await agent.actions.runAction(
                 'action:takeFromChest',
-                async () => { await skills.takeFromChest(agent.bot, item_name, num); },
+                async () => { await skills.takeFromChest(agent.bot, item_name, num, chestPos); },
                 { timeout: -1, resume: false },
             );
             return interruptedAware(code_return);
@@ -414,10 +424,15 @@ export const actionsList = [
     },
     {
         name: '!viewChest',
-        description: 'View the items/counts of the nearest chest.',
+        description: 'View the items/counts of my assigned chest. If no chest is assigned, asks the owner to assign one first (does NOT use the nearest chest).',
         params: { },
         perform: runAsAction(async (agent) => {
-            await skills.viewChest(agent.bot);
+            const chestPos = agent.memory_bank.recallPlace('my-chest');
+            if (!chestPos) {
+                skills.log(agent.bot, `[chest blocked] No chest assigned to me — I only use chests I own (Code of Conduct). Stand by the chest you want me to use and tell me to assign it.`);
+                return;
+            }
+            await skills.viewChest(agent.bot, chestPos);
         })
     },
     {
