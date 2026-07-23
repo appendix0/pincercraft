@@ -1,13 +1,13 @@
-# DRAFT — upstream issue for mindcraft-bots/mindcraft
+# SENT — upstream issue for mindcraft-bots/mindcraft
 
-**Ring 1, artifact #1. Human sends.** This goes first — everything else links it.
+**Ring 1, artifact #1.** Posted 2026-07-23: https://github.com/mindcraft-bots/mindcraft/issues/808
 
-Pre-send checklist:
-- [ ] Field Trial done; every `⟦…⟧` replaced with a number that traces to a DB row
-- [ ] Referee Calibration done (~6 human-verified attempts)
-- [ ] Receipt doc + HF dataset links live
-- [ ] Re-check #800/#780 are still open; adjust the opener if they've moved
-- [ ] `grep ⟦ docs/publish/upstream-issue.md` returns nothing
+Pre-send checklist (all satisfied before send):
+- [x] Field Trial done; every `⟦…⟧` replaced with a number that traces to a DB row
+- [x] Referee Calibration done (~6 human-verified attempts)
+- [x] Receipt doc + HF dataset links live
+- [x] Re-check #800/#780 are still open; adjust the opener if they've moved
+- [x] `grep ⟦ docs/publish/upstream-issue.md` returns nothing
 
 ---
 

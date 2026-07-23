@@ -6,10 +6,11 @@ pins first; if there's a #showcase or #projects channel, use that, not
 #general).
 
 Pre-send checklist:
-- [ ] Upstream issue is posted (this links to it)
+- [x] Upstream issue is posted (this links to it) — https://github.com/mindcraft-bots/mindcraft/issues/808 (2026-07-23)
 - [ ] Demo GIF/MP4 recorded and attached — the post leads with it
 - [ ] Numbers filled — `grep ⟦` returns nothing
 - [ ] Tone check: we're a fork saying thanks + showing work, not advertising at them
+- [ ] Wait ~2-3 days after the issue post before sending (per header above)
 
 ---
 
@@ -23,7 +24,7 @@ The fork's whole idea: **code owns the facts (inventory, "can I mine this?", "is
 
 ⟦attach demo GIF/MP4 here⟧
 
-- Measured writeup + offer of a small upstream PR: ⟦upstream issue link⟧
+- Measured writeup + offer of a small upstream PR: https://github.com/mindcraft-bots/mindcraft/issues/808
 - Repo (MIT, same as upstream): https://github.com/appendix0/pincercraft
 - Raw traces if you want to check my math: https://huggingface.co/datasets/Appendix0/pincercraft-say-do-gap
 
