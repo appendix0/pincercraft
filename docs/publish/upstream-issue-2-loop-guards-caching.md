@@ -1,23 +1,21 @@
-# DRAFT — second upstream issue for mindcraft-bots/mindcraft
+# SENT — second upstream issue for mindcraft-bots/mindcraft
 
-**Ring 1 follow-up to #808. Human sends. HOLD — do not send yet.**
+**Ring 1 follow-up to #808.** Posted 2026-07-24: https://github.com/mindcraft-bots/mindcraft/issues/810
 
 Timing note (2026-07-23): #808 (the completion-referee issue) was posted same day with
-zero comments/reactions so far. Recommendation discussed with owner: wait at least a day,
-longer if #808 gets a maintainer reply worth reacting to first — don't stack two asks on
-the repo before anyone's responded to the first one.
+zero comments/reactions so far. Held ~24h per owner instruction ("check on #808 tomorrow,
+then send this one") before sending.
 
-Pre-send checklist:
-- [ ] #808 has had some engagement (comment/reaction/maintainer response), or enough time
-      has passed (owner's call) that sending anyway makes sense
-- [ ] Re-check #780 is still open and the maintainer cost-complaint reply is still there
-- [ ] Re-check #187, #246, #347, #290 — cited as CLOSED symptom issues; confirm they
-      haven't been reopened or superseded, and the summaries below still hold
-- [ ] Re-verify the 0.79 cache-hit-ratio figure still traces to the live HF dataset
-      `metrics` config (Appendix0/pincercraft-say-do-gap)
-- [ ] `grep ⟦ docs/publish/upstream-issue-2-loop-guards-caching.md` returns nothing
-- [ ] Confirm `HARD_CAP=12` and the two-strikes fingerprint logic haven't changed in
-      `src/agent/orchestrator_v2.js` since this draft was written
+Pre-send checklist (all re-verified immediately before send, 2026-07-24):
+- [x] #808 re-checked: still 0 comments/0 reactions, still open — no engagement either way,
+      but 24h had passed per owner's timing instruction, and no hostile response to hold for
+- [x] #780 still open, maintainer cost-complaint reply (uukelele, 2026-06-01) still there
+- [x] #187, #246, #347, #290 re-checked — all still CLOSED, summaries below still accurate
+- [x] 0.79 cache-hit-ratio re-verified live on the HF dataset card
+      (Appendix0/pincercraft-say-do-gap, `metrics` config, confirmed via HF API)
+- [x] `grep ⟦ docs/publish/upstream-issue-2-loop-guards-caching.md` returns nothing
+- [x] `HARD_CAP=12` and the two-strikes fingerprint logic in `src/agent/orchestrator_v2.js`
+      unchanged since this draft was written
 
 ---
 
