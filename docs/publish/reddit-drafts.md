@@ -37,9 +37,11 @@ Happy to answer anything about the referee design or where the LLM still fails w
 
 **Title:** We caught our Minecraft AI lying about finishing tasks, so we built it a referee that measures the world instead
 
-**Body:**
+**URL:** https://appendix0.github.io/pincercraft-site/ (link post — the site is the article; sidebar favors links over text posts)
 
-⟦2–3 sentence version of the story: the cobblestone anecdote, the measured gap, the one-rule fix ("code owns the facts, the LLM owns the plan"), repo link. r/programming favors a linked article — link the receipt doc or the site, not a text post, if the sidebar prefers links. Decide on send day.⟧
+**Body (accompanying self-text / first comment):**
+
+Ran an LLM Minecraft bot for months assuming it worked because it kept saying so, then measured it: told to gather 32 cobblestone while already holding 37, it declared done in 5 seconds without moving — and an LLM-based grader passed it. Across a 9-task benchmark with the model self-grading, it claimed "done" 9/9 times; a deterministic check of the actual world-state (inventory delta, not the model's word) confirmed 1/9. The fix was a harness in the same spirit as typechecks for coding agents — code owns the facts (inventory, reachability, completion), the LLM only owns the plan — same 9 tasks, harness on: 9/9 verified. Traces, referee code, and the dataset are public: repo (https://github.com/appendix0/pincercraft) / dataset (https://huggingface.co/datasets/Appendix0/pincercraft-say-do-gap).
 
 ## Reply drafts (prepare before posting, human sends)
 
