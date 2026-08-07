@@ -86,6 +86,11 @@ _MIGRATIONS = (
     # 'referee' (independent inventory verdict) vs 'honor_system' (queue outcome).
     "ALTER TABLE task_attempts ADD COLUMN end_factor TEXT",
     "ALTER TABLE task_attempts ADD COLUMN label_source TEXT DEFAULT 'honor_system'",
+    # Campaign seed: three independent passes per arm (preregistration.md §4).
+    # The analysis clusters by task and treats seeds within a task as
+    # non-independent, so the seed has to be recoverable per row rather than
+    # inferred from timestamps. 0 = pre-campaign rows.
+    "ALTER TABLE task_attempts ADD COLUMN seed INTEGER DEFAULT 0",
 )
 
 
@@ -136,6 +141,7 @@ def log_attempt(row: dict, path=DB_PATH):
         "task_source": row.get("task_source", "llm"),
         "end_factor": row.get("end_factor"),
         "label_source": row.get("label_source", "honor_system"),
+        "seed": int(row.get("seed", 0) or 0),
     }
     # Named column list (not positional VALUES) so the insert survives schema
     # drift — extra columns in the live table default to NULL instead of
@@ -146,11 +152,11 @@ def log_attempt(row: dict, path=DB_PATH):
             "(attempt_id,task_id,task_name,difficulty_tier,task_set,commit_hash,timestamp,"
             "success,progress_score,input_tokens,output_tokens,steps,retry_count,"
             "wall_clock_seconds,n_distinct_actions,failure_mode,rag_version,task_source,"
-            "end_factor,label_source) VALUES "
+            "end_factor,label_source,seed) VALUES "
             "(:attempt_id,:task_id,:task_name,:difficulty_tier,:task_set,:commit_hash,:timestamp,"
             ":success,:progress_score,:input_tokens,:output_tokens,:steps,:retry_count,"
             ":wall_clock_seconds,:n_distinct_actions,:failure_mode,:rag_version,:task_source,"
-            ":end_factor,:label_source)",
+            ":end_factor,:label_source,:seed)",
             rec,
         )
     return rec["attempt_id"]

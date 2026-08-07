@@ -171,7 +171,8 @@ ROW=$(node -e '
   const id=process.argv[2], name=process.argv[3], tier=process.argv[4],
         commit=process.argv[5], outcome=process.argv[6], wall=process.argv[7],
         prog=process.argv[8], fmode=process.argv[9], taskset=process.argv[10],
-        v=JSON.parse(process.argv[11]||"{}"), ef=process.argv[12];
+        v=JSON.parse(process.argv[11]||"{}"), ef=process.argv[12],
+        seed=process.argv[13];
   // Referee verdict is the label when it could measure; queue outcome only
   // labels unmeasurable criteria (label_source records which one applied).
   const success = typeof v.success==="boolean" ? v.success : outcome==="done";
@@ -180,12 +181,13 @@ ROW=$(node -e '
     label_source: v.label_source||"honor_system",
     input_tokens:(t.input||0)+(t.cache_read||0)+(t.cache_creation||0),
     output_tokens:(t.output||0), steps:m.turns||0, wall_clock_seconds:Number(wall||0) };
+  if (seed) row.seed=Number(seed);
   if (ef) row.end_factor=ef;
   if (prog) row.progress_score=Number(prog);
   if (!success) row.failure_mode = v.referee_failure_mode || fmode || outcome;
   else if (v.referee_failure_mode) row.failure_mode = v.referee_failure_mode; // e.g. verified but queue_never_finished
   process.stdout.write(JSON.stringify(row));
-' "$M" "$TASKID" "$DESC" "$TIER" "$COMMIT" "$OUTCOME" "$WALL" "${PROG:-}" "${FMODE:-}" "${TASKSET:-$MODE}" "$VERDICT" "${EF:-}")
+' "$M" "$TASKID" "$DESC" "$TIER" "$COMMIT" "$OUTCOME" "$WALL" "${PROG:-}" "${FMODE:-}" "${TASKSET:-$MODE}" "$VERDICT" "${EF:-}" "${SEED:-0}")
 printf '%s' "$ROW" | python3 eval/eval_db.py log-attempt >/dev/null \
   && say "logged attempt → pincercraft_evals.db (commit $COMMIT, tier $TIER, ${PROG:-auto} progress)"
 

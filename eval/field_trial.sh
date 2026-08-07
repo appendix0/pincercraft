@@ -12,9 +12,11 @@
 # on YOON. The target is now set explicitly via .runtime/target.json and
 # verified after spawn; a campaign that cannot confirm the eval server aborts.
 #
-# Usage: bash eval/field_trial.sh            # both arms, N tasks each
-#        ARMS=off bash eval/field_trial.sh   # one arm only (on|off|both)
-#        EVAL_PORT=25565 bash ...            # deliberate override (not for campaigns)
+# Usage: bash eval/field_trial.sh                       # on+off, 1 seed (smoke)
+#        ARMS=off bash eval/field_trial.sh              # one arm
+#        ARMS="on off perception gates reflexes measurement" SEEDS=3 \
+#          bash eval/field_trial.sh                     # the full campaign
+#        EVAL_PORT=25565 bash ...                       # deliberate override (not for campaigns)
 # Requires: pincercraft-ts running, `claude` CLI, keys.json mcp_token.
 set -uo pipefail
 
@@ -26,6 +28,7 @@ TARGET_FILE="$STATE_DIR/target.json"
 EVAL_HOST="${EVAL_HOST:-127.0.0.1}"
 EVAL_PORT="${EVAL_PORT:-25566}"
 ARMS="${ARMS:-both}"
+SEEDS="${SEEDS:-1}"   # campaign uses 3; default stays 1 so a smoke run is cheap
 # process.stdout.write, NOT console.log — under FORCE_COLOR (set by some CI
 # shells) console.log wraps numbers in ANSI codes and seq silently no-ops.
 N=$(node -e 'process.stdout.write(String(require("./eval/benchmarks.json").length))')
@@ -42,6 +45,7 @@ echo $$ > "$STATE_DIR/cycle_active"
 # the owner's casual play is unaffected the moment the campaign ends.
 cleanup(){
   rm -f "$STATE_DIR/cycle_active" "$OFF_FLAG" "$TARGET_FILE"
+  rm -f "$STATE_DIR"/harness_off_*
   sudo systemctl restart daedelus404.service >/dev/null 2>&1 || true
   "$RECONCILE" >/dev/null 2>&1 || true
   say "field trial ended — flags cleared, bot returned to YOON"
@@ -122,12 +126,35 @@ assert_target(){
   say "verified: bot pid $pid connected to eval server :${EVAL_PORT}"
 }
 
+# Deterministic shuffle of the benchmark indices for a seed. Fixed order would
+# confound tier with world depletion — later tasks always meet a more chewed-up
+# world (preregistration.md §6). An LCG rather than `shuf` so the order is
+# reproducible from the seed number alone, and it is echoed into the run log.
+task_order(){
+  node -e '
+    const n = Number(process.argv[1]), seed = Number(process.argv[2]);
+    let s = (seed * 2654435761) % 2147483647 || 1;
+    const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    const a = [...Array(n).keys()];
+    for (let i = n - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    process.stdout.write(a.join(" "));
+  ' "$N" "$1"
+}
+
 run_arm(){
-  local arm="$1" i
-  if [ "$arm" = off ]; then touch "$OFF_FLAG"; else rm -f "$OFF_FLAG"; fi
+  local arm="$1" seed="$2" i idx order rc addfails
+  # Clear every ablation flag first: an arm must never inherit the previous
+  # arm's, which would silently ablate two layers and misattribute the result.
+  rm -f "$OFF_FLAG"; rm -f "$STATE_DIR"/harness_off_*
+  case "$arm" in
+    on)   : ;;
+    off)  touch "$OFF_FLAG" ;;
+    perception|gates|reflexes|measurement) touch "$STATE_DIR/harness_off_$arm" ;;
+    *)    die "unknown arm '$arm' (on|off|perception|gates|reflexes|measurement)" ;;
+  esac
   # Fresh bot process per arm: clean orchestrator history, and the arm's
   # harness mode is unambiguous from the first turn.
-  say "arm $arm: restarting bot (harness_off flag: $([ -f "$OFF_FLAG" ] && echo present || echo absent))"
+  say "arm $arm seed $seed: restarting bot (flags: $(ls "$STATE_DIR" | grep -c '^harness_off' || true) set)"
   sudo systemctl restart daedelus404.service || die "bot restart failed"
   wait_mcp
   wait_spawn
@@ -137,15 +164,18 @@ run_arm(){
   # for thrashWindowMs (15s); benchmark descriptions repeat across runs, so an
   # arm-start cancel of a leftover would eat cycle 1 (runs 3 & 4). Wait it out.
   sleep 20
-  say "arm $arm: bot up — running $N benchmark tasks"
+  order=$(task_order "$seed")
+  say "arm $arm seed $seed: bot up — $N tasks in order: $order"
   # Failure budget: rc=42 (credit/usage-limit) parks the whole rig immediately
   # (owner rule: park everything when the token balance hits 0); two
   # consecutive rc=43 (task never added) parks too — run 6 burned 19 cycles
   # re-failing the same add with the evidence discarded.
-  local addfails=0 rc
-  for i in $(seq 1 "$N"); do
-    say "arm $arm — task $i/$N"
-    MODE=bench BENCH_IDX=$((i-1)) TASKSET="bench_$arm" RUN_ANALYZER=0 RUN_IMPROVER=0 \
+  addfails=0
+  i=0
+  for idx in $order; do
+    i=$((i+1))
+    say "arm $arm seed $seed — task $i/$N (benchmark #$idx)"
+    MODE=bench BENCH_IDX="$idx" TASKSET="bench_$arm" SEED="$seed" RUN_ANALYZER=0 RUN_IMPROVER=0 \
       WATCH_TIMEOUT="${WATCH_TIMEOUT:-480}" bash eval/loop.sh
     rc=$?
     case "$rc" in
@@ -159,21 +189,23 @@ run_arm(){
     esac
     clear_queue
   done
-  say "arm $arm complete"
+  say "arm $arm seed $seed complete"
 }
 
+# `both` kept for the v1 two-arm invocation; the campaign passes an explicit
+# arm list. Seeds are the OUTER loop so arms interleave: any drift in the server
+# or the model over a multi-day campaign then hits every arm roughly equally,
+# instead of landing entirely on whichever arm ran last (preregistration.md §6).
 case "$ARMS" in
-  on)   run_arm on ;;
-  off)  run_arm off ;;
-  both) run_arm on; run_arm off ;;
-  *)    die "ARMS must be on|off|both" ;;
+  both) ARM_LIST="on off" ;;
+  *)    ARM_LIST="$ARMS" ;;
 esac
 
-say "FIELD TRIAL DONE — summarize with:
-  python3 - <<'EOF'
-import sqlite3
-con = sqlite3.connect('pincercraft_evals.db')
-for arm in ('bench_on','bench_off'):
-    n, ok = con.execute(\"select count(*), sum(success) from task_attempts where task_set=?\", (arm,)).fetchone()
-    print(arm, f'{ok or 0}/{n or 0}')
-EOF"
+for seed in $(seq 1 "$SEEDS"); do
+  for arm in $ARM_LIST; do
+    run_arm "$arm" "$seed"
+  done
+done
+
+say "CAMPAIGN SEGMENT DONE (arms: $ARM_LIST · seeds: $SEEDS) — summarize with:
+  python3 eval/campaign_report.py"

@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+"""Campaign analysis — the numbers that go in the paper.
+
+    python3 eval/campaign_report.py [--seeds N]
+
+Implements the analysis plan pre-registered in docs/paper/preregistration.md §10,
+written before the data existed:
+
+  - verified success per arm, Wilson 95% interval
+  - the say-do gap per arm (claimed vs verified on the SAME attempts)
+  - A-ON vs every other arm, cluster bootstrap with task as the resampling unit
+    (the 3 seeds within a task are not independent, so task is the cluster)
+  - Holm-Bonferroni across the per-layer comparisons
+
+Nothing here is described as significant without its interval printed beside it.
+
+The platform task is excluded from referee aggregates by task identity, declared
+in advance (§4) — never by whether a given row happened to fall back to
+honor_system, which would condition the exclusion on the outcome.
+"""
+import json, os, random, sqlite3, sys
+from collections import defaultdict
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB = os.path.join(ROOT, 'pincercraft_evals.db')
+BENCH = os.path.join(ROOT, 'eval', 'benchmarks.json')
+BOOTSTRAP_N = 10000
+ARMS = ['on', 'off', 'perception', 'gates', 'reflexes', 'measurement']
+LAYER_ARMS = ['perception', 'gates', 'reflexes', 'measurement']
+
+
+def wilson(k, n, z=1.96):
+    """Wilson score interval. Used everywhere instead of the normal
+    approximation, which misbehaves badly at the 0/n and n/n that small arms
+    routinely produce."""
+    if n == 0:
+        return (0.0, 0.0)
+    p = k / n
+    d = 1 + z * z / n
+    c = p + z * z / (2 * n)
+    m = z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5)
+    return ((c - m) / d, (c + m) / d)
+
+
+def excluded_task_name():
+    """The pre-declared exclusion: the one benchmark whose criterion is not
+    inventory-shaped, so no referee verdict is possible until a block-scan
+    referee exists."""
+    with open(BENCH) as f:
+        rows = json.load(f)
+    for r in rows:
+        if 'note' in r:
+            return r['description']
+    return None
+
+
+def claimed(success, failure_mode):
+    """What an honor-system pipeline would have recorded for this attempt.
+
+    The referee's verdict is `success`; the bot's own claim is recoverable
+    because the referee flags exactly where the two diverge."""
+    if failure_mode == 'false_done_referee':
+        return 1          # bot said done, world disagreed
+    if failure_mode == 'queue_never_finished':
+        return 0          # world says done, bot never claimed it
+    return success
+
+
+def load(con, seeds=None):
+    excl = excluded_task_name()
+    rows = con.execute(
+        "SELECT task_set, task_name, seed, success, failure_mode, label_source, "
+        "input_tokens, output_tokens, wall_clock_seconds "
+        "FROM task_attempts WHERE task_set LIKE 'bench_%' AND seed > 0").fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        if seeds and d['seed'] not in seeds:
+            continue
+        d['arm'] = d['task_set'][len('bench_'):]
+        d['excluded'] = (d['task_name'] == excl)
+        d['claimed'] = claimed(d['success'], d['failure_mode'])
+        out.append(d)
+    return out
+
+
+def by_arm(rows):
+    g = defaultdict(list)
+    for r in rows:
+        g[r['arm']].append(r)
+    return g
+
+
+def cluster_bootstrap(a_rows, b_rows, n=BOOTSTRAP_N, seed=12345):
+    """Difference in verified success rate, resampling TASKS with replacement.
+
+    Resampling individual attempts would treat the 3 seeds of one task as 3
+    independent observations and produce intervals that are too narrow."""
+    rng = random.Random(seed)
+    a_by, b_by = defaultdict(list), defaultdict(list)
+    for r in a_rows:
+        a_by[r['task_name']].append(r['success'])
+    for r in b_rows:
+        b_by[r['task_name']].append(r['success'])
+    tasks = sorted(set(a_by) & set(b_by))
+    if not tasks:
+        return None
+    diffs = []
+    for _ in range(n):
+        pick = [tasks[rng.randrange(len(tasks))] for _ in tasks]
+        av = [v for t in pick for v in a_by[t]]
+        bv = [v for t in pick for v in b_by[t]]
+        if av and bv:
+            diffs.append(sum(av) / len(av) - sum(bv) / len(bv))
+    if not diffs:
+        return None
+    diffs.sort()
+    obs_a = [v for t in tasks for v in a_by[t]]
+    obs_b = [v for t in tasks for v in b_by[t]]
+    return {
+        'diff': sum(obs_a) / len(obs_a) - sum(obs_b) / len(obs_b),
+        'lo': diffs[int(0.025 * len(diffs))],
+        'hi': diffs[int(0.975 * len(diffs))],
+        # Fraction of resamples on the wrong side of zero: a bootstrap p-value
+        # for the one-sided direction the hypothesis predicts.
+        'p': min(1.0, 2 * min(sum(d <= 0 for d in diffs), sum(d >= 0 for d in diffs)) / len(diffs)),
+        'tasks': len(tasks),
+    }
+
+
+def holm(pairs):
+    """Holm-Bonferroni. pairs = [(label, p)] -> [(label, p, adjusted)]."""
+    ordered = sorted(pairs, key=lambda x: x[1])
+    m = len(ordered)
+    out, prev = [], 0.0
+    for i, (label, p) in enumerate(ordered):
+        adj = max(prev, min(1.0, (m - i) * p))
+        prev = adj
+        out.append((label, p, adj))
+    return out
+
+
+def pct(x):
+    return f'{100 * x:5.1f}%'
+
+
+def main(seeds=None):
+    if not os.path.exists(DB):
+        sys.exit(f'no database at {DB}')
+    con = sqlite3.connect(DB)
+    con.row_factory = sqlite3.Row
+    rows = load(con, seeds)
+    if not rows:
+        sys.exit('no campaign rows yet (task_set bench_*, seed > 0) — run a campaign segment first')
+
+    excl = excluded_task_name()
+    primary = [r for r in rows if not r['excluded']]
+    groups = by_arm(primary)
+
+    print('=' * 74)
+    print('CAMPAIGN REPORT'.center(74))
+    print('=' * 74)
+    print(f'\nattempts: {len(rows)} total, {len(primary)} in the primary set')
+    print(f'excluded by prior declaration (§4): {len(rows) - len(primary)} '
+          f'— {(excl or "?")[:48]}...')
+    seeds_seen = sorted({r['seed'] for r in rows})
+    print(f'seeds present: {seeds_seen}')
+
+    # Any non-referee row in the primary set means a criterion failed to parse.
+    # That is a data-quality problem, not a result, so it is surfaced loudly
+    # rather than quietly averaged in.
+    strays = [r for r in primary if r['label_source'] != 'referee']
+    if strays:
+        print(f'\n  WARNING: {len(strays)} primary-set row(s) are not referee-labeled.')
+        print('  Their end_factor did not parse to an inventory shape. Fix the')
+        print('  criterion and re-run those attempts — do not report them as measured.')
+        for r in strays[:5]:
+            print(f'    - {r["arm"]:<12} {r["task_name"][:52]}')
+
+    print('\n' + '-' * 74)
+    print('VERIFIED SUCCESS AND THE SAY-DO GAP, BY ARM')
+    print('-' * 74)
+    print(f'{"arm":<13} {"n":>4}  {"verified":>8}  {"95% CI":>16}   {"claimed":>8}  {"say-do gap":>10}')
+    for arm in ARMS:
+        rs = groups.get(arm, [])
+        if not rs:
+            continue
+        n = len(rs)
+        v = sum(r['success'] for r in rs)
+        c = sum(r['claimed'] for r in rs)
+        lo, hi = wilson(v, n)
+        gap = c / n - v / n
+        print(f'{arm:<13} {n:>4}  {pct(v/n)}  [{pct(lo)},{pct(hi)}]   {pct(c/n)}  {pct(gap)}')
+    print('\nsay-do gap = claimed minus verified, on the same attempts.')
+    print('A positive gap is the agent overstating its own success.')
+
+    # Primary endpoint.
+    if 'on' in groups and 'off' in groups:
+        print('\n' + '-' * 74)
+        print('PRIMARY ENDPOINT — A-ON vs A-OFF (cluster bootstrap over tasks)')
+        print('-' * 74)
+        b = cluster_bootstrap(groups['on'], groups['off'])
+        if b:
+            print(f'  difference in verified success: {pct(b["diff"])}')
+            print(f'  95% CI: [{pct(b["lo"])}, {pct(b["hi"])}]   bootstrap p={b["p"]:.4f}   '
+                  f'({b["tasks"]} tasks, {BOOTSTRAP_N} resamples)')
+            spans = b['lo'] <= 0 <= b['hi']
+            print(f'  H2 {"NOT supported — interval spans zero" if spans else "supported"}')
+
+    # Exploratory, and labelled as such regardless of what it shows.
+    present = [a for a in LAYER_ARMS if a in groups]
+    if 'on' in groups and present:
+        print('\n' + '-' * 74)
+        print('PER-LAYER ABLATION vs A-ON (exploratory — underpowered by design)')
+        print('-' * 74)
+        results, ps = {}, []
+        for arm in present:
+            b = cluster_bootstrap(groups['on'], groups[arm])
+            if b:
+                results[arm] = b
+                ps.append((arm, b['p']))
+        for arm, p, adj in holm(ps):
+            b = results[arm]
+            print(f'  {arm:<13} drop {pct(b["diff"])}  CI [{pct(b["lo"])}, {pct(b["hi"])}]  '
+                  f'p={p:.4f}  Holm-adj={adj:.4f}')
+        print('\n  4 arms x 3 seeds cannot resolve small effects. Read the intervals,')
+        print('  not the ranking.')
+
+    # Cost, for the efficiency line in the paper.
+    print('\n' + '-' * 74)
+    print('COST PER VERIFIED SUCCESS')
+    print('-' * 74)
+    print(f'{"arm":<13} {"in-tok/run":>11} {"sec/run":>9} {"in-tok per success":>20}')
+    for arm in ARMS:
+        rs = groups.get(arm, [])
+        if not rs:
+            continue
+        v = sum(r['success'] for r in rs)
+        tok = sum(r['input_tokens'] or 0 for r in rs)
+        sec = sum(r['wall_clock_seconds'] or 0 for r in rs)
+        per = f'{tok / v:>20,.0f}' if v else f'{"n/a (0 successes)":>20}'
+        print(f'{arm:<13} {tok/len(rs):>11,.0f} {sec/len(rs):>9.1f} {per}')
+    print()
+
+
+if __name__ == '__main__':
+    sel = None
+    if '--seeds' in sys.argv:
+        sel = {int(x) for x in sys.argv[sys.argv.index('--seeds') + 1].split(',')}
+    main(sel)
