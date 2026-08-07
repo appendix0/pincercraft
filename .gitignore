@@ -43,3 +43,4 @@ eval/cycle*.log
 .runtime/
 eval/.referee/
 eval/hf_export/
+.claude/

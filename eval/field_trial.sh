@@ -231,7 +231,7 @@ case "$ARMS" in
   *)    ARM_LIST="$ARMS" ;;
 esac
 
-for seed in $(seq 1 "$SEEDS"); do
+for seed in $(seq "${SEED_START:-1}" "$SEEDS"); do
   for arm in $ARM_LIST; do
     run_arm "$arm" "$seed"
   done
