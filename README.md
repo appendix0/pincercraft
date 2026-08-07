@@ -117,6 +117,24 @@ The promised benchmark: the same ten fixed tasks run twice — once with the ful
 
 Fine print, because receipts cut both ways: the off arm inherited a stocked inventory from the on arm's runs (an *easier* setup) and still went 1/9 — the gap is conservative. The referee itself was calibrated first: **11/12 (92%)** agreement with blind human labels across gain, loss, and cancel criteria. Token cost tells the same story — the harness arm spent ~413k input / 6.5k output tokens doing the actual work; the ablated arm spent ~318k / 2k mostly generating claims.
 
+## Structural symmetry with physical-AI safety systems
+
+This is a Minecraft agent, but the architecture it converged on is the one the robotics labs are converging on independently. Google DeepMind's [Gemini Robotics 2 safety report](https://storage.googleapis.com/deepmind-media/gemini-robotics/Gemini-Robotics-2-Safety.pdf) (2026-07-29) describes an embodied-reasoning model supervising a vision-language-action model — a "system 2 / system 1" split where the upper model must refuse unsafe tool calls, shield the lower model from tasks it will fumble, and request human help rather than propagate uncertainty downstream. Every one of those roles has a counterpart here, arrived at for different reasons.
+
+| PincerCraft | Physical-AI counterpart | Where it appears |
+|---|---|---|
+| Deterministic referee — verdict from world-state delta, never the agent's word | ER model gating VLA tool calls | ASIMOV-Agentic, safety orchestration |
+| Say-do preempt — async interrupt aborts the running task | Safety tool calling — fault message triggers `robot_stop()` | ASIMOV-Agentic §2.3 |
+| CoC gates — `canMine` / `hasTool` preconditions refuse the action | Safety constraint following — payload, gripper width, contamination limits | ASIMOV-Agentic §2.1 |
+| Craft-preflight gate — bounce a plan the world can't support | VLA feasibility awareness — shield the policy from out-of-distribution subtasks | ASIMOV-Agentic §2.4 |
+| Plan-mode entry on ambiguous asks | Instruction ambiguity — pause and query the operator | ASIMOV-Agentic §2.5 |
+| Honor-system rows, kept as the counter-exhibit | Self-reported episode success labels in robot datasets | e.g. `next.success` in LeRobot |
+| Referee calibrated against blind human labels (11/12) | *no widely adopted counterpart* | — |
+
+The last row is the interesting one. DeepMind's supervising gate is itself a statistical model — an LLM judging an LLM — and their own numbers show it wobbling: on human-proximity monitoring, holding false stops under 5% costs a false-negative rate above 40%. The gate here is deterministic code reading world state, so it cannot hallucinate its own compliance, and it was calibrated against blind human labels before being trusted at scale. Calibrating the judge is ordinary practice in measurement and still rare in agent evaluation.
+
+None of this makes a Minecraft bot a robot. It does mean the *measurement method* transfers, which is the part worth reusing.
+
 ## Stock Mindcraft vs PincerCraft
 
 | | Stock | PincerCraft |
