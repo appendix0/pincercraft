@@ -6,8 +6,15 @@
 # Rows land in pincercraft_evals.db tagged task_set=bench_on / bench_off,
 # task_source=llm, referee-labeled. Measurement-only: no analyzer, no improver.
 #
+# Runs against the dedicated eval server (pincercraft-ts, :25566), NOT the
+# owner's live world — see preregistration.md §7. Until 2026-08-07 this header
+# claimed that while settings.js hardcoded :25565, so Field Trial v1 in fact ran
+# on YOON. The target is now set explicitly via .runtime/target.json and
+# verified after spawn; a campaign that cannot confirm the eval server aborts.
+#
 # Usage: bash eval/field_trial.sh            # both arms, N tasks each
 #        ARMS=off bash eval/field_trial.sh   # one arm only (on|off|both)
+#        EVAL_PORT=25565 bash ...            # deliberate override (not for campaigns)
 # Requires: pincercraft-ts running, `claude` CLI, keys.json mcp_token.
 set -uo pipefail
 
@@ -15,6 +22,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; cd "$ROOT"
 STATE_DIR="$ROOT/.runtime"; mkdir -p "$STATE_DIR"
 RECONCILE="/usr/local/bin/daedelus404-reconcile.sh"
 OFF_FLAG="$STATE_DIR/harness_off"
+TARGET_FILE="$STATE_DIR/target.json"
+EVAL_HOST="${EVAL_HOST:-127.0.0.1}"
+EVAL_PORT="${EVAL_PORT:-25566}"
 ARMS="${ARMS:-both}"
 # process.stdout.write, NOT console.log — under FORCE_COLOR (set by some CI
 # shells) console.log wraps numbers in ANSI codes and seq silently no-ops.
@@ -28,13 +38,22 @@ die(){ printf '\033[1;31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 # a dead runner never pins the bot up. play_logger stays quiet under this flag;
 # loop.sh owns every row.
 echo $$ > "$STATE_DIR/cycle_active"
+# target.json is removed BEFORE the restart so the bot comes back on YOON and
+# the owner's casual play is unaffected the moment the campaign ends.
 cleanup(){
-  rm -f "$STATE_DIR/cycle_active" "$OFF_FLAG"
+  rm -f "$STATE_DIR/cycle_active" "$OFF_FLAG" "$TARGET_FILE"
   sudo systemctl restart daedelus404.service >/dev/null 2>&1 || true
   "$RECONCILE" >/dev/null 2>&1 || true
-  say "field trial ended — flags cleared, bot reconciled"
+  say "field trial ended — flags cleared, bot returned to YOON"
 }
 trap cleanup EXIT INT TERM
+
+# Point the bot at the eval server. Written before any restart so every arm,
+# including the first, joins pincercraft-ts rather than the owner's world.
+ss -tln 2>/dev/null | grep -q ":${EVAL_PORT}\b" \
+  || die "nothing listening on :${EVAL_PORT} — start the eval server before a campaign"
+printf '{"host":"%s","port":%s}\n' "$EVAL_HOST" "$EVAL_PORT" > "$TARGET_FILE"
+say "eval target set: ${EVAL_HOST}:${EVAL_PORT}"
 
 wait_mcp(){
   local TOKEN deadline
@@ -88,6 +107,21 @@ wait_spawn(){
   done
 }
 
+# Confirm from the OS, not from our own config file, that the bot really is on
+# the eval server. settings.js could have been overridden, the file could have
+# been cleared by a concurrent session, or a stale process could have survived
+# the restart — any of which would silently run the campaign in the owner's
+# live world and confound the whole dataset. Cheap check, catastrophic miss.
+assert_target(){
+  local pid
+  pid=$(systemctl show -p MainPID --value daedelus404.service 2>/dev/null)
+  [ -n "$pid" ] && [ "$pid" != 0 ] || die "cannot resolve bot PID to verify the eval target"
+  if ! ss -tnp 2>/dev/null | grep "pid=${pid}," | grep -q "127.0.0.1:${EVAL_PORT}"; then
+    die "bot (pid $pid) is NOT connected to :${EVAL_PORT} — refusing to run a campaign in the owner's live world (preregistration.md §7)"
+  fi
+  say "verified: bot pid $pid connected to eval server :${EVAL_PORT}"
+}
+
 run_arm(){
   local arm="$1" i
   if [ "$arm" = off ]; then touch "$OFF_FLAG"; else rm -f "$OFF_FLAG"; fi
@@ -97,6 +131,7 @@ run_arm(){
   sudo systemctl restart daedelus404.service || die "bot restart failed"
   wait_mcp
   wait_spawn
+  assert_target
   clear_queue
   # The queue's anti-churn guard rejects re-adding a just-cancelled description
   # for thrashWindowMs (15s); benchmark descriptions repeat across runs, so an

@@ -1,7 +1,34 @@
+import fs from 'node:fs';
+
+// Eval campaigns must not run in the owner's live world. Over a long campaign
+// the trees felled and stone mined near spawn accumulate, so a later arm faces
+// a measurably poorer world than an earlier one and world depletion is
+// confounded with the condition under test (docs/paper/preregistration.md §7).
+// The runner drops .runtime/target.json to point the bot at the dedicated eval
+// server and clears it on exit. Absent — which is the normal case, including
+// every watcher-spawned session — the bot joins YOON exactly as before.
+// Resolved against this file, not cwd, since systemd and the runner differ.
+const target = (() => {
+    let raw;
+    try {
+        raw = fs.readFileSync(new URL('./.runtime/target.json', import.meta.url), 'utf8');
+    } catch { return {}; }          // absent: normal play, join YOON
+    try {
+        return JSON.parse(raw);
+    } catch (e) {
+        // Present but unparseable means a redirect was intended and did not
+        // take. Defaulting to YOON here would quietly run a campaign in the
+        // owner's live world, so fail loudly instead of failing "safe".
+        throw new Error(`.runtime/target.json present but unparseable (${e.message}) — refusing to start`);
+    }
+})();
+
 const settings = {
-    "minecraft_version": "1.21.11", // YOON runs Paper 1.21.11 (set 1.21.6 when flipping to PincerCraft TS)
-    "host": "127.0.0.1",
-    "port": 25565, // YOON Java port. v2 orchestrator validated end-to-end 2026-05-25 on Claude (Haiku planner + Sonnet coder) — tool-use protocol, decomposition gates, prompt caching all green.
+    // PincerCraft TS runs the same Paper 1.21.11 as YOON, so switching targets
+    // needs no version flip.
+    "minecraft_version": "1.21.11",
+    "host": target.host || "127.0.0.1",
+    "port": target.port || 25565, // YOON Java port. v2 orchestrator validated end-to-end 2026-05-25 on Claude (Haiku planner + Sonnet coder) — tool-use protocol, decomposition gates, prompt caching all green.
     "auth": "microsoft", // device-code flow with PinBench1502 MS account (owns Java)
 
     // the mindserver manages all agents and hosts the UI
