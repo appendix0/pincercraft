@@ -111,19 +111,49 @@ wait_spawn(){
   done
 }
 
+# MainPID and every descendant. Mindcraft's main.js spawns each agent as a
+# CHILD process (src/process/agent_process.js), so the Minecraft socket belongs
+# to a descendant and never to MainPID itself — checking MainPID alone is a
+# guaranteed false negative, which is exactly how the first smoke run aborted
+# on a bot that was correctly connected.
+service_pids(){
+  local root
+  root=$(systemctl show -p MainPID --value daedelus404.service 2>/dev/null)
+  [ -n "$root" ] && [ "$root" != 0 ] || return 1
+  _descend "$root"
+}
+_descend(){
+  local kid
+  printf '%s\n' "$1"
+  for kid in $(pgrep -P "$1" 2>/dev/null); do _descend "$kid"; done
+}
+
 # Confirm from the OS, not from our own config file, that the bot really is on
 # the eval server. settings.js could have been overridden, the file could have
 # been cleared by a concurrent session, or a stale process could have survived
 # the restart — any of which would silently run the campaign in the owner's
 # live world and confound the whole dataset. Cheap check, catastrophic miss.
+#
+# Polled rather than sampled once: the socket appears a moment after spawn, and
+# a single early sample would abort a healthy run. Only a sustained absence is
+# treated as the real thing.
 assert_target(){
-  local pid
-  pid=$(systemctl show -p MainPID --value daedelus404.service 2>/dev/null)
-  [ -n "$pid" ] && [ "$pid" != 0 ] || die "cannot resolve bot PID to verify the eval target"
-  if ! ss -tnp 2>/dev/null | grep "pid=${pid}," | grep -q "127.0.0.1:${EVAL_PORT}"; then
-    die "bot (pid $pid) is NOT connected to :${EVAL_PORT} — refusing to run a campaign in the owner's live world (preregistration.md §7)"
-  fi
-  say "verified: bot pid $pid connected to eval server :${EVAL_PORT}"
+  local deadline pids pid socks
+  deadline=$(( $(date +%s) + 30 ))
+  while :; do
+    pids=$(service_pids) || die "cannot resolve bot PID to verify the eval target"
+    socks=$(ss -tnp state established 2>/dev/null)
+    for pid in $pids; do
+      if printf '%s\n' "$socks" | grep "pid=${pid}," \
+           | grep -qE "127\.0\.0\.1:${EVAL_PORT}([^0-9]|$)"; then
+        say "verified: bot (pid $pid) connected to eval server :${EVAL_PORT}"
+        return 0
+      fi
+    done
+    [ "$(date +%s)" -lt "$deadline" ] \
+      || die "bot never connected to :${EVAL_PORT} within 30s — refusing to run a campaign in the owner's live world (preregistration.md §7)"
+    sleep 2
+  done
 }
 
 # Deterministic shuffle of the benchmark indices for a seed. Fixed order would
