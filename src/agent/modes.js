@@ -4,7 +4,7 @@ import * as verify from './verify.js';
 import * as mc from '../utils/mcdata.js';
 import settings from './settings.js'
 import convoManager from './conversation.js';
-import { harnessOn } from './harness_mode.js';
+import { layerOn } from './harness_mode.js';
 
 async function say(agent, message) {
     agent.bot.modes.behavior_log += message + '\n';
@@ -115,7 +115,7 @@ const modes_list = [
         had_pickaxe: false,
         last_dig_time: 0,
         update: function (agent) {
-            if (!harnessOn()) return; // reflex under field-trial ablation
+            if (!layerOn('reflexes')) return; // reflex under field-trial ablation
             const bot = agent.bot;
             if (bot.targetDigBlock) this.last_dig_time = Date.now();
             const items = bot.inventory?.items?.() || [];

@@ -15,7 +15,7 @@
 import * as world from './library/world.js';
 import * as mc from '../utils/mcdata.js';
 import { parseEndFactorTarget, parseEndFactorCriterion } from './verify.js';
-import { harnessOn } from './harness_mode.js';
+import { layerOn } from './harness_mode.js';
 
 const NEARBY_BLOCK_CAP = 10;
 const NEARBY_ENTITY_CAP = 5;
@@ -196,7 +196,7 @@ export function buildLiveStateBlock(agent) {
         // OFF arm: raw state only (SELF/INVENTORY/NEARBY — upstream parity).
         // TASK-PROGRESS and CAPABILITIES are the "don't act against the facts"
         // layer under ablation.
-        const prog = harnessOn() ? taskProgressLine(agent, inv) : null;
+        const prog = layerOn('perception') ? taskProgressLine(agent, inv) : null;
         const parts = [
             '=== LIVE STATE (deterministic, refreshed every turn) ===',
             selfLine(bot, agent),
@@ -206,7 +206,7 @@ export function buildLiveStateBlock(agent) {
             inventoryLines(bot, inv, agent),
             nearbyLine(bot),
         ];
-        const caps = harnessOn() ? capabilitiesBlock(agent, inv) : null;
+        const caps = layerOn('perception') ? capabilitiesBlock(agent, inv) : null;
         if (caps) parts.push(caps);
         return parts.join('\n');
     } catch (e) {

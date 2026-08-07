@@ -15,7 +15,7 @@
 
 import settings from './settings.js';
 import { executeCommand } from './commands/index.js';
-import { harnessOn } from './harness_mode.js';
+import { layerOn } from './harness_mode.js';
 
 const skills = new Map();
 
@@ -249,7 +249,7 @@ registerSlashSkill('loop', {
         if (!Number.isFinite(target)) return `[loop] invalid target: ${tokens[1]}`;
         const inv = agent.bot.inventory?.items?.() || [];
         const have = inv.filter(i => i.name === item).reduce((s, i) => s + i.count, 0);
-        if (!harnessOn()) return `[loop] ${have}/${target} ${item}.`; // count only, no coaching
+        if (!layerOn('measurement')) return `[loop] ${have}/${target} ${item}.`; // count only, no coaching
         if (have >= target) {
             return `[loop:complete ${have}/${target} ${item}] Target reached. Your next action MUST be !finishTask — the end_factor is met.`;
         }
@@ -268,7 +268,7 @@ registerSlashSkill('verify', {
     description: '(bot-self) Re-check the in-progress task end_factor before !finishTask. Returns [verify:pass] (safe to finish), [verify:fail] (keep going), or [verify:unknown] (use judgment).',
     async run(agent, args, ctx) {
         if (!agent.bot) return '[verify] not in-world.';
-        if (!harnessOn()) return '[verify] verification disabled — use your own judgment.'; // ablation
+        if (!layerOn('measurement')) return '[verify] verification disabled — use your own judgment.'; // ablation
         const active = agent.task_queue?.tasks?.find(t => t.status === 'in_progress');
         if (!active) return '[verify] no task in progress.';
         const end = active.endFactor || '';

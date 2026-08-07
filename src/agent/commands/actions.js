@@ -3,7 +3,7 @@ import settings from '../settings.js';
 import convoManager from '../conversation.js';
 import { findMissingToolsInPrompt, MISSING_TOOL_REJECT, findRedundantFetchInPrompt, REDUNDANT_FETCH_SKIP } from '../classify_and_gate.js';
 import { verifyEndFactor } from '../verify.js';
-import { harnessOn } from '../harness_mode.js';
+import { layerOn } from '../harness_mode.js';
 
 
 // The player currently directing me (Floodgate '.'-prefix aware). I resolve
@@ -307,7 +307,7 @@ export const actionsList = [
             // collected yet — either way the give physically happened, so both
             // gate the auto-finish. Failure messages don't match.
             try {
-                const pickedUp = harnessOn() && result && /\b(received|gave)\b/i.test(result);
+                const pickedUp = layerOn('measurement') && result && /\b(received|gave)\b/i.test(result);
                 if (pickedUp) {
                     const active = agent.task_queue?.tasks.find(t => t.status === 'in_progress');
                     if (active) {
@@ -496,7 +496,7 @@ export const actionsList = [
         // never craft a second of a tool already held (resources are exempt —
         // redundantAcquire only fires for tool/equipment-class items).
         perform: async function (agent, recipe_name, num) {
-            if (harnessOn() && agent.inventory_manager?.redundantAcquire(recipe_name)) {
+            if (layerOn('gates') && agent.inventory_manager?.redundantAcquire(recipe_name)) {
                 const msg = `Already have a ${recipe_name} — no need to craft another.`;
                 try { agent.openChat(msg); } catch {}
                 return `[craft blocked] ${msg}`;
@@ -505,7 +505,7 @@ export const actionsList = [
             // attempt a craft the bot can't afford. Bounce it with a structured
             // corrective (missing materials + cheapest tool it CAN make) so the
             // planner re-plans instead of failing the craft and flailing.
-            const pf = harnessOn() ? agent.inventory_manager?.craftPreflight(recipe_name, num) : null;
+            const pf = layerOn('gates') ? agent.inventory_manager?.craftPreflight(recipe_name, num) : null;
             if (pf && pf.ok === false) {
                 try { agent.openChat(pf.corrective); } catch {}
                 return `[craft blocked] ${pf.corrective}`;
@@ -820,7 +820,7 @@ export const actionsList = [
             const target = taskId != null
                 ? queue.tasks.find(t => t.id === Number(taskId))
                 : queue.tasks.find(t => t.status === 'in_progress');
-            if (target && target.status !== 'done' && harnessOn()) {
+            if (target && target.status !== 'done' && layerOn('measurement')) {
                 try {
                     const v = verifyEndFactor(agent, target);
                     if (v && v.programmatic && v.verified === false) {
