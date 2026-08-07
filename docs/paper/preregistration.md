@@ -57,9 +57,17 @@ floor.
 |---|---|---|---|
 | **A-ON** | Full harness (as shipped) | 10 × 3 | 30 |
 | **A-OFF** | `harness_off` — all layers ablated | 10 × 3 | 30 |
-| **B1–B5** | One layer removed at a time: perception, gates, reflexes, measurement, referee | 5 × 10 × 3 | 150 |
+| **B1–B4** | One layer removed at a time: perception, gates, reflexes, measurement | 4 × 10 × 3 | 120 |
 | **C-BASE** | Stock upstream Mindcraft, same model, same tasks | 10 × 3 | 30 |
-| | | **total** | **240** |
+| | | **total** | **210** |
+
+**Four ablatable layers, not five.** An earlier draft listed *referee* as a
+fifth. That was an error: the referee is the measuring instrument, not a
+component under test. Removing it would delete the measurement rather than vary
+a condition. `LAYERS` in `src/agent/harness_mode.js` excludes it and
+`test/harness_layers_offline.mjs` asserts it stays excluded. Note the resulting
+split: the `measurement` layer — the bot's *own* finish verification — is
+ablated, while the external referee that scores the arm is not.
 
 **The referee labels every arm, including the baseline and including A-OFF.**
 The instrument is external to the system under test. In A-OFF and B4 the harness's
@@ -175,9 +183,9 @@ Written before the data exists.
   success. Task is the unit because the 3 seeds within a task are not independent.
 - **Say-do gap**: McNemar's exact test on claimed-vs-verified within the same
   attempts, per arm.
-- **Per-layer ablation**: each of B1–B5 against A-ON, same cluster bootstrap,
-  **Holm–Bonferroni correction across the five comparisons.** Reported as
-  exploratory regardless — 5 arms × 3 seeds is underpowered for small effects,
+- **Per-layer ablation**: each of B1–B4 against A-ON, same cluster bootstrap,
+  **Holm–Bonferroni correction across the four comparisons.** Reported as
+  exploratory regardless — 4 arms × 3 seeds is underpowered for small effects,
   and we say so rather than reading noise as structure.
 - **Calibration**: raw agreement, Cohen's κ, Wilson interval.
 - No result is described as "significant" without the interval printed next to it.
@@ -217,4 +225,4 @@ The confirmatory claims rest only on the 240 attempts collected after this freez
 
 | Date | Deviation | Reason |
 |---|---|---|
-| — | — | — |
+| 2026-08-07 | §4: ablation arms cut from five (B1–B5) to four (B1–B4); total runs 240 → 210. The dropped arm was *referee*. | Error in the original draft. The referee is the measuring instrument, not a component under test — ablating it removes the measurement instead of varying a condition, contradicting §4's own rule that ablating the harness must not ablate the scorer. Found while implementing the flag split (`92a37f8`). **Pre-data:** no campaign run had happened, so no result influenced this. |
