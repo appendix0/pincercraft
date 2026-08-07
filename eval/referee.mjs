@@ -137,6 +137,28 @@ async function snapshot(id) {
     process.stdout.write(JSON.stringify({ description: task.description, end_factor: task.end_factor }) + '\n');
 }
 
+// Persist what the verdict was computed from. The verdict itself lives in the
+// DB; this file is the ground truth a human labeller reads to judge the attempt
+// independently (docs/paper/preregistration.md §5). Best-effort: a failed
+// evidence write must never change a verdict.
+function writeEvidence(id, snap, outcome, nowInv, verdict) {
+    try {
+        fs.mkdirSync(STATE_DIR, { recursive: true });
+        fs.writeFileSync(path.join(STATE_DIR, `${id}.evidence.json`), JSON.stringify({
+            task_id: id,
+            description: snap.description,
+            end_factor: snap.end_factor,
+            outcome,                       // the bot's own claim: done | cancel | timeout
+            baseline: snap.baseline,
+            ts_start: snap.ts,
+            ts_judge: new Date().toISOString(),
+            inv_start: snap.inventory,
+            inv_end: nowInv,
+            verdict,                       // stripped before a card is rendered
+        }, null, 2));
+    } catch (e) { console.warn(`[referee] evidence write failed: ${e.message}`); }
+}
+
 async function judge(id, outcome) {
     const honorSystem = (note) => ({
         parseable: false, success: outcome === 'done', label_source: 'honor_system',
@@ -146,18 +168,24 @@ async function judge(id, outcome) {
     try { snap = JSON.parse(fs.readFileSync(path.join(STATE_DIR, `${id}.json`), 'utf8')); }
     catch { return honorSystem('no snapshot for this task'); }
     const criterion = parseEndFactorCriterion(snap.end_factor);
-    if (!criterion) return honorSystem('end_factor not an inventory-count shape');
-    let nowInv;
+    // Read the final inventory before branching on the criterion: the verdict
+    // needs it only when the criterion parses, but the evidence file wants it
+    // either way — an unparseable criterion (the 5x5 platform) is exactly the
+    // case where a human most needs to see what actually changed.
+    let nowInv = null, readErr = null;
     try { nowInv = await readInventoryJson(); }
-    catch (e) { return honorSystem(`inventory read failed: ${e.message}`); }
+    catch (e) { readErr = e.message; }
+    const finish = (verdict) => { writeEvidence(id, snap, outcome, nowInv, verdict); return verdict; };
+    if (!criterion) return finish(honorSystem('end_factor not an inventory-count shape'));
+    if (!nowInv) return finish(honorSystem(`inventory read failed: ${readErr}`));
     const v = evaluateCriterion(criterion, snap.inventory, nowInv);
     let referee_failure_mode = null;
     if (outcome === 'done' && !v.verified) referee_failure_mode = 'false_done_referee';
     if (outcome !== 'done' && v.verified) referee_failure_mode = 'queue_never_finished';
-    return {
+    return finish({
         parseable: true, success: v.verified, label_source: 'referee',
         expected: v.expected, observed: v.observed, referee_failure_mode,
-    };
+    });
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
