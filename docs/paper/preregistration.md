@@ -55,25 +55,40 @@ floor.
 
 | Code | Condition | Tasks × seeds | Attempts |
 |---|---|---|---|
-| **A-ON** | Full harness (as shipped) | 10 × 3 | 30 |
-| **A-OFF** | `harness_off` — all layers ablated | 10 × 3 | 30 |
-| **B1–B4** | One layer removed at a time: perception, gates, reflexes, measurement | 4 × 10 × 3 | 120 |
-| **C-BASE** | Stock upstream Mindcraft, same model, same tasks | 10 × 3 | 30 |
-| | | **total** | **210** |
+| **A-ON** | Full harness (as shipped) | 13 × 3 | 39 |
+| **A-OFF** | `harness_off` — all layers ablated | 13 × 3 | 39 |
+| **B1–B5** | One layer removed at a time: perception, gates, reflexes, verify, autofinish | 5 × 13 × 3 | 195 |
+| | | **total** | **273** |
 
-**Four ablatable layers, not five.** An earlier draft listed *referee* as a
-fifth. That was an error: the referee is the measuring instrument, not a
-component under test. Removing it would delete the measurement rather than vary
-a condition. `LAYERS` in `src/agent/harness_mode.js` excludes it and
-`test/harness_layers_offline.mjs` asserts it stays excluded. Note the resulting
-split: the `measurement` layer — the bot's *own* finish verification — is
-ablated, while the external referee that scores the arm is not.
+**Five ablatable layers.** An earlier draft listed *referee* as one. That was an
+error: the referee is the measuring instrument, not a component under test.
+Removing it would delete the measurement rather than vary a condition. `LAYERS`
+in `src/agent/harness_mode.js` excludes it and `test/harness_layers_offline.mjs`
+asserts it stays excluded. Note the resulting split: the bot's *own* finish
+verification is ablated, while the external referee that scores the arm is not.
 
-**The referee labels every arm, including the baseline and including A-OFF.**
-The instrument is external to the system under test. In A-OFF and B4 the harness's
-*own* finish-verification is disabled, but the referee still computes the verdict
-out-of-band for scoring. This distinction is load-bearing and must survive into
-the code: ablating the harness must not ablate the scorer.
+**No stock-Mindcraft baseline.** An earlier draft included a C-BASE arm (stock
+upstream Mindcraft, 30 runs). Dropped: this fork has diverged far enough from
+upstream — orchestrator, prompts, task queue, skill layer — that any A-ON minus
+C-BASE difference would be unattributable to the harness, which is the only
+thing this study is about. **A-OFF is the better control**: same model, same
+prompts, same task queue, same tasks, harness removed. A comparison against
+upstream would also require scoring upstream with *our* referee, since its
+validators cover only its own pre-specified benchmark tasks and cannot score
+open-ended ones.
+
+**`verify` and `autofinish` are separate layers.** Seeds 1–2 ran them as one
+`measurement` layer, which produced the campaign's largest effect (−61.1 pp) but
+bundled "block an unearned finish" with "close the task once the criterion is
+met" — so the number was not attributable to either. They are now independently
+ablatable. `harness_off_measurement` is retained as a compound flag so the
+seeds-1–2 arm stays reproducible from current code.
+
+**The referee labels every arm, including A-OFF.** The instrument is external to
+the system under test. In A-OFF and B4 the harness's *own* finish-verification is
+disabled, but the referee still computes the verdict out-of-band for scoring.
+This distinction is load-bearing and must survive into the code: ablating the
+harness must not ablate the scorer.
 
 **Primary endpoint:** verified success rate, A-ON vs A-OFF.
 **Co-primary:** say-do gap, A-ON vs A-OFF.
@@ -82,12 +97,14 @@ wall-clock cost per verified success.
 
 ### Excluded from the primary analysis, by prior commitment
 
-Task 10 (5×5 cobblestone platform) is deliberately not inventory-shaped and
+The 5×5 cobblestone platform task is deliberately not inventory-shaped and
 falls back to `honor_system` — there is no block-scan referee yet. It is
 **excluded from every referee-labeled aggregate** and reported separately as a
 worked example of what an unverifiable criterion looks like. Primary analysis is
-therefore **9 tasks × 3 seeds = 27 attempts per arm**. This exclusion is declared
-now, not chosen after seeing results.
+therefore **12 tasks × 3 seeds = 36 attempts per arm**. This exclusion is
+declared now, not chosen after seeing results, and is applied by task identity —
+never by whether a given row happened to fall back to `honor_system`, which
+would condition the exclusion on the outcome.
 
 ## 5. The instrument, and how it is calibrated
 
@@ -215,7 +232,7 @@ For transparency, existing rows in `pincercraft_evals.db` at freeze time:
 | play, explore, live | mixed | 35 | 23 |
 
 These are **pilot data**. They motivated the hypotheses and are reported as such.
-The confirmatory claims rest only on the 240 attempts collected after this freeze.
+The confirmatory claims rest only on the attempts collected after this freeze.
 
 ---
 
@@ -226,3 +243,7 @@ The confirmatory claims rest only on the 240 attempts collected after this freez
 | Date | Deviation | Reason |
 |---|---|---|
 | 2026-08-07 | §4: ablation arms cut from five (B1–B5) to four (B1–B4); total runs 240 → 210. The dropped arm was *referee*. | Error in the original draft. The referee is the measuring instrument, not a component under test — ablating it removes the measurement instead of varying a condition, contradicting §4's own rule that ablating the harness must not ablate the scorer. Found while implementing the flag split (`92a37f8`). **Pre-data:** no campaign run had happened, so no result influenced this. |
+| 2026-08-08 | §4: `measurement` split into two independently ablatable layers, `verify` and `autofinish`. B arms 4 → 5. | The layer produced the campaign's largest effect (−61.1 pp) but bundled blocking an unearned finish with closing a met task, so the drop was not attributable to either. **Post-data, and declared as such:** seeds 1–2 are already collected and are reported unchanged under the compound layer. `harness_off_measurement` is retained as a compound flag so those runs remain reproducible from current code, and `campaign_report.py` drops the compound from the Holm family whenever both halves are present, to avoid correcting across a redundant hypothesis. |
+| 2026-08-08 | §4: C-BASE (stock upstream Mindcraft, 30 runs) removed. | Two reasons, neither outcome-dependent. (1) This fork has diverged from upstream across the orchestrator, prompts, task queue and skill layer, so an A-ON − C-BASE difference would not be attributable to the harness. A-OFF is a strictly better control: same everything, harness removed. (2) Upstream's validators (`src/agent/tasks/tasks.js`) cover only its own pre-specified benchmark tasks and cannot score open-ended ones, so C-BASE would have to be scored by our referee anyway. **The arm was never run**, so no data was discarded. |
+| 2026-08-08 | §4: benchmark set 10 tasks → 13; tier 4 added (iron pickaxe, 64 cobblestone, 5 iron ingots). Primary set 9 × seeds → 12 × seeds. | Ceiling effect, measured not suspected: A-ON scored 3/3 on eight of the nine primary tasks in seeds 1–2. An endpoint with no headroom cannot detect improvement, which is the leading explanation for the flat H2. **Post-data.** Seeds 1–2 are reported on the 9-task primary set they were collected on and are not retro-fitted; any tier-4 result is a separate, later comparison. |
+| 2026-08-08 | §5: calibration set restated as n=40 confirmatory blind labels, with the 23 pilot `gold_attempts` explicitly non-pooling. | No change of substance — §5 always said this. Recorded because the ablation campaign added 120 referee-labeled rows and zero human ones, leaving the middle tier ~7× the apex and every campaign figure formally uncertified until the pass completes. Stated in the README so the gap is visible to a reader, not only to us. |

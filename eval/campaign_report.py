@@ -25,8 +25,14 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB = os.path.join(ROOT, 'pincercraft_evals.db')
 BENCH = os.path.join(ROOT, 'eval', 'benchmarks.json')
 BOOTSTRAP_N = 10000
-ARMS = ['on', 'off', 'perception', 'gates', 'reflexes', 'measurement']
-LAYER_ARMS = ['perception', 'gates', 'reflexes', 'measurement']
+# 'measurement' is the seeds-1-2 compound arm, superseded by the verify /
+# autofinish split. It stays in ARMS so the historical rows still print, but it
+# is deliberately NOT in LAYER_ARMS: Holm corrects over a family of hypotheses,
+# and measurement is not independent of verify/autofinish — it is exactly their
+# conjunction. Including all three would correct across a redundant comparison
+# and silently inflate every adjusted p-value in the family.
+ARMS = ['on', 'off', 'perception', 'gates', 'reflexes', 'verify', 'autofinish', 'measurement']
+LAYER_ARMS = ['perception', 'gates', 'reflexes', 'verify', 'autofinish']
 
 
 def wilson(k, n, z=1.96):
@@ -208,7 +214,13 @@ def main(seeds=None):
             print(f'  H2 {"NOT supported — interval spans zero" if spans else "supported"}')
 
     # Exploratory, and labelled as such regardless of what it shows.
+    # The correction family is the arms actually run, not the catalogue. When
+    # the split arms are present, `measurement` is their conjunction and is
+    # dropped to keep the family independent; when they are not (the seeds-1-2
+    # data), `measurement` IS the pre-registered hypothesis and must be tested.
     present = [a for a in LAYER_ARMS if a in groups]
+    if 'measurement' in groups and not ('verify' in groups and 'autofinish' in groups):
+        present.append('measurement')
     if 'on' in groups and present:
         print('\n' + '-' * 74)
         print('PER-LAYER ABLATION vs A-ON (exploratory — underpowered by design)')
@@ -223,7 +235,7 @@ def main(seeds=None):
             b = results[arm]
             print(f'  {arm:<13} drop {pct(b["diff"])}  CI [{pct(b["lo"])}, {pct(b["hi"])}]  '
                   f'p={p:.4f}  Holm-adj={adj:.4f}')
-        print('\n  4 arms x 3 seeds cannot resolve small effects. Read the intervals,')
+        print(f'\n  {len(present)} arms at this seed count cannot resolve small effects. Read the intervals,')
         print('  not the ranking.')
 
     # Cost, for the efficiency line in the paper.

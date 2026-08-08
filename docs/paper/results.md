@@ -55,8 +55,16 @@ The arms fail in different *ways*:
   believes it is finished.
 - **Measurement-only fails by never finishing.** It claimed just 44.4% — it
   *knew* it had not finished, because the perception layer was still showing it
-  real inventory counts — and ground on until the 480 s watchdog. Mean wall
-  clock 259 s/run against 38 s for ON.
+  real inventory counts — and ran out the 480 s watchdog. Mean wall clock 259 s
+  against 38 s for ON.
+
+  It did not do so by *working*. The arm averaged **2.0 steps and 29 k input
+  tokens per run, against 4.3 steps and 71 k for ON** — fewer model calls and
+  under half the tokens of any other arm. So it was not grinding; it was
+  **stalled**: the task never closed, and the agent sat parked waiting on a
+  completion signal that only `autofinish` emits. That the worst arm in the
+  campaign was also the *cheapest* per run is the clearest evidence available
+  that the loop guard holds under the condition most likely to produce runaway.
 - **ON fails honestly**, with a `cancelled`.
 
 So the layers do different jobs, and they interact:
@@ -68,24 +76,67 @@ Ground-truth *awareness* is what suppresses false claims; deterministic
 verification is what converts awareness into completed work. Remove awareness
 too and the agent stops noticing it has failed at all.
 
+## Cost: honesty is roughly free
+
+Same primary set, same runs — the harness is not free per run, and is close to
+free per unit of work that actually happened.
+
+| arm | input tokens/run | sec/run | **input tokens per verified success** |
+|---|---|---|---|
+| on | 71,074 | 37.8 | **79,958** |
+| off | 53,254 | 26.4 | **79,881** |
+| gates | 57,908 | 39.2 | 57,908 |
+| perception | 55,553 | 55.1 | 66,664 |
+| reflexes | 54,998 | 108.6 | 76,151 |
+| measurement | 29,123 | 259.4 | 104,842 |
+
+Per run, A-ON costs **33% more** than A-OFF. Per verified success the two are
+indistinguishable — 79,958 against 79,881, a difference far below what n = 18
+per arm can resolve, and the near-equality is coincidence, not precision.
+
+The reason A-OFF looks cheap per run is that **fabricating a completion is
+cheap**: it declares done at 26 s and stops paying. The overhead only cancels
+out once you divide by work that was actually done.
+
+Stated as a claim: at this task difficulty, the harness buys the elimination of
+a 33-point say-do gap at **no measurable cost per completed task**. It does not
+buy a cost *saving*, and an earlier reading of these runs that suggested one was
+computed on a wider row set than the primary set and does not survive.
+
+This is also the paper's own thesis turned on the paper: tokens-per-run and
+tokens-per-verified-success rank the arms differently, and only one of them is
+measuring anything a user cares about.
+
 ## Limitations
 
-1. **`measurement` bundles two functions.** The flag removes both (a) the finish
+1. **`measurement` bundled two functions.** The flag removed both (a) the finish
    gate that blocks unearned completion claims and (b) deterministic
    auto-finish, which closes a task once its criterion is met. The 61.1% drop
-   conflates them, and the timeout-dominated failure profile suggests (b) drives
-   much of it. **Fix before seed 3: split into `verify` and `autofinish`.**
+   conflates them, and the stall profile — 2.0 steps/run, no token burn —
+   points at (b). **Resolved in code after this campaign: the layer is now
+   `verify` and `autofinish`, ablatable separately.** Every number on this page
+   predates the split and describes the compound; `harness_off_measurement` is
+   retained as a compound flag so these runs stay reproducible.
 2. **Two seeds, n = 18 per arm.** Intervals are wide; the per-layer analysis is
    exploratory as pre-declared.
-3. **The task set may be too easy on a fresh world.** A fully-ablated agent
-   still scored 66.7%. Fixing the depletion confound (§7) by moving off YOON
-   likely introduced an easiness confound: resources sit near spawn on an
-   untouched map. This is the most plausible explanation for the divergence from
-   Field Trial v1's 9/9 vs 1/9. The task set needs harder tiers.
+3. **The task set is too easy on a fresh world — measured, not suspected.**
+   A-ON scored **3/3 on eight of the nine primary tasks**; only the stone
+   pickaxe (1/3) sat below ceiling. An endpoint with no headroom cannot show
+   the harness improving anything, which is the most likely reason H2 came back
+   flat. A fully-ablated agent still scored 66.7%. Fixing the depletion
+   confound (§7) by moving off YOON appears to have introduced an easiness
+   confound: resources sit near spawn on an untouched map. **Addressed after
+   this campaign: tier 4 adds iron pickaxe, 64 cobblestone, and 5 iron ingots
+   — a deep prerequisite chain, a duration/tool-break task, and a
+   three-precondition task.**
 4. `gates` at 100% — above full-ON — is noise at this n, not evidence that gates
    hurt.
-5. The stone pickaxe task failed in nearly every arm including full-ON. Check
-   whether it is mis-specified rather than merely hard.
+5. **The stone pickaxe task needs checking before it is reported again.** It was
+   the only sub-ceiling task, and A-ON went 1/3 on it while the `gates`-ablated
+   arm went 2/2. That ordering is backwards, and while n = 2 makes it nothing
+   on its own, the natural hypothesis — craft preflight false-positively
+   blocking a legitimate stone-pickaxe craft — is a bug in the gates layer, not
+   a property of the world. Untested.
 
 ## What replicates, and what does not
 

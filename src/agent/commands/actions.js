@@ -307,7 +307,7 @@ export const actionsList = [
             // collected yet — either way the give physically happened, so both
             // gate the auto-finish. Failure messages don't match.
             try {
-                const pickedUp = layerOn('measurement') && result && /\b(received|gave)\b/i.test(result);
+                const pickedUp = layerOn('autofinish') && result && /\b(received|gave)\b/i.test(result);
                 if (pickedUp) {
                     const active = agent.task_queue?.tasks.find(t => t.status === 'in_progress');
                     if (active) {
@@ -820,7 +820,7 @@ export const actionsList = [
             const target = taskId != null
                 ? queue.tasks.find(t => t.id === Number(taskId))
                 : queue.tasks.find(t => t.status === 'in_progress');
-            if (target && target.status !== 'done' && layerOn('measurement')) {
+            if (target && target.status !== 'done' && layerOn('verify')) {
                 try {
                     const v = verifyEndFactor(agent, target);
                     if (v && v.programmatic && v.verified === false) {
