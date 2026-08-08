@@ -77,16 +77,21 @@ def diff_inventory(start, end):
 def card(rec, con):
     tid = rec.get('task_id')
     att = con.execute(
-        'SELECT task_set, difficulty_tier, wall_clock_seconds FROM task_attempts '
+        'SELECT difficulty_tier, wall_clock_seconds FROM task_attempts '
         'WHERE task_id=? ORDER BY rowid DESC LIMIT 1', (str(tid),)).fetchone()
-    task_set, tier, secs = att if att else ('?', '?', None)
+    tier, secs = att if att else ('?', None)
 
     L = []
     L.append(f'### Attempt #{tid}')
     L.append('')
     L.append(f'- **Task:** {rec.get("description", "?")}')
     L.append(f'- **Stated criterion:** `{rec.get("end_factor") or "(none)"}`')
-    L.append(f'- **Arm:** `{task_set}` · tier {tier}'
+    # The arm is deliberately NOT shown. Hiding only the referee's verdict is
+    # not enough: knowing an attempt came from an ablated arm primes the
+    # labeller toward failure, and the labels are the apex that certifies the
+    # referee — a bias channel there propagates into every rate the paper
+    # reports. Tier and duration stay; neither identifies the condition.
+    L.append(f'- **Tier:** {tier}'
              + (f' · {secs:.0f}s' if isinstance(secs, (int, float)) else ''))
     L.append('')
     claim = rec.get('outcome')
