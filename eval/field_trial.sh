@@ -112,6 +112,13 @@ clear_queue(){
   done
 }
 
+# Steps recorded for the attempt loop.sh just logged. Feeds the per-task health
+# check: a wedged or brain-dead bot logs 0. Empty output on any error, which the
+# caller reads as "healthy" — a broken query must not trigger restarts.
+last_steps(){
+  python3 -c "import sqlite3;r=sqlite3.connect('pincercraft_evals.db').execute('SELECT COALESCE(steps,0) FROM task_attempts ORDER BY rowid DESC LIMIT 1').fetchone();print(r[0] if r else '')" 2>/dev/null
+}
+
 # Bot fully in-world, not just MCP-up: commands issued pre-spawn can hang an
 # orchestrator run forever (run-4 wedge). !stats answers with a Position only
 # once spawned.
@@ -221,6 +228,13 @@ run_arm(){
   # consecutive rc=43 (task never added) parks too — run 6 burned 19 cycles
   # re-failing the same add with the evidence discarded.
   addfails=0
+  # Consecutive zero-step attempts. Two faults have each silently poisoned a
+  # whole arm, because the bot is otherwise restarted only BETWEEN arms:
+  # bench_measurement seed 2 (API credit exhausted — every LLM call refused,
+  # 10 attempts at 0 turns) and bench_on seed 3 (agent wedged holding the
+  # action-execution lock — 10 attempts cancelled at 0 steps). Both land in the
+  # DB looking like a catastrophic layer effect. See docs/paper/aborts.md.
+  deadruns=0
   i=0
   for idx in $order; do
     i=$((i+1))
@@ -238,6 +252,26 @@ run_arm(){
           say "arm $arm task $i: loop.sh rc=$rc (timeout/cancel) — row still logged, continuing" ;;
     esac
     clear_queue
+    # Per-task health check. A functioning bot cannot record 0 steps, so this
+    # never fires on a real result — only on a bot that is unable to act. Credit
+    # exhaustion is not recoverable by a restart, so it parks (owner rule, same
+    # as rc=42); a wedge is, so it restarts and carries on.
+    if tail -n 800 bot.log 2>/dev/null | grep -qa 'credit balance is too low'; then
+      die "Anthropic API credit exhausted — the bot cannot act; parking the rig"
+    fi
+    if [ "$(last_steps)" = "0" ]; then
+      deadruns=$((deadruns+1))
+      say "arm $arm task $i: attempt recorded 0 steps ($deadruns in a row)"
+      if [ "$deadruns" -ge 2 ]; then
+        say "arm $arm: bot looks wedged — restarting before it eats the rest of the arm"
+        sudo systemctl restart daedelus404.service || die "bot restart failed"
+        wait_mcp; wait_spawn; assert_target; clear_queue
+        sleep 20
+        deadruns=0
+      fi
+    else
+      deadruns=0
+    fi
   done
   say "arm $arm seed $seed complete"
 }
