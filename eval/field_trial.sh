@@ -112,6 +112,49 @@ clear_queue(){
   done
 }
 
+# Fixed pre-attempt world state — the §7 commitment ("bot returned to a known
+# position and its inventory cleared between attempts") that was never actually
+# implemented. Without it the bot's stock carries across attempts AND arms, and
+# since arms always ran in the same order within a backtest, the 4th arm
+# (`gates`) inherited the richest inventory in all three backtests and scored
+# 30/30 — starting cobblestone predicts success (69%→89% across quartiles), so
+# that reads as a layer effect when it is a position confound.
+#
+# Runs over RCON so the runner, not the agent, holds console powers: an
+# LLM-driven bot with op could kill/ban/op itself and the CoC layer is not a
+# security boundary.
+#
+# Opt-in via RESET_STATE=1. It changes conditions, so it must never silently
+# apply to a campaign meant to match already-collected backtests.
+BOT_NAME="${BOT_NAME:-Daedelus404}"
+# Near the middle of the stock actually observed across the campaign, so a
+# controlled run sits in the same regime rather than a new one. Net-gain
+# criteria are unaffected by held stock: "+16 cobblestone" still needs 16 mined.
+RESET_KIT="${RESET_KIT:-128 cobblestone,32 oak_log,64 stick,32 oak_planks,8 coal,1 stone_pickaxe,1 stone_axe,1 crafting_table}"
+RESET_POS=""
+
+pin_reset_pos(){
+  [ "${RESET_STATE:-0}" = "1" ] || return 0
+  [ -n "$RESET_POS" ] && return 0
+  RESET_POS="$(python3 eval/rcon.py "data get entity $BOT_NAME Pos" 2>/dev/null \
+    | grep -oE '\-?[0-9]+\.[0-9]+' | head -3 | tr '\n' ' ')"
+  say "reset position pinned: ${RESET_POS:-<unavailable, position reset skipped>}"
+}
+
+reset_state(){
+  [ "${RESET_STATE:-0}" = "1" ] || return 0
+  local cmds=("clear $BOT_NAME") item qty name
+  local IFS=','
+  for item in $RESET_KIT; do
+    qty="${item%% *}"; name="${item#* }"
+    cmds+=("give $BOT_NAME minecraft:$name $qty")
+  done
+  unset IFS
+  [ -n "$RESET_POS" ] && cmds+=("tp $BOT_NAME $RESET_POS")
+  python3 eval/rcon.py "${cmds[@]}" >/dev/null 2>&1 \
+    || say "reset_state: RCON call failed — attempt runs on carried-over state"
+}
+
 # Steps recorded for the attempt loop.sh just logged. Feeds the per-task health
 # check: a wedged or brain-dead bot logs 0. Empty output on any error, which the
 # caller reads as "healthy" — a broken query must not trigger restarts.
@@ -239,6 +282,8 @@ run_arm(){
   for idx in $order; do
     i=$((i+1))
     say "arm $arm seed $seed — task $i (benchmark #$idx)"
+    pin_reset_pos
+    reset_state
     MODE=bench BENCH_IDX="$idx" TASKSET="${TAG}_$arm" SEED="$seed" RUN_ANALYZER=0 RUN_IMPROVER=0 \
       WATCH_TIMEOUT="${WATCH_TIMEOUT:-480}" bash eval/loop.sh
     rc=$?
