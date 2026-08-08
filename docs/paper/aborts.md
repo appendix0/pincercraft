@@ -9,7 +9,8 @@ The discard rate computed from this file is reported in the paper.
 
 | Date (UTC) | Run tag | Rule | Cause | Attempts lost |
 |---|---|---|---|---|
-| — | — | — | — | — |
+| 2026-08-07 | `bench_measurement` seed 2 | 3 | **Anthropic API credit exhausted mid-campaign.** Every LLM call returned `400 ... "Your credit balance is too low to access the Anthropic API"`. The bot stayed connected and received drive nudges, but took 0 turns; all 10 attempts ran to the full 480 s timeout with inventory unchanged. Attempts #490–#499. Detected 2026-08-08 while investigating the layer's 61.1 pp drop. | 10 |
+| 2026-08-08 | `bench_on` seed 3 | 3 | **Agent wedged holding the action-execution lock.** After #516 the log repeats `waiting for code to finish executing...` indefinitely with `executing=true` and no active task; every subsequent task was cancelled in 0–30 s at 0 steps. Attempts #517–#526. The runner restarts the bot only between arms, so one wedge poisoned the rest of the arm. | 10 |
 
 ---
 
