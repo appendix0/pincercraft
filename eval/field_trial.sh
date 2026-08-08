@@ -29,6 +29,15 @@ EVAL_HOST="${EVAL_HOST:-127.0.0.1}"
 EVAL_PORT="${EVAL_PORT:-25566}"
 ARMS="${ARMS:-both}"
 SEEDS="${SEEDS:-1}"   # campaign uses 3; default stays 1 so a smoke run is cheap
+# TAG namespaces the rows. Campaign rows must be tagged `bench` — that is what
+# campaign_report.py selects on (task_set LIKE 'bench_%'). A validation run uses
+# TAG=smoke so its rows are inert to the analysis: shaking down the rig must
+# never be able to add attempts to a published rate.
+TAG="${TAG:-bench}"
+# TASKS restricts the run to explicit benchmark indices, repeats allowed
+# ("7 7 7" = three attempts at #7). Empty means the full shuffled order. Only
+# for targeted validation; a campaign arm always runs the whole set.
+TASKS="${TASKS:-}"
 # process.stdout.write, NOT console.log — under FORCE_COLOR (set by some CI
 # shells) console.log wraps numbers in ANSI codes and seq silently no-ops.
 N=$(node -e 'process.stdout.write(String(require("./eval/benchmarks.json").length))')
@@ -36,6 +45,12 @@ case "$N" in (*[!0-9]*|'') die "benchmark count came out non-numeric: '$N'";; es
 
 say(){ printf '\n\033[1;33m■ %s\033[0m\n' "$*"; }
 die(){ printf '\033[1;31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
+
+case "$TAG" in (*[!a-z0-9_]*|'') die "TAG must be lowercase alnum/underscore: '$TAG'";; esac
+case "$TASKS" in (*[!0-9\ ]*) die "TASKS must be space-separated indices: '$TASKS'";; esac
+for _t in $TASKS; do
+  [ "$_t" -lt "$N" ] || die "TASKS index $_t out of range (benchmarks.json has $N tasks, 0-$((N-1)))"
+done
 
 # Eval-session presence (same contract as session.sh): flag stores our PID so
 # a dead runner never pins the bot up. play_logger stays quiet under this flag;
@@ -196,8 +211,8 @@ run_arm(){
   # for thrashWindowMs (15s); benchmark descriptions repeat across runs, so an
   # arm-start cancel of a leftover would eat cycle 1 (runs 3 & 4). Wait it out.
   sleep 20
-  order=$(task_order "$seed")
-  say "arm $arm seed $seed: bot up — $N tasks in order: $order"
+  order=${TASKS:-$(task_order "$seed")}
+  say "arm $arm seed $seed: bot up — tasks in order: $order"
   # Failure budget: rc=42 (credit/usage-limit) parks the whole rig immediately
   # (owner rule: park everything when the token balance hits 0); two
   # consecutive rc=43 (task never added) parks too — run 6 burned 19 cycles
@@ -206,8 +221,8 @@ run_arm(){
   i=0
   for idx in $order; do
     i=$((i+1))
-    say "arm $arm seed $seed — task $i/$N (benchmark #$idx)"
-    MODE=bench BENCH_IDX="$idx" TASKSET="bench_$arm" SEED="$seed" RUN_ANALYZER=0 RUN_IMPROVER=0 \
+    say "arm $arm seed $seed — task $i (benchmark #$idx)"
+    MODE=bench BENCH_IDX="$idx" TASKSET="${TAG}_$arm" SEED="$seed" RUN_ANALYZER=0 RUN_IMPROVER=0 \
       WATCH_TIMEOUT="${WATCH_TIMEOUT:-480}" bash eval/loop.sh
     rc=$?
     case "$rc" in
