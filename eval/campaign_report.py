@@ -223,9 +223,24 @@ def main(seeds=None):
             print(f'    - {r["arm"]:<12} {r["task_name"][:52]}')
 
     # Every section below iterates the ARMS catalogue, so an arm name that is
-    # not in it contributes to nothing and vanishes without a count. A typo in
-    # the arm passed to field_trial.sh would silently discard a whole segment.
-    unknown = sorted(set(groups) - set(ARMS))
+    # not in it contributes to nothing and vanishes without a count. Two very
+    # different things land here, and conflating them would be a problem: a
+    # DECLARED abort (§8, tagged *_aborted_*, excluded on purpose and reported
+    # as a discard rate) versus a typo in the arm passed to field_trial.sh,
+    # which would silently discard a whole segment.
+    off_catalogue = sorted(set(groups) - set(ARMS))
+    aborted = [a for a in off_catalogue if '_aborted_' in a]
+    unknown = [a for a in off_catalogue if '_aborted_' not in a]
+
+    if aborted:
+        n_ab = sum(len(groups[a]) for a in aborted)
+        live = sum(len(groups[a]) for a in ARMS if a in groups)
+        print(f'\ndiscarded as infrastructure faults (§8): {n_ab} attempt(s), '
+              f'{n_ab / (n_ab + live) * 100:.1f}% discard rate')
+        for a in aborted:
+            print(f'    - {a:<36} {len(groups[a])} attempt(s)')
+        print('  cause and rule per abort: docs/paper/aborts.md')
+
     if unknown:
         print(f'\n  WARNING: {len(unknown)} arm(s) in the data are not in the report')
         print('  catalogue — their rows appear in NO section below. Check the arm')
