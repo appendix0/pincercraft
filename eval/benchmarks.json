@@ -48,7 +48,8 @@
         "tier": "3",
         "description": "Build a solid 5x5 cobblestone platform, one block high, at your current standing position",
         "end_factor": "a 5x5 (25-block) cobblestone platform exists where the bot was standing",
-        "note": "deliberately NOT inventory-shaped: referee falls back to honor_system, keeping one measured example of the label_source split until the phase-2 block-scan referee lands"
+        "note": "deliberately NOT inventory-shaped: referee falls back to honor_system, keeping one measured example of the label_source split until the phase-2 block-scan referee lands",
+        "exclude_from_primary": true
     },
     {
         "tier": "4",
