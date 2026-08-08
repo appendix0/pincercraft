@@ -51,13 +51,25 @@ def wilson(k, n, z=1.96):
 def excluded_task_name():
     """The pre-declared exclusion: the one benchmark whose criterion is not
     inventory-shaped, so no referee verdict is possible until a block-scan
-    referee exists."""
+    referee exists.
+
+    Keyed on an explicit `exclude_from_primary` flag, not on the presence of a
+    `note`: notes are documentation and several tasks carry one, so matching on
+    `note` picked whichever such row happened to sit first in the file. That
+    resolved correctly only by file ordering, and a reorder would have quietly
+    swapped the exclusion — dropping a referee-labeled task from the primary
+    endpoint and admitting the one task that can only be honor-system labeled.
+    Exactly one row must be marked; anything else is a benchmark-file error and
+    is worth stopping the report over, because every downstream rate is
+    computed against this set."""
     with open(BENCH) as f:
         rows = json.load(f)
-    for r in rows:
-        if 'note' in r:
-            return r['description']
-    return None
+    marked = [r['description'] for r in rows if r.get('exclude_from_primary')]
+    if len(marked) != 1:
+        raise SystemExit(
+            f'{BENCH}: expected exactly 1 task with "exclude_from_primary": true, '
+            f'found {len(marked)}')
+    return marked[0]
 
 
 def claimed(success, failure_mode):
