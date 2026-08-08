@@ -89,7 +89,10 @@ def load(con, seeds=None):
     rows = con.execute(
         "SELECT task_set, task_name, seed, success, failure_mode, label_source, "
         "input_tokens, output_tokens, wall_clock_seconds "
-        "FROM task_attempts WHERE task_set LIKE 'bench_%' AND seed > 0").fetchall()
+        # `_` is a single-character wildcard in LIKE, so an unescaped 'bench_%'
+        # also matches e.g. 'benchmark_x'. Escaped, the prefix is literal.
+        r"FROM task_attempts WHERE task_set LIKE 'bench\_%' ESCAPE '\' "
+        "AND seed > 0").fetchall()
     out = []
     for r in rows:
         d = dict(r)
@@ -107,6 +110,30 @@ def by_arm(rows):
     for r in rows:
         g[r['arm']].append(r)
     return g
+
+
+def arm_table(groups, arms, restrict=None):
+    """Verified rate and say-do gap per arm.
+
+    `restrict` limits every arm to the same task names. Without it the rates
+    are each computed over whatever tasks that arm happens to hold, which is
+    only meaningful when the arms ran the same set — hence the `tasks` column,
+    so an unequal design is visible in the table rather than implied by it."""
+    print(f'{"arm":<13} {"n":>4} {"tasks":>6}  {"verified":>8}  {"95% CI":>16}'
+          f'   {"claimed":>8}  {"say-do gap":>10}')
+    for arm in arms:
+        rs = groups.get(arm, [])
+        if restrict is not None:
+            rs = [r for r in rs if r['task_name'] in restrict]
+        if not rs:
+            continue
+        n = len(rs)
+        v = sum(r['success'] for r in rs)
+        c = sum(r['claimed'] for r in rs)
+        lo, hi = wilson(v, n)
+        t = len({r['task_name'] for r in rs})
+        print(f'{arm:<13} {n:>4} {t:>6}  {pct(v/n)}  [{pct(lo)},{pct(hi)}]'
+              f'   {pct(c/n)}  {pct(c/n - v/n)}')
 
 
 def cluster_bootstrap(a_rows, b_rows, n=BOOTSTRAP_N, seed=12345):
@@ -195,22 +222,43 @@ def main(seeds=None):
         for r in strays[:5]:
             print(f'    - {r["arm"]:<12} {r["task_name"][:52]}')
 
+    # Every section below iterates the ARMS catalogue, so an arm name that is
+    # not in it contributes to nothing and vanishes without a count. A typo in
+    # the arm passed to field_trial.sh would silently discard a whole segment.
+    unknown = sorted(set(groups) - set(ARMS))
+    if unknown:
+        print(f'\n  WARNING: {len(unknown)} arm(s) in the data are not in the report')
+        print('  catalogue — their rows appear in NO section below. Check the arm')
+        print('  name passed to field_trial.sh, or add it to ARMS.')
+        for a in unknown:
+            print(f'    - {a:<20} {len(groups[a])} row(s)')
+
     print('\n' + '-' * 74)
     print('VERIFIED SUCCESS AND THE SAY-DO GAP, BY ARM')
     print('-' * 74)
-    print(f'{"arm":<13} {"n":>4}  {"verified":>8}  {"95% CI":>16}   {"claimed":>8}  {"say-do gap":>10}')
-    for arm in ARMS:
-        rs = groups.get(arm, [])
-        if not rs:
-            continue
-        n = len(rs)
-        v = sum(r['success'] for r in rs)
-        c = sum(r['claimed'] for r in rs)
-        lo, hi = wilson(v, n)
-        gap = c / n - v / n
-        print(f'{arm:<13} {n:>4}  {pct(v/n)}  [{pct(lo)},{pct(hi)}]   {pct(c/n)}  {pct(gap)}')
+    arm_table(groups, ARMS)
     print('\nsay-do gap = claimed minus verified, on the same attempts.')
     print('A positive gap is the agent overstating its own success.')
+
+    # Arms that ran different task sets are not comparable row-to-row: the
+    # benchmark grew from 10 tasks to 13, so an arm carrying tier 4 is scored
+    # on strictly harder work than one that predates it and would look worse
+    # for that reason alone. The pairwise tests below already intersect task
+    # sets; this table is what a reader compares by eye, so when the design is
+    # unequal, restate it on the shared tasks instead of leaving the raw rates
+    # to be misread as like-for-like.
+    shown = [a for a in ARMS if groups.get(a)]
+    per_arm_tasks = {a: {r['task_name'] for r in groups[a]} for a in shown}
+    common = set.intersection(*per_arm_tasks.values()) if per_arm_tasks else set()
+    if any(per_arm_tasks[a] != common for a in shown):
+        print('\n  NOTE: the arms above did not all run the same tasks, so those rates')
+        print(f'  are not comparable to each other. Restated on the {len(common)} task(s)')
+        print('  common to every arm shown:')
+        print()
+        if common:
+            arm_table(groups, ARMS, restrict=common)
+        else:
+            print('    no task is shared by every arm — nothing can be compared.')
 
     # Primary endpoint.
     if 'on' in groups and 'off' in groups:
