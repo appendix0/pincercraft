@@ -90,11 +90,13 @@ Physical-AI teams calibrate broad automated data against a small, expensive, hum
 
 | Tier | What | Rows | Role |
 |---|---|---|---|
-| Apex — calibration | blind human verdicts (`gold_attempts`) | 23 | certifies the referee (11/12, 92% agreement) |
+| Apex — calibration | blind human verdicts (`gold_attempts`) | 12 comparable | certifies the referee (11/12, 92% agreement) |
 | Middle — scale | referee labels from world-state delta (`task_attempts`) | 158 of 192 | cheap, automated, trustworthy *because* calibrated |
 | Base — raw | the model's own honor-system word (`task_attempts`) | 34 of 192 | the counter-exhibit — included on purpose, never headlined |
 
-**The apex has not grown with the base.** The 2026-08-07 ablation campaign added 120 referee-labeled rows and zero human ones, so the middle tier is now ~7× the apex, against ~2× when the 92% figure was earned. Worse, those 23 apex rows are *pilot* labels: they helped develop the end_factor grammar they test, so [the pre-registration](docs/paper/preregistration.md) §5 forbids pooling them with confirmatory data. **The campaign's numbers currently rest on an apex that does not certify them.** Closing that is a fixed n=40 blind-labelling pass, tooled and pending — see the [runbook](docs/paper/runbook.md). Until it lands, campaign figures are reported as uncertified.
+**How the apex count works**, since the table above is the number a reader will check. `gold_attempts` holds **23** human-judged rows, but they are not all calibration. **16** carry an `agree:task_id=N` tag binding the verdict to one specific attempt; the other 7 are curated examples that certify nothing. Of those 16, **12** have a referee verdict to compare against — 11 agree, hence **11/12 = 92%** — and 4 compare against an honor-system label, where agreement is **0/4**. That 0/4 is not a defect in the apex; it is [the finding](#receipts). Only tagged rows are calibration, and only `eval/agreement.py label` writes them — `eval/gold_add.py` adds curated rows to the same table and does not touch the agreement math.
+
+**The apex has not grown with the base.** The 2026-08-07 ablation campaign added 120 referee-labeled rows and zero human ones, so the middle tier is now ~13× the comparable apex, against ~4× when the 92% figure was earned. Worse, those 16 blind labels are *pilot* data: they helped develop the end_factor grammar they test, so [the pre-registration](docs/paper/preregistration.md) §5 forbids pooling them with confirmatory results. **The campaign's numbers currently rest on an apex that does not certify them.** Closing that is a fixed n=40 blind-labelling pass, tooled and pending — see the [runbook](docs/paper/runbook.md). Until it lands, campaign figures are reported as uncertified.
 
 This matters beyond the labels: any metric *derived* from a verified success — cost per verified success, the say-do gap itself — inherits the apex dependency. Only raw instrument readings (tokens per run, wall clock) stand outside the pyramid, because the model never self-reports them.
 
