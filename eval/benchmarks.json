@@ -49,5 +49,23 @@
         "description": "Build a solid 5x5 cobblestone platform, one block high, at your current standing position",
         "end_factor": "a 5x5 (25-block) cobblestone platform exists where the bot was standing",
         "note": "deliberately NOT inventory-shaped: referee falls back to honor_system, keeping one measured example of the label_source split until the phase-2 block-scan referee lands"
+    },
+    {
+        "tier": "4",
+        "description": "Craft 1 NEW iron pickaxe this run: gather wood, craft a stone pickaxe, mine iron ore, build a furnace, smelt the ore, and craft the pickaxe",
+        "end_factor": "+1 iron_pickaxe in inventory (net gain this run)",
+        "note": "tier 4 rationale: longest prerequisite chain in the set (wood -> planks -> sticks -> stone pickaxe -> iron ore -> furnace + fuel -> ingots -> pickaxe). Tests gates (craft preflight over a deep chain) and long-horizon planning, the thing tiers 1-3 never reach."
+    },
+    {
+        "tier": "4",
+        "description": "Mine 64 NEW cobblestone this run",
+        "end_factor": "+64 cobblestone in inventory (net gain this run)",
+        "note": "tier 4 rationale: same action as benchmark #0 at 4x the count. Long enough to break a stone pickaxe and to matter for inventory space, so it exercises reflexes; large enough that knowing when to stop is non-trivial, so it exercises verify/autofinish. Deliberately a scaled twin of an easy task — difficulty from duration, not from a new skill."
+    },
+    {
+        "tier": "4",
+        "description": "Smelt 5 NEW iron ingots this run: mine iron ore, build a furnace, and supply fuel",
+        "end_factor": "+5 iron_ingot in inventory (net gain this run)",
+        "note": "tier 4 rationale: the only task requiring three simultaneous preconditions (ore + furnace + fuel) and a non-instant process. A plan that omits fuel fails on the world, not on a parse."
     }
 ]

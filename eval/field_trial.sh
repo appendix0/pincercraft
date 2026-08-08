@@ -179,8 +179,10 @@ run_arm(){
   case "$arm" in
     on)   : ;;
     off)  touch "$OFF_FLAG" ;;
-    perception|gates|reflexes|measurement) touch "$STATE_DIR/harness_off_$arm" ;;
-    *)    die "unknown arm '$arm' (on|off|perception|gates|reflexes|measurement)" ;;
+    # `measurement` is the seeds-1-2 compound (verify+autofinish), kept so the
+    # published arm stays reproducible; harness_mode.js resolves it.
+    perception|gates|reflexes|verify|autofinish|measurement) touch "$STATE_DIR/harness_off_$arm" ;;
+    *)    die "unknown arm '$arm' (on|off|perception|gates|reflexes|verify|autofinish|measurement)" ;;
   esac
   # Fresh bot process per arm: clean orchestrator history, and the arm's
   # harness mode is unambiguous from the first turn.

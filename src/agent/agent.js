@@ -635,7 +635,7 @@ export class Agent {
             // diamonds before the nudge made it finishTask). Same parser/count
             // the verify gate uses, so the two never disagree. Non-countable
             // criteria (programmatic:false) fall through to the normal nudge.
-            const ef = layerOn('measurement') ? verifyEndFactor(this, active) : { programmatic: false };
+            const ef = layerOn('autofinish') ? verifyEndFactor(this, active) : { programmatic: false };
             if (ef.programmatic && ef.verified) {
                 console.log(`[drive] end_factor met (${ef.observed}) → auto-finishing #${active.id} deterministically`);
                 try { this.openChat(`Done — ${active.description} (${ef.observed}).`); } catch {}
@@ -667,7 +667,7 @@ export class Agent {
                     source: 'system',
                     // OFF arm gets a stock-style reminder: no end_factor echo,
                     // no verify coaching — completion is the model's own call.
-                    message: layerOn('measurement')
+                    message: layerOn('verify')
                         ? `[drive] Task #${active.id} (${active.description}) is in_progress and the action queue is idle. Issue the next concrete command to advance it. If the end_factor (${active.endFactor || 'unset'}) has been observed, call !finishTask. If the task no longer makes sense, !cancelTask and explain to the player.`
                         : `[drive] Task #${active.id} (${active.description}) is in_progress and the action queue is idle. Continue working on it; call !finishTask when you consider it complete, or !cancelTask if it no longer makes sense.`,
                     kind: 'drive_tick',

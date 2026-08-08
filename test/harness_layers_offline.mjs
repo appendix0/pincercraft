@@ -52,7 +52,35 @@ for (const target of LAYERS) {
         assert.strictEqual(layerOn(other), true, `${other} should stay on while ${target} is off`);
     }
 }
-ok('each harness_off_<layer> ablates that layer alone, leaving the other three on');
+ok('each harness_off_<layer> ablates that layer alone, leaving the others on');
+
+// 3b. The `measurement` compound. Seeds 1-2 ran it as a single layer; it is now
+//     verify + autofinish. The flag must still ablate BOTH, or the published
+//     seeds-1-2 arm is no longer reproducible from this code — and, worse, it
+//     would read as fully-ON and report an ablation that never happened.
+{
+    clear();
+    flag('harness_off_measurement');
+    assert.strictEqual(layerOn('verify'), false, 'verify should be off');
+    assert.strictEqual(layerOn('autofinish'), false, 'autofinish should be off');
+    for (const other of ['perception', 'gates', 'reflexes']) {
+        assert.strictEqual(layerOn(other), true, `${other} should stay on`);
+    }
+    ok('harness_off_measurement ablates verify+autofinish only (seeds 1-2 reproducible)');
+}
+
+// 3c. The halves are independently ablatable — the entire point of the split.
+{
+    clear();
+    flag('harness_off_verify');
+    assert.strictEqual(layerOn('verify'), false);
+    assert.strictEqual(layerOn('autofinish'), true, 'autofinish must survive a verify ablation');
+    clear();
+    flag('harness_off_autofinish');
+    assert.strictEqual(layerOn('autofinish'), false);
+    assert.strictEqual(layerOn('verify'), true, 'verify must survive an autofinish ablation');
+    ok('verify and autofinish ablate independently');
+}
 
 // 4. Global ablation beats a per-layer flag rather than the two interacting.
 {
@@ -69,6 +97,9 @@ ok('each harness_off_<layer> ablates that layer alone, leaving the other three o
     clear();
     assert.throws(() => layerOn('measurment'), /unknown harness layer/);
     assert.throws(() => layerOn('referee'), /unknown harness layer/);
+    // `measurement` is a valid FLAG but no longer a layer: code asking whether
+    // it is on is code that missed the split.
+    assert.throws(() => layerOn('measurement'), /unknown harness layer/);
     ok('unknown layer name throws (a typo must not silently disable an ablation)');
 }
 

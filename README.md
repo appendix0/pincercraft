@@ -90,9 +90,13 @@ Physical-AI teams calibrate broad automated data against a small, expensive, hum
 
 | Tier | What | Rows | Role |
 |---|---|---|---|
-| Apex — calibration | blind human verdicts (`gold_labels`) | 23 | certifies the referee (11/12, 92% agreement) — done once |
-| Middle — scale | referee labels from world-state delta (`task_attempts`) | most of 72 | cheap, automated, trustworthy *because* calibrated |
-| Base — raw | the model's own honor-system word (`task_attempts`) | rest of 72 | the counter-exhibit — included on purpose, never headlined |
+| Apex — calibration | blind human verdicts (`gold_attempts`) | 23 | certifies the referee (11/12, 92% agreement) |
+| Middle — scale | referee labels from world-state delta (`task_attempts`) | 158 of 192 | cheap, automated, trustworthy *because* calibrated |
+| Base — raw | the model's own honor-system word (`task_attempts`) | 34 of 192 | the counter-exhibit — included on purpose, never headlined |
+
+**The apex has not grown with the base.** The 2026-08-07 ablation campaign added 120 referee-labeled rows and zero human ones, so the middle tier is now ~7× the apex, against ~2× when the 92% figure was earned. Worse, those 23 apex rows are *pilot* labels: they helped develop the end_factor grammar they test, so [the pre-registration](docs/paper/preregistration.md) §5 forbids pooling them with confirmatory data. **The campaign's numbers currently rest on an apex that does not certify them.** Closing that is a fixed n=40 blind-labelling pass, tooled and pending — see the [runbook](docs/paper/runbook.md). Until it lands, campaign figures are reported as uncertified.
+
+This matters beyond the labels: any metric *derived* from a verified success — cost per verified success, the say-do gap itself — inherits the apex dependency. Only raw instrument readings (tokens per run, wall clock) stand outside the pyramid, because the model never self-reports them.
 
 Field Trial v1, below, is the pyramid's output: ten tasks, two arms, built entirely on the calibrated middle tier. All three tiers, raw: [`Appendix0/pincercraft-say-do-gap`](https://huggingface.co/datasets/Appendix0/pincercraft-say-do-gap) on Hugging Face.
 
@@ -140,11 +144,13 @@ None of this makes a Minecraft bot a robot. It does mean the *measurement method
 | | Stock | PincerCraft |
 |---|---|---|
 | Inventory & recipes | LLM eyeballs them | computed in code |
-| "Task done?" | honor system | measured against world state |
+| "Task done?" | validated for its own pre-specified benchmark tasks; the agent's word in open-ended play | measured against world state, always |
 | A bad plan | runs, fails, retries | bounced with a fix |
 | Agent loop | re-prompts on every line | parks until something changes |
 | Bot rules | config file | staple CoC + in-world editable house rules |
 | Getting better | you edit the code | it drafts its own patches, you review |
+
+On that second row, precisely: upstream Mindcraft *does* check the world — `src/agent/tasks/tasks.js` counts inventory against a hand-written `requiredQuantities` and returns a real verdict. It works because a human wrote the answer key in advance for a fixed task suite. Open-ended play has no answer key: the task and its success criterion are both generated at runtime, so there is nothing to hand-write a validator against, and self-report becomes the label by default. That is the gap this repo measures — and the honor system it caught was **its own**, not upstream's. No number on this page is a comparison against stock Mindcraft; the ablation compares this bot to itself with the harness removed.
 
 ## Setup
 
