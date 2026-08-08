@@ -83,8 +83,12 @@ export const actionsList = [
             }
             // Tool-availability gate: reject prompts that name tools the bot
             // doesn't have, before burning a Coder turn + pathfinder timeout.
+            // Both halves are precondition checks, so both belong to the
+            // `gates` layer and must switch off when it is ablated — they were
+            // unguarded until 2026-08-08, which left real gates running inside
+            // the "gates off" arm and understated the layer's effect.
             const inv = agent.bot?.inventory?.items?.() || [];
-            const missing = findMissingToolsInPrompt(prompt, inv);
+            const missing = layerOn('gates') ? findMissingToolsInPrompt(prompt, inv) : [];
             if (missing.length > 0) {
                 console.log('[tool-gate] rejecting !newAction, missing:', missing.join(', '));
                 return MISSING_TOOL_REJECT(missing);
@@ -92,7 +96,10 @@ export const actionsList = [
             // Redundant-fetch gate (inverse): skip the Coder when the prompt
             // wants to fetch/craft a tool already in inventory (the
             // iron_pickaxe-from-chest loop). Skip + one-line chat, no code run.
-            const redundant = findRedundantFetchInPrompt(prompt, inv);
+            // Suppressed when the task demands a NEW copy — see
+            // inventory_manager.redundantAcquire for why possession ≠ done.
+            const redundant = (layerOn('gates') ? findRedundantFetchInPrompt(prompt, inv) : [])
+                .filter(t => !agent.inventory_manager?.demandsNewCopy(t));
             if (redundant.length > 0) {
                 console.log('[tool-gate] skipping !newAction, already have:', redundant.join(', '));
                 try { agent.openChat(`Already have my ${redundant[0]} — skipping that, moving on.`); } catch {}
@@ -403,7 +410,7 @@ export const actionsList = [
         // circuit before acquiring the action lock / pathing to the chest.
         // Mirrors !givePlayer's explicit-label runAction call.
         perform: async function (agent, item_name, num) {
-            if (agent.inventory_manager?.redundantAcquire(item_name)) {
+            if (layerOn('gates') && agent.inventory_manager?.redundantAcquire(item_name)) {
                 const msg = `Already have ${item_name} — not opening the chest.`;
                 try { agent.openChat(msg); } catch {}
                 // "[chest blocked]" marks this as a gate bounce (streak-neutral

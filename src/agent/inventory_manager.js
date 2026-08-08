@@ -1,6 +1,7 @@
 import * as world from './library/world.js';
 import * as skills from './library/skills.js';
 import * as mc from '../utils/mcdata.js';
+import { parseEndFactorCriterion } from './verify.js';
 
 // Tool/weapon/armor suffixes — never auto-discarded.
 const TOOL_SUFFIXES = ['pickaxe', 'axe', 'sword', 'shovel', 'hoe', 'shears', 'shield',
@@ -196,12 +197,39 @@ export class InventoryManager {
         return UNIQUE_TOOLS.has(item);
     }
 
+    // True when the active task's criterion demands a NET GAIN of `item` this
+    // run (`+N item`) rather than mere possession. Same parser as the finish
+    // gate and the referee, so the gate cannot drift from what the task asks.
+    demandsNewCopy(item) {
+        try {
+            const tasks = this.agent?.task_queue?.tasks || [];
+            const active = tasks.find(t => String(t.status).includes('progress'));
+            if (!active) return false;
+            const c = parseEndFactorCriterion(active.endFactor);
+            return !!c && c.kind === 'delta' && c.item === item;
+        } catch {
+            return false;
+        }
+    }
+
     // The idempotency guard: true iff `item` is a tool/equipment the bot
     // ALREADY holds, so fetching/crafting another is a deterministic no-op.
     // This is the "code owns 'already have it'" reflex — it never fires for
     // stackable resources, so it can't block a real "gather more" request.
+    //
+    // Exception: a `+N item` criterion asks for a NEW one this run, so holding
+    // one is the starting line, not the finish. The gate asks "do you possess
+    // one?"; that criterion asks "did you make one more?" — different
+    // questions. Firing here blocked "craft 1 NEW stone pickaxe" outright once
+    // the bot owned any, and since inventory persists across runs the block got
+    // MORE likely the longer a campaign ran (7 stone_pickaxe held by the time
+    // the 2026-08-08 smoke caught it: 1/5 gated vs 5/5 with gates ablated).
+    // An `absolute` criterion ("iron_pickaxe in inventory") is satisfied by
+    // possession, so the guard still fires there — the chest-fetch loop it was
+    // built for is untouched.
     redundantAcquire(item, inv = world.getInventoryCounts(this.bot)) {
-        return this.isToolLike(item) && this.count(item, inv) >= 1;
+        if (!this.isToolLike(item) || this.count(item, inv) < 1) return false;
+        return !this.demandsNewCopy(item);
     }
 
     // Cheapest tool of `category` the bot can craft from held materials right
