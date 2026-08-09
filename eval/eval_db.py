@@ -120,6 +120,18 @@ _MIGRATIONS = (
     #   harness_autofinish: fired   | not_fired | off
     "ALTER TABLE task_attempts ADD COLUMN harness_verify TEXT",
     "ALTER TABLE task_attempts ADD COLUMN harness_autofinish TEXT",
+    # Model and inference configuration in force for this attempt. Unrecorded
+    # until now, so a model or sampling change mid-campaign would have been
+    # invisible in the data — arms could differ in the one variable the
+    # protocol most insists on holding fixed and nothing would show it.
+    # Stored as JSON (planner/coder model ids, max_tokens) rather than a column
+    # each: the shape belongs to the profile, and widening the schema for every
+    # new inference knob would churn the table.
+    "ALTER TABLE task_attempts ADD COLUMN model_config TEXT",
+    # Path to this attempt's action trace, relative to the repo root. The trace
+    # already existed (bots/<name>/episodes/<id>.jsonl) but was reachable only
+    # by guessing the filename, so the receipt did not actually lead to it.
+    "ALTER TABLE task_attempts ADD COLUMN episode_path TEXT",
 )
 
 
@@ -177,6 +189,8 @@ def log_attempt(row: dict, path=DB_PATH):
         # distinguishable from one that observed the layer switched off.
         "harness_verify": row.get("harness_verify") or None,
         "harness_autofinish": row.get("harness_autofinish") or None,
+        "model_config": row.get("model_config") or None,
+        "episode_path": row.get("episode_path") or None,
     }
     # Column list is derived from `rec`, not written out by hand. It used to be
     # hardcoded and ended at :seed, so arm_position / harness_verify /
