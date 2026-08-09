@@ -239,6 +239,23 @@ task_order(){
   ' "$N" "$1"
 }
 
+# Arm order within a backtest, shuffled from the backtest number with the same
+# LCG + Fisher-Yates as task_order. §6 interleaved arms ACROSS backtests but
+# left their order fixed WITHIN one, so arm position was perfectly confounded
+# with arm identity: `gates` ran 4th every time, inherited the most
+# carried-over inventory, and scored 30/30 — which read as a layer effect until
+# a controlled re-run gave +0.0pp (p=1.000). Offset the seed so a backtest does
+# not shuffle arms and tasks into correlated orders.
+arm_order(){
+  node -e '
+    const arms = process.argv[1].split(/\s+/).filter(Boolean), seed = Number(process.argv[2]);
+    let s = ((seed + 7919) * 2654435761) % 2147483647 || 1;
+    const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    for (let i = arms.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [arms[i], arms[j]] = [arms[j], arms[i]]; }
+    process.stdout.write(arms.join(" "));
+  ' "$1" "$2"
+}
+
 run_arm(){
   local arm="$1" seed="$2" i idx order rc addfails
   # Clear every ablation flag first: an arm must never inherit the previous
@@ -331,7 +348,22 @@ case "$ARMS" in
 esac
 
 for seed in $(seq "${SEED_START:-1}" "$SEEDS"); do
-  for arm in $ARM_LIST; do
+  # Shuffled per backtest, and the position is exported so every row records
+  # where in the order it ran. FIXED_ARM_ORDER=1 restores the old fixed order
+  # for reproducing a pre-2026-08-09 segment exactly.
+  if [ "${FIXED_ARM_ORDER:-0}" = "1" ]; then
+    seed_arms="$ARM_LIST"
+  else
+    seed_arms="$(arm_order "$ARM_LIST" "$seed")"
+  fi
+  say "backtest $seed arm order: $seed_arms"
+  pos=0
+  for arm in $seed_arms; do
+    pos=$((pos+1))
+    # Exported, not a command-prefix assignment: for a shell FUNCTION bash
+    # applies the prefix to the current environment without reliably marking it
+    # for export, so loop.sh (a child process) would not see it.
+    export ARM_POSITION=$pos
     run_arm "$arm" "$seed"
   done
 done

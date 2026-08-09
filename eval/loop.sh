@@ -122,6 +122,35 @@ done
 LEND=$(wc -l < "$BOTLOG"); WALL=$(( $(date +%s) - T0 ))
 say "task #$TASKID → $OUTCOME in ${WALL}s (bot.log lines $LSTART–$LEND)"
 
+# ── 2a. what the HARNESS did, as distinct from what the agent claimed and what
+# the referee measured. Read from this run's own bot.log slice so the three
+# outcomes are independently recoverable per attempt:
+#   agent   -> $OUTCOME        (did the model declare completion?)
+#   harness -> below           (did verify block it / did autofinish trigger?)
+#   referee -> $VERDICT        (was the world state actually correct?)
+# Without this the middle term lived only in bot.log, unlinked to the row, so
+# no analysis could separate "the agent got it right" from "the harness caught
+# it". `off` is read from the ablation flag rather than inferred from silence —
+# a layer that is ON but never had cause to fire must not look ablated.
+SLICE_TXT=$(sed -n "${LSTART},${LEND}p" "$BOTLOG")
+if [ -e "$ROOT/.runtime/harness_off" ] || [ -e "$ROOT/.runtime/harness_off_verify" ] \
+   || [ -e "$ROOT/.runtime/harness_off_measurement" ]; then
+  HVERIFY=off
+elif printf '%s' "$SLICE_TXT" | grep -qa "\[verify\] Task #$TASKID not finished"; then
+  HVERIFY=blocked
+else
+  HVERIFY=passed
+fi
+if [ -e "$ROOT/.runtime/harness_off" ] || [ -e "$ROOT/.runtime/harness_off_autofinish" ] \
+   || [ -e "$ROOT/.runtime/harness_off_measurement" ]; then
+  HAUTOFIN=off
+elif printf '%s' "$SLICE_TXT" | grep -qa "auto-finishing #$TASKID"; then
+  HAUTOFIN=fired
+else
+  HAUTOFIN=not_fired
+fi
+say "harness: verify=$HVERIFY autofinish=$HAUTOFIN"
+
 # ── 2b. referee verdict — success from world state, not the bot's say-so ────
 # Independent re-read of the inventory vs the pre-task snapshot. When the
 # end_factor parses to an inventory shape, THIS is the success label; the
@@ -172,7 +201,8 @@ ROW=$(node -e '
         commit=process.argv[5], outcome=process.argv[6], wall=process.argv[7],
         prog=process.argv[8], fmode=process.argv[9], taskset=process.argv[10],
         v=JSON.parse(process.argv[11]||"{}"), ef=process.argv[12],
-        seed=process.argv[13];
+        seed=process.argv[13], armpos=process.argv[14],
+        hverify=process.argv[15], hautofin=process.argv[16];
   // Referee verdict is the label when it could measure; queue outcome only
   // labels unmeasurable criteria (label_source records which one applied).
   const success = typeof v.success==="boolean" ? v.success : outcome==="done";
@@ -182,12 +212,15 @@ ROW=$(node -e '
     input_tokens:(t.input||0)+(t.cache_read||0)+(t.cache_creation||0),
     output_tokens:(t.output||0), steps:m.turns||0, wall_clock_seconds:Number(wall||0) };
   if (seed) row.seed=Number(seed);
+  if (armpos) row.arm_position=Number(armpos);
+  if (hverify) row.harness_verify=hverify;
+  if (hautofin) row.harness_autofinish=hautofin;
   if (ef) row.end_factor=ef;
   if (prog) row.progress_score=Number(prog);
   if (!success) row.failure_mode = v.referee_failure_mode || fmode || outcome;
   else if (v.referee_failure_mode) row.failure_mode = v.referee_failure_mode; // e.g. verified but queue_never_finished
   process.stdout.write(JSON.stringify(row));
-' "$M" "$TASKID" "$DESC" "$TIER" "$COMMIT" "$OUTCOME" "$WALL" "${PROG:-}" "${FMODE:-}" "${TASKSET:-$MODE}" "$VERDICT" "${EF:-}" "${SEED:-0}")
+' "$M" "$TASKID" "$DESC" "$TIER" "$COMMIT" "$OUTCOME" "$WALL" "${PROG:-}" "${FMODE:-}" "${TASKSET:-$MODE}" "$VERDICT" "${EF:-}" "${SEED:-0}" "${ARM_POSITION:-0}" "$HVERIFY" "$HAUTOFIN")
 printf '%s' "$ROW" | python3 eval/eval_db.py log-attempt >/dev/null \
   && say "logged attempt → pincercraft_evals.db (commit $COMMIT, tier $TIER, ${PROG:-auto} progress)"
 
