@@ -124,25 +124,52 @@ clear_queue(){
 # LLM-driven bot with op could kill/ban/op itself and the CoC layer is not a
 # security boundary.
 #
-# Opt-in via RESET_STATE=1. It changes conditions, so it must never silently
-# apply to a campaign meant to match already-collected backtests.
+# DEFAULT ON (docs/paper/protocol.md §1). A confirmatory run without it is not
+# valid, so the safe setting is the default and RESET_STATE=0 is the explicit
+# opt-out for exploratory work or for reproducing a pre-2026-08-09 segment.
 BOT_NAME="${BOT_NAME:-Daedelus404}"
-# Near the middle of the stock actually observed across the campaign, so a
-# controlled run sits in the same regime rather than a new one. Net-gain
-# criteria are unaffected by held stock: "+16 cobblestone" still needs 16 mined.
-RESET_KIT="${RESET_KIT:-128 cobblestone,32 oak_log,64 stick,32 oak_planks,8 coal,1 stone_pickaxe,1 stone_axe,1 crafting_table}"
+# Composition rule: ONE of each enabler, and the observed campaign median of
+# each consumable (rounded to a convenient stack fraction).
+#
+#   enablers   stone_pickaxe, stone_axe, crafting_table, and coal as furnace
+#              fuel — one each, so every benchmark task is attemptable without
+#              depending on an unrelated foraging step first. Coal's observed
+#              median is 0, which would have made the tier-4 smelt task turn on
+#              finding fuel rather than on smelting; that exception is
+#              deliberate and is the only one.
+#   consumables  cobblestone 102->96, stick 111->96, oak_planks 44->48,
+#              oak_log 18->16 (medians over 223 exploratory attempts).
+#
+# Tools are NOT set to their observed medians: the median bot held 6 stone
+# pickaxes, which is an artifact of the carry-over defect this reset exists to
+# remove. Reproducing it would bake the bug into the control.
+#
+# Nothing in the kit can satisfy a criterion — every criterion is a net gain
+# measured from a per-attempt snapshot, so "+16 cobblestone" still needs 16
+# mined with 96 already in the bag.
+RESET_KIT="${RESET_KIT:-96 cobblestone,16 oak_log,96 stick,48 oak_planks,8 coal,1 stone_pickaxe,1 stone_axe,1 crafting_table}"
+# Pinned ONCE PER EXPERIMENT, not per arm, and persisted so a campaign split
+# across several runner invocations still starts every attempt in one place.
+# Delete .runtime/reset_pos to re-pin for a genuinely new experiment.
+RESET_POS_FILE="$STATE_DIR/reset_pos"
 RESET_POS=""
+[ -r "$RESET_POS_FILE" ] && RESET_POS="$(cat "$RESET_POS_FILE")"
 
 pin_reset_pos(){
-  [ "${RESET_STATE:-0}" = "1" ] || return 0
+  [ "${RESET_STATE:-1}" = "1" ] || return 0
   [ -n "$RESET_POS" ] && return 0
   RESET_POS="$(python3 eval/rcon.py "data get entity $BOT_NAME Pos" 2>/dev/null \
     | grep -oE '\-?[0-9]+\.[0-9]+' | head -3 | tr '\n' ' ')"
-  say "reset position pinned: ${RESET_POS:-<unavailable, position reset skipped>}"
+  [ -n "$RESET_POS" ] || die "could not read $BOT_NAME's position over RCON — cannot pin
+  the reset position, and a confirmatory run must start every attempt in the same
+  place. Check RCON is enabled on the eval server, or set RESET_STATE=0 to run
+  exploratory."
+  printf '%s' "$RESET_POS" > "$RESET_POS_FILE"
+  say "reset position pinned for this experiment: $RESET_POS"
 }
 
 reset_state(){
-  [ "${RESET_STATE:-0}" = "1" ] || return 0
+  [ "${RESET_STATE:-1}" = "1" ] || return 0
   local cmds=("clear $BOT_NAME") item qty name
   local IFS=','
   for item in $RESET_KIT; do
@@ -151,8 +178,14 @@ reset_state(){
   done
   unset IFS
   [ -n "$RESET_POS" ] && cmds+=("tp $BOT_NAME $RESET_POS")
+  # Hard failure, not a warning. Continuing here would produce an attempt that
+  # LOOKS protocol-compliant while actually running on carried-over state, and
+  # nothing downstream could tell the difference — exactly the class of silent
+  # invalidity that cost two arms of the exploratory campaign.
   python3 eval/rcon.py "${cmds[@]}" >/dev/null 2>&1 \
-    || say "reset_state: RCON call failed — attempt runs on carried-over state"
+    || die "reset_state: RCON call failed — refusing to run an attempt on
+  carried-over state. Re-enable RCON on the eval server, or set RESET_STATE=0
+  to run exploratory."
 }
 
 # Steps recorded for the attempt loop.sh just logged. Feeds the per-task health
