@@ -22,6 +22,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseEndFactorCriterion } from '../src/agent/verify.js';
 
@@ -127,6 +128,39 @@ async function readPosition() {
     } catch { return null; }
 }
 
+// Structure criteria — the shape the inventory parser cannot express. Matches
+// "a 5x5 (25-block) cobblestone platform exists where the bot was standing".
+// Returns { size, block } or null.
+export function parseStructureCriterion(endFactor) {
+    if (!endFactor) return null;
+    const text = String(endFactor).toLowerCase();
+    const dims = text.match(/(\d+)\s*[x×]\s*(\d+)/);
+    if (!dims || dims[1] !== dims[2]) return null;   // square platforms only, for now
+    const block = text.match(/\b([a-z_]+)\s+platform\b/);
+    if (!block) return null;
+    return { size: Number(dims[1]), block: block[1] };
+}
+
+// Delegate to the block scanner, which reads the SERVER's blocks over RCON.
+// Returns a verdict in the same shape as the inventory path, or null when the
+// scan cannot run — a scan that could not happen must fall back to the honor
+// system, never invent a verdict.
+function blockScanVerdict(structure, pos) {
+    if (!pos) return null;
+    try {
+        const out = execFileSync('python3', [
+            path.join(ROOT, 'eval', 'blockscan.py'),
+            '--x', String(pos.x), '--y', String(pos.y), '--z', String(pos.z),
+            '--size', String(structure.size), '--block', structure.block,
+        ], { encoding: 'utf8', timeout: 120_000 });
+        const v = JSON.parse(out.trim().split('\n').pop());
+        return v && v.parseable ? v : null;
+    } catch (e) {
+        console.warn(`[referee] block scan failed: ${e.message}`);
+        return null;
+    }
+}
+
 // ── subcommands ──────────────────────────────────────────────────────────────
 
 // Pre-add baseline: capture the inventory BEFORE the task-giver is invoked,
@@ -209,7 +243,26 @@ async function judge(id, outcome) {
     catch (e) { readErr = e.message; }
     const nowPos = await readPosition();
     const finish = (verdict) => { writeEvidence(id, snap, outcome, nowInv, verdict, nowPos); return verdict; };
-    if (!criterion) return finish(honorSystem('end_factor not an inventory-count shape'));
+    if (!criterion) {
+        // Not inventory-shaped. Before conceding to the honor system — the bot's
+        // own word, the one thing this campaign exists not to trust — try the
+        // block scanner. This is the only path by which the 5x5 platform task
+        // has ever been machine-scored; every earlier attempt at it was
+        // honor-system, and the owner abstained on all three blind cards
+        // because the evidence recorded inventory only.
+        const structure = parseStructureCriterion(snap.end_factor);
+        if (structure) {
+            // Scan around where the bot ENDED: the criterion says the platform
+            // exists where it was standing, and a bot that built and then
+            // wandered is scored on the structure, not on where it started.
+            const v = blockScanVerdict(structure, nowPos || snap.position);
+            if (v) return finish(v);
+            return finish(honorSystem(
+                `structure criterion, but the block scan could not run `
+                + `(position ${nowPos || snap.position ? 'known' : 'unavailable'})`));
+        }
+        return finish(honorSystem('end_factor not an inventory-count shape'));
+    }
     if (!nowInv) return finish(honorSystem(`inventory read failed: ${readErr}`));
     const v = evaluateCriterion(criterion, snap.inventory, nowInv);
     let referee_failure_mode = null;
