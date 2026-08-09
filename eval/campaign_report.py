@@ -19,7 +19,7 @@ in advance (§4) — never by whether a given row happened to fall back to
 honor_system, which would condition the exclusion on the outcome.
 """
 import json, os, random, sqlite3, sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB = os.path.join(ROOT, 'pincercraft_evals.db')
@@ -86,8 +86,12 @@ def claimed(success, failure_mode):
 
 def load(con, seeds=None):
     excl = excluded_task_name()
+    # Discards are looked up by attempt_id in `exclusions`, not inferred from a
+    # rewritten arm name — raw receipts are append-only, so `task_set` keeps
+    # saying which arm the attempt actually ran under even after it is excluded.
+    dropped = {r[0] for r in con.execute("SELECT attempt_id FROM exclusions")}
     rows = con.execute(
-        "SELECT task_set, task_name, seed, success, failure_mode, label_source, "
+        "SELECT attempt_id, task_set, task_name, seed, success, failure_mode, label_source, "
         "input_tokens, output_tokens, wall_clock_seconds "
         # `_` is a single-character wildcard in LIKE, so an unescaped 'bench_%'
         # also matches e.g. 'benchmark_x'. Escaped, the prefix is literal.
@@ -99,6 +103,10 @@ def load(con, seeds=None):
         if seeds and d['seed'] not in seeds:
             continue
         d['arm'] = d['task_set'][len('bench_'):]
+        # Two independent reasons a row leaves the primary analysis, kept apart:
+        #   discarded — §8 infrastructure fault, this attempt is not evidence
+        #   excluded  — §4 prior commitment, this TASK has no referee coverage
+        d['discarded'] = d['attempt_id'] in dropped
         d['excluded'] = (d['task_name'] == excl)
         d['claimed'] = claimed(d['success'], d['failure_mode'])
         out.append(d)
@@ -199,14 +207,19 @@ def main(seeds=None):
         sys.exit('no campaign rows yet (task_set bench_*, seed > 0) — run a campaign segment first')
 
     excl = excluded_task_name()
-    primary = [r for r in rows if not r['excluded']]
+    discarded = [r for r in rows if r['discarded']]
+    kept = [r for r in rows if not r['discarded']]
+    primary = [r for r in kept if not r['excluded']]
     groups = by_arm(primary)
 
     print('=' * 74)
     print('CAMPAIGN REPORT'.center(74))
     print('=' * 74)
+    # Counted against `kept`, not `rows`: an attempt discarded for an
+    # infrastructure fault was never evidence about the excluded task either,
+    # so charging it to the §4 exclusion double-counts it.
     print(f'\nattempts: {len(rows)} total, {len(primary)} in the primary set')
-    print(f'excluded by prior declaration (§4): {len(rows) - len(primary)} '
+    print(f'excluded by prior declaration (§4): {len(kept) - len(primary)} '
           f'— {(excl or "?")[:48]}...')
     seeds_seen = sorted({r['seed'] for r in rows})
     print(f'seeds present: {seeds_seen}')
@@ -222,24 +235,20 @@ def main(seeds=None):
         for r in strays[:5]:
             print(f'    - {r["arm"]:<12} {r["task_name"][:52]}')
 
-    # Every section below iterates the ARMS catalogue, so an arm name that is
-    # not in it contributes to nothing and vanishes without a count. Two very
-    # different things land here, and conflating them would be a problem: a
-    # DECLARED abort (§8, tagged *_aborted_*, excluded on purpose and reported
-    # as a discard rate) versus a typo in the arm passed to field_trial.sh,
-    # which would silently discard a whole segment.
-    off_catalogue = sorted(set(groups) - set(ARMS))
-    aborted = [a for a in off_catalogue if '_aborted_' in a]
-    unknown = [a for a in off_catalogue if '_aborted_' not in a]
+    # §8 discards, counted by reference. The arm name is intact on these rows,
+    # so the rate can be broken down by the arm the attempt actually ran under.
+    if discarded:
+        per_arm = Counter(r['arm'] for r in discarded)
+        print(f'\ndiscarded as infrastructure faults (§8): {len(discarded)} attempt(s), '
+              f'{len(discarded) / len(rows) * 100:.1f}% discard rate')
+        for a, n in sorted(per_arm.items()):
+            print(f'    - {a:<36} {n} attempt(s)')
+        print('  cause and rule per attempt: `exclusions` table, docs/paper/aborts.md')
 
-    if aborted:
-        n_ab = sum(len(groups[a]) for a in aborted)
-        live = sum(len(groups[a]) for a in ARMS if a in groups)
-        print(f'\ndiscarded as infrastructure faults (§8): {n_ab} attempt(s), '
-              f'{n_ab / (n_ab + live) * 100:.1f}% discard rate')
-        for a in aborted:
-            print(f'    - {a:<36} {len(groups[a])} attempt(s)')
-        print('  cause and rule per abort: docs/paper/aborts.md')
+    # Every section below iterates the ARMS catalogue, so an arm name that is
+    # not in it contributes to nothing and vanishes without a count — a typo in
+    # the arm passed to field_trial.sh would silently drop a whole segment.
+    unknown = sorted(set(groups) - set(ARMS))
 
     if unknown:
         print(f'\n  WARNING: {len(unknown)} arm(s) in the data are not in the report')

@@ -56,6 +56,20 @@ CREATE TABLE IF NOT EXISTS task_attempts (
     rag_version         INTEGER DEFAULT 0,     -- regime fingerprint (see CURRENT_RAG_VERSION)
     task_source         TEXT DEFAULT 'llm'     -- 'player' (real play) | 'llm' (eval task-giver)
 );
+-- Declared discards (preregistration §8), kept OUT of task_attempts so raw
+-- receipts stay append-only. The first two aborts were recorded by rewriting
+-- task_set to '*_aborted_*', which mutates the very rows the analysis is
+-- supposed to be able to re-derive from; a reader could no longer tell which
+-- arm an attempt actually ran under. Excluding by reference fixes that and
+-- makes the discard reversible and auditable.
+CREATE TABLE IF NOT EXISTS exclusions (
+    attempt_id  TEXT PRIMARY KEY,
+    task_id     TEXT,
+    rule        TEXT,          -- which of §8 rules 1-4
+    reason      TEXT,
+    excluded_at TEXT,
+    source      TEXT           -- who/what recorded it
+);
 CREATE TABLE IF NOT EXISTS gate_decisions (
     decision_id             TEXT PRIMARY KEY,
     timestamp               TEXT,
@@ -177,6 +191,26 @@ def log_attempt(row: dict, path=DB_PATH):
             rec,
         )
     return rec["attempt_id"]
+
+
+def excluded_attempt_ids(path=DB_PATH):
+    """attempt_ids discarded under §8. Analysis filters on this rather than on
+    the arm name, so `task_set` keeps saying which arm the attempt ran under."""
+    with connect(path) as conn:
+        return {r[0] for r in conn.execute("SELECT attempt_id FROM exclusions")}
+
+
+def log_exclusion(attempt_id, rule, reason, task_id="", source="manual", path=DB_PATH):
+    """Record a discard by reference. Idempotent: re-recording the same attempt
+    replaces the row rather than raising, so a re-run of a migration is safe."""
+    with connect(path) as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO exclusions "
+            "(attempt_id,task_id,rule,reason,excluded_at,source) "
+            "VALUES (?,?,?,?,?,?)",
+            (attempt_id, str(task_id), str(rule), reason, _now(), source),
+        )
+    return attempt_id
 
 
 def log_gate(commit_hash, summary, decision, reason, path=DB_PATH):

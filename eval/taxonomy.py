@@ -52,12 +52,14 @@ def load_claims():
     return out
 
 
-def classify(row, claim):
-    """One attempt -> one category. `row` is a task_attempts record."""
+def classify(row, claim, discarded=frozenset()):
+    """One attempt -> one category. `row` is a task_attempts record.
+
+    `discarded` holds attempt_ids recorded in the `exclusions` table."""
     # Infrastructure first: a bot that could not act never produced a result to
     # classify, and scoring it as a capability failure is how a credit outage
     # once read as a 61pp layer effect (docs/paper/aborts.md).
-    if '_aborted_' in (row['task_set'] or ''):
+    if row['attempt_id'] in discarded:
         return 'infrastructure'
     if (row['steps'] or 0) == 0 and (row['failure_mode'] or '') == 'timeout':
         return 'infrastructure'
@@ -84,6 +86,9 @@ def main():
     con = sqlite3.connect(DB)
     con.row_factory = sqlite3.Row
     claims = load_claims()
+    con.execute("CREATE TABLE IF NOT EXISTS exclusions (attempt_id TEXT PRIMARY KEY, "
+                "task_id TEXT, rule TEXT, reason TEXT, excluded_at TEXT, source TEXT)")
+    discarded = {r[0] for r in con.execute('SELECT attempt_id FROM exclusions')}
     rows = con.execute(
         "SELECT * FROM task_attempts WHERE task_set LIKE ? ESCAPE '\\'",
         (a.task_set_prefix.replace('_', r'\_') + r'\_%',)).fetchall()
@@ -98,7 +103,7 @@ def main():
         arm = (r['task_set'] or '').split('_', 1)[1] if '_' in (r['task_set'] or '') else '?'
         if arms is not None and arm not in arms:
             continue
-        per_arm[arm][classify(r, claims.get(str(r['task_id'])))] += 1
+        per_arm[arm][classify(r, claims.get(str(r['task_id'])), discarded)] += 1
 
     if not per_arm:
         sys.exit('no rows matched')
