@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Campaign analysis — the numbers that go in the paper.
 
-    python3 eval/campaign_report.py [--seeds N]
+    python3 eval/campaign_report.py [--seeds N] [--tag conf|bench]
 
 Implements the analysis plan pre-registered in docs/paper/preregistration.md §10,
 written before the data existed:
@@ -87,7 +87,7 @@ def claimed(success, failure_mode):
     return success
 
 
-def load(con, seeds=None):
+def load(con, seeds=None, tag='conf'):
     excl = excluded_task_name()
     # Discards are looked up by attempt_id in `exclusions`, not inferred from a
     # rewritten arm name — raw receipts are append-only, so `task_set` keeps
@@ -98,14 +98,14 @@ def load(con, seeds=None):
         "input_tokens, output_tokens, wall_clock_seconds "
         # `_` is a single-character wildcard in LIKE, so an unescaped 'bench_%'
         # also matches e.g. 'benchmark_x'. Escaped, the prefix is literal.
-        r"FROM task_attempts WHERE task_set LIKE 'bench\_%' ESCAPE '\' "
-        "AND seed > 0").fetchall()
+        r"FROM task_attempts WHERE task_set LIKE ? ESCAPE '\' "
+        "AND seed > 0", (tag.replace('_', r'\_') + r'\_%',)).fetchall()
     out = []
     for r in rows:
         d = dict(r)
         if seeds and d['seed'] not in seeds:
             continue
-        d['arm'] = d['task_set'][len('bench_'):]
+        d['arm'] = d['task_set'][len(tag) + 1:]
         # Two independent reasons a row leaves the primary analysis, kept apart:
         #   discarded — §8 infrastructure fault, this attempt is not evidence
         #   excluded  — §4 prior commitment, this TASK has no referee coverage
@@ -214,14 +214,16 @@ def pct(x):
     return f'{100 * x:5.1f}%'
 
 
-def main(seeds=None):
+def main(seeds=None, tag='conf'):
     if not os.path.exists(DB):
         sys.exit(f'no database at {DB}')
     con = sqlite3.connect(DB)
     con.row_factory = sqlite3.Row
-    rows = load(con, seeds)
+    rows = load(con, seeds, tag)
     if not rows:
-        sys.exit('no campaign rows yet (task_set bench_*, seed > 0) — run a campaign segment first')
+        sys.exit(f'no rows for task_set {tag}_*, seed > 0.\n'
+                 f'The default namespace is the CONFIRMATORY set; the exploratory '
+                 f'backtests are --tag bench.')
 
     excl = excluded_task_name()
     discarded = [r for r in rows if r['discarded']]
@@ -386,4 +388,12 @@ if __name__ == '__main__':
     sel = None
     if '--seeds' in sys.argv:
         sel = {int(x) for x in sys.argv[sys.argv.index('--seeds') + 1].split(',')}
-    main(sel)
+    # Default is `conf` — the CONFIRMATORY namespace. Exploratory data lives
+    # under `bench` and must be asked for explicitly (`--tag bench`). Making the
+    # confirmatory set the default, in its own namespace rather than separated
+    # by a convention about seed numbers, is what stops the two regimes being
+    # pooled by someone running the script with no arguments.
+    tag = 'conf'
+    if '--tag' in sys.argv:
+        tag = sys.argv[sys.argv.index('--tag') + 1]
+    main(sel, tag)
