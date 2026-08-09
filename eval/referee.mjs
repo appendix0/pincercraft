@@ -256,7 +256,22 @@ async function judge(id, outcome) {
             // exists where it was standing, and a bot that built and then
             // wandered is scored on the structure, not on where it started.
             const v = blockScanVerdict(structure, nowPos || snap.position);
-            if (v) return finish(v);
+            if (v) {
+                // Same failure-mode vocabulary as the inventory path. The
+                // scanner reports WHY the structure failed
+                // (`structure_incomplete`), but the campaign's headline counts
+                // false completions by failure_mode, so a claim/verdict
+                // disagreement has to be labelled the same way here or the
+                // newly-scoreable platform false completions would be measured
+                // and then silently omitted from the number they belong in.
+                if (outcome === 'done' && !v.success) {
+                    v.structure_detail = v.referee_failure_mode;
+                    v.referee_failure_mode = 'false_done_referee';
+                } else if (outcome !== 'done' && v.success) {
+                    v.referee_failure_mode = 'queue_never_finished';
+                }
+                return finish(v);
+            }
             return finish(honorSystem(
                 `structure criterion, but the block scan could not run `
                 + `(position ${nowPos || snap.position ? 'known' : 'unavailable'})`));
