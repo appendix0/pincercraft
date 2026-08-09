@@ -164,20 +164,16 @@ def log_attempt(row: dict, path=DB_PATH):
         "harness_verify": row.get("harness_verify") or None,
         "harness_autofinish": row.get("harness_autofinish") or None,
     }
-    # Named column list (not positional VALUES) so the insert survives schema
-    # drift — extra columns in the live table default to NULL instead of
-    # raising "N columns but M values supplied".
+    # Column list is derived from `rec`, not written out by hand. It used to be
+    # hardcoded and ended at :seed, so arm_position / harness_verify /
+    # harness_autofinish were assembled above and then silently dropped on
+    # insert — the row was written, no error was raised, and the fields simply
+    # read back NULL. Anything added to `rec` is now persisted by construction.
     with connect(path) as conn:
+        cols = list(rec)
         conn.execute(
-            "INSERT INTO task_attempts "
-            "(attempt_id,task_id,task_name,difficulty_tier,task_set,commit_hash,timestamp,"
-            "success,progress_score,input_tokens,output_tokens,steps,retry_count,"
-            "wall_clock_seconds,n_distinct_actions,failure_mode,rag_version,task_source,"
-            "end_factor,label_source,seed) VALUES "
-            "(:attempt_id,:task_id,:task_name,:difficulty_tier,:task_set,:commit_hash,:timestamp,"
-            ":success,:progress_score,:input_tokens,:output_tokens,:steps,:retry_count,"
-            ":wall_clock_seconds,:n_distinct_actions,:failure_mode,:rag_version,:task_source,"
-            ":end_factor,:label_source,:seed)",
+            f"INSERT INTO task_attempts ({','.join(cols)}) "
+            f"VALUES ({','.join(':' + c for c in cols)})",
             rec,
         )
     return rec["attempt_id"]
