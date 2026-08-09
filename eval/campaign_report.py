@@ -45,7 +45,10 @@ def wilson(k, n, z=1.96):
     d = 1 + z * z / n
     c = p + z * z / (2 * n)
     m = z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5)
-    return ((c - m) / d, (c + m) / d)
+    # Clamped: floating point puts the bound a hair outside [0,1] at k=0 or
+    # k=n, and a proportion reported as "-0.0%" invites a reader to wonder what
+    # else in the pipeline is unchecked.
+    return (max(0.0, (c - m) / d), min(1.0, (c + m) / d))
 
 
 def excluded_task_name():
@@ -144,17 +147,31 @@ def arm_table(groups, arms, restrict=None):
               f'   {pct(c/n)}  {pct(c/n - v/n)}')
 
 
-def cluster_bootstrap(a_rows, b_rows, n=BOOTSTRAP_N, seed=12345):
-    """Difference in verified success rate, resampling TASKS with replacement.
+def false_completion(r):
+    """1 when the agent claimed done and the referee's world read disagreed.
+
+    The paper's central quantity. Kept as a function of the row rather than a
+    stored column so it stays derived (see eval/taxonomy.py)."""
+    return 1 if r['failure_mode'] == 'false_done_referee' else 0
+
+
+def cluster_bootstrap(a_rows, b_rows, n=BOOTSTRAP_N, seed=12345,
+                      value=lambda r: r['success']):
+    """Difference in a per-attempt rate, resampling TASKS with replacement.
 
     Resampling individual attempts would treat the 3 seeds of one task as 3
-    independent observations and produce intervals that are too narrow."""
+    independent observations and produce intervals that are too narrow.
+
+    `value` selects the outcome. It defaults to verified success, but the
+    headline comparison is false completion — that number had no interval at
+    all until 2026-08-09, which made the single most important quantity in the
+    campaign the one not carrying uncertainty."""
     rng = random.Random(seed)
     a_by, b_by = defaultdict(list), defaultdict(list)
     for r in a_rows:
-        a_by[r['task_name']].append(r['success'])
+        a_by[r['task_name']].append(value(r))
     for r in b_rows:
-        b_by[r['task_name']].append(r['success'])
+        b_by[r['task_name']].append(value(r))
     tasks = sorted(set(a_by) & set(b_by))
     if not tasks:
         return None
@@ -284,10 +301,36 @@ def main(seeds=None):
         else:
             print('    no task is shared by every arm — nothing can be compared.')
 
-    # Primary endpoint.
+    # Primary endpoint: false completion. This is the claim the paper rests on
+    # — the harness does not mainly make the agent better at the game, it stops
+    # it reporting success it did not achieve — so it is reported first and with
+    # its own interval.
     if 'on' in groups and 'off' in groups:
         print('\n' + '-' * 74)
-        print('PRIMARY ENDPOINT — A-ON vs A-OFF (cluster bootstrap over tasks)')
+        print('PRIMARY ENDPOINT — FALSE COMPLETION, A-ON vs A-OFF')
+        print('-' * 74)
+        for arm in ('on', 'off'):
+            k = sum(false_completion(r) for r in groups[arm])
+            n_a = len(groups[arm])
+            lo, hi = wilson(k, n_a)
+            line = f'  {arm:<4} {k}/{n_a} = {pct(k / n_a):>7}   95% CI [{pct(lo)}, {pct(hi)}]'
+            if k == 0:
+                # Zero events is not "eliminated". State what it rules out.
+                line += f'   one-sided 95% upper bound {pct(1 - 0.05 ** (1 / n_a))}'
+            print(line)
+        b = cluster_bootstrap(groups['on'], groups['off'], value=false_completion)
+        if b:
+            print(f'\n  difference in false-completion rate: {pct(b["diff"])}')
+            print(f'  95% CI: [{pct(b["lo"])}, {pct(b["hi"])}]   bootstrap p={b["p"]:.4f}   '
+                  f'({b["tasks"]} tasks, {BOOTSTRAP_N} resamples)')
+            spans = b['lo'] <= 0 <= b['hi']
+            print(f'  H1 {"NOT supported — interval spans zero" if spans else "supported"}')
+
+    # Secondary endpoint: overall task success. Underpowered by comparison, and
+    # partly a capability question rather than a self-report one.
+    if 'on' in groups and 'off' in groups:
+        print('\n' + '-' * 74)
+        print('SECONDARY ENDPOINT — VERIFIED SUCCESS, A-ON vs A-OFF')
         print('-' * 74)
         b = cluster_bootstrap(groups['on'], groups['off'])
         if b:
