@@ -33,17 +33,39 @@ this protocol.
 - Runs target **pincercraft-ts (`127.0.0.1:25566`)**, the dedicated eval world,
   via `.runtime/target.json`, verified from the OS after spawn. Never YOON.
 - **No human player** on the eval server during a batch.
-- **`RESET_STATE=1` is mandatory.** Before every attempt the runner clears the
-  bot's inventory, issues the standard kit, and returns it to the pinned
-  position, over RCON.
-- **Standard kit** (`RESET_KIT`), chosen near the campaign-median observed stock
-  so absolute difficulty stays interpretable against exploratory data:
-  `128 cobblestone, 32 oak_log, 64 stick, 32 oak_planks, 8 coal, 1 stone_pickaxe,
-  1 stone_axe, 1 crafting_table`.
+- **State reset is on by default and mandatory.** Before every attempt the
+  runner clears the bot's inventory, issues the standard kit, and returns it to
+  the pinned position, over RCON. `RESET_STATE=0` is the explicit opt-out and
+  marks the run exploratory.
+- **If the reset cannot be applied, the run aborts.** It does not warn and
+  continue: that would produce attempts which look protocol-compliant while
+  running on carried-over state, and nothing downstream could tell.
+- **Standard kit** (`RESET_KIT`):
+  `96 cobblestone, 16 oak_log, 96 stick, 48 oak_planks, 8 coal, 1 stone_pickaxe,
+  1 stone_axe, 1 crafting_table`
+
+  Composition rule: **one of each enabler, the observed campaign median of each
+  consumable** (medians over 223 exploratory attempts — cobblestone 102→96,
+  stick 111→96, oak_planks 44→48, oak_log 18→16).
+
+  Enablers are *not* set to their observed medians. The median bot held **6
+  stone pickaxes**, which is an artifact of the carry-over defect this reset
+  exists to remove; reproducing it would bake the bug into the control. Coal is
+  the one deliberate exception in the other direction: its observed median is 0,
+  which would make the tier-4 smelting task turn on finding fuel rather than on
+  smelting.
 - The kit is identical for every arm and every attempt. Held stock cannot
   satisfy a criterion: every criterion is a **net gain measured from a
-  per-attempt snapshot**, so "+16 cobblestone" still requires mining 16.
-- **Reset position is pinned once per experiment**, not per arm, and recorded.
+  per-attempt snapshot**, so "+16 cobblestone" still requires mining 16 with 96
+  already in the bag.
+- **Reset position is pinned once per experiment**, not per arm, persisted in
+  `.runtime/reset_pos`, and recorded in each attempt's evidence file
+  (`pos_start` / `pos_end`).
+- **RCON is bound to localhost.** It is enabled on `pincercraft-ts` only, never
+  YOON; the password lives in `.runtime/rcon.pass` (0600) and host firewall
+  rules restrict port 25575 to `127.0.0.1`. Console powers stay with the
+  *runner*: an LLM-driven bot holding op could `kill`, `ban` or `op` itself, and
+  the Code of Conduct layer is not a security boundary.
 - Carry-over of inventory, position or world state across attempts is a
   protocol violation unless persistence is explicitly the manipulated variable.
 
