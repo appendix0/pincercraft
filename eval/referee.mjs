@@ -102,6 +102,31 @@ async function readInventoryJson() {
     return JSON.parse(body.result.content[0].text);
 }
 
+// Bot position, parsed from !stats. Recorded alongside inventory so the world
+// state in a receipt is not inventory-only: the 5x5 platform task cannot be
+// judged after the fact precisely because no attempt recorded WHERE the bot
+// was standing, which is also what a block-scan referee will need. Best-effort
+// — a failed position read must never change a verdict, so it returns null.
+async function readPosition() {
+    try {
+        const token = JSON.parse(fs.readFileSync(path.join(ROOT, 'keys.json'), 'utf8')).mcp_token;
+        const res = await fetch(MCP_URL, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({
+                jsonrpc: '2.0', id: 2, method: 'tools/call',
+                params: { name: 'read_stats', arguments: {} },
+            }),
+            signal: AbortSignal.timeout(10_000),
+        });
+        const body = await res.json();
+        if (body.error) return null;
+        const text = body.result?.content?.[0]?.text ?? '';
+        const m = text.match(/Position:\s*x:\s*(-?[\d.]+),\s*y:\s*(-?[\d.]+),\s*z:\s*(-?[\d.]+)/);
+        return m ? { x: +m[1], y: +m[2], z: +m[3] } : null;
+    } catch { return null; }
+}
+
 // ── subcommands ──────────────────────────────────────────────────────────────
 
 // Pre-add baseline: capture the inventory BEFORE the task-giver is invoked,
@@ -131,7 +156,8 @@ async function snapshot(id) {
     } catch { /* no pre-read -> post-add baseline (biases toward false FAIL, never false pass) */ }
     fs.rmSync(prePath, { force: true });
     fs.mkdirSync(STATE_DIR, { recursive: true });
-    const rec = { task_id: id, ...task, inventory, baseline, ts: new Date().toISOString() };
+    const position = await readPosition();
+    const rec = { task_id: id, ...task, inventory, position, baseline, ts: new Date().toISOString() };
     fs.writeFileSync(path.join(STATE_DIR, `${id}.json`), JSON.stringify(rec, null, 2));
     // Echo essentials so loop.sh can capture description/end_factor from here.
     process.stdout.write(JSON.stringify({ description: task.description, end_factor: task.end_factor }) + '\n');
@@ -141,7 +167,7 @@ async function snapshot(id) {
 // DB; this file is the ground truth a human labeller reads to judge the attempt
 // independently (docs/paper/preregistration.md §5). Best-effort: a failed
 // evidence write must never change a verdict.
-function writeEvidence(id, snap, outcome, nowInv, verdict) {
+function writeEvidence(id, snap, outcome, nowInv, verdict, nowPos) {
     try {
         fs.mkdirSync(STATE_DIR, { recursive: true });
         fs.writeFileSync(path.join(STATE_DIR, `${id}.evidence.json`), JSON.stringify({
@@ -154,6 +180,12 @@ function writeEvidence(id, snap, outcome, nowInv, verdict) {
             ts_judge: new Date().toISOString(),
             inv_start: snap.inventory,
             inv_end: nowInv,
+            // World state is no longer inventory-only. Without these the 5x5
+            // platform attempts could not be checked in-game afterwards — no
+            // record of where to look — and a block-scan referee needs an
+            // origin to scan around.
+            pos_start: snap.position ?? null,
+            pos_end: nowPos ?? null,
             verdict,                       // stripped before a card is rendered
         }, null, 2));
     } catch (e) { console.warn(`[referee] evidence write failed: ${e.message}`); }
@@ -175,7 +207,8 @@ async function judge(id, outcome) {
     let nowInv = null, readErr = null;
     try { nowInv = await readInventoryJson(); }
     catch (e) { readErr = e.message; }
-    const finish = (verdict) => { writeEvidence(id, snap, outcome, nowInv, verdict); return verdict; };
+    const nowPos = await readPosition();
+    const finish = (verdict) => { writeEvidence(id, snap, outcome, nowInv, verdict, nowPos); return verdict; };
     if (!criterion) return finish(honorSystem('end_factor not an inventory-count shape'));
     if (!nowInv) return finish(honorSystem(`inventory read failed: ${readErr}`));
     const v = evaluateCriterion(criterion, snap.inventory, nowInv);

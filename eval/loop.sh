@@ -192,6 +192,30 @@ else
   say "analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label"
 fi
 
+# ── 4a. configuration and trace pointer ────────────────────────────────────
+# The model/inference config in force, and where this attempt's action trace
+# lives. Neither was recoverable from the row before: a model or sampling
+# change mid-campaign would have been invisible in the data — arms could have
+# differed in the one variable the protocol most insists on holding fixed —
+# and the trace could only be found by guessing the filename.
+# Resolved from settings.js -> the active profile, i.e. what actually launched.
+MODELCFG=$(node -e '
+  import("./settings.js").then(async (m) => {
+    const s = m.default || m;
+    const p = (s.profiles || [])[0];
+    const prof = JSON.parse((await import("fs")).readFileSync(p, "utf8"));
+    process.stdout.write(JSON.stringify({
+      profile: p, name: prof.name, planner: prof.model,
+      coder: prof.code_model, max_tokens: prof.max_tokens,
+    }));
+  }).catch(() => process.stdout.write(""));
+' 2>/dev/null)
+BOTNAME=$(printf '%s' "$MODELCFG" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).name||"")}catch{}})' 2>/dev/null)
+EPISODE=""
+if [ -n "$BOTNAME" ] && [ -f "$ROOT/bots/$BOTNAME/episodes/$TASKID.jsonl" ]; then
+  EPISODE="bots/$BOTNAME/episodes/$TASKID.jsonl"
+fi
+
 # ── 4b. log the attempt to pincercraft_evals.db ────────────────────────────
 PROG=$(grep -oE 'PROGRESS_SCORE=[0-9.]+'        "$DIAG" | head -1 | cut -d= -f2)
 FMODE=$(grep -oE 'FAILURE_MODE=[A-Za-z0-9_-]+'  "$DIAG" | head -1 | cut -d= -f2)
@@ -202,7 +226,8 @@ ROW=$(node -e '
         prog=process.argv[8], fmode=process.argv[9], taskset=process.argv[10],
         v=JSON.parse(process.argv[11]||"{}"), ef=process.argv[12],
         seed=process.argv[13], armpos=process.argv[14],
-        hverify=process.argv[15], hautofin=process.argv[16];
+        hverify=process.argv[15], hautofin=process.argv[16],
+        modelcfg=process.argv[17], episode=process.argv[18];
   // Referee verdict is the label when it could measure; queue outcome only
   // labels unmeasurable criteria (label_source records which one applied).
   const success = typeof v.success==="boolean" ? v.success : outcome==="done";
@@ -215,12 +240,14 @@ ROW=$(node -e '
   if (armpos) row.arm_position=Number(armpos);
   if (hverify) row.harness_verify=hverify;
   if (hautofin) row.harness_autofinish=hautofin;
+  if (modelcfg) row.model_config=modelcfg;
+  if (episode) row.episode_path=episode;
   if (ef) row.end_factor=ef;
   if (prog) row.progress_score=Number(prog);
   if (!success) row.failure_mode = v.referee_failure_mode || fmode || outcome;
   else if (v.referee_failure_mode) row.failure_mode = v.referee_failure_mode; // e.g. verified but queue_never_finished
   process.stdout.write(JSON.stringify(row));
-' "$M" "$TASKID" "$DESC" "$TIER" "$COMMIT" "$OUTCOME" "$WALL" "${PROG:-}" "${FMODE:-}" "${TASKSET:-$MODE}" "$VERDICT" "${EF:-}" "${SEED:-0}" "${ARM_POSITION:-0}" "$HVERIFY" "$HAUTOFIN")
+' "$M" "$TASKID" "$DESC" "$TIER" "$COMMIT" "$OUTCOME" "$WALL" "${PROG:-}" "${FMODE:-}" "${TASKSET:-$MODE}" "$VERDICT" "${EF:-}" "${SEED:-0}" "${ARM_POSITION:-0}" "$HVERIFY" "$HAUTOFIN" "$MODELCFG" "$EPISODE")
 printf '%s' "$ROW" | python3 eval/eval_db.py log-attempt >/dev/null \
   && say "logged attempt → pincercraft_evals.db (commit $COMMIT, tier $TIER, ${PROG:-auto} progress)"
 
