@@ -91,6 +91,21 @@ _MIGRATIONS = (
     # non-independent, so the seed has to be recoverable per row rather than
     # inferred from timestamps. 0 = pre-campaign rows.
     "ALTER TABLE task_attempts ADD COLUMN seed INTEGER DEFAULT 0",
+    # Position of this arm within its backtest's run order, 1-based. Arm order
+    # used to be fixed, which made position perfectly confounded with arm
+    # identity: `gates` always ran 4th, inherited the richest carried-over
+    # inventory, and scored 30/30 — read as a layer effect until a controlled
+    # re-run showed +0.0pp (p=1.000). Order is randomized now, so the variable
+    # has to be recorded to be adjustable for. 0 = not part of a campaign arm.
+    "ALTER TABLE task_attempts ADD COLUMN arm_position INTEGER DEFAULT 0",
+    # The harness's OWN decisions, kept separate from the agent's claim
+    # (evidence.outcome) and the referee's verdict (success). Without these the
+    # three-way separation is not recoverable from the row: we could see what
+    # the bot said and what was true, but not what the harness did about it.
+    #   harness_verify:     blocked | passed | off
+    #   harness_autofinish: fired   | not_fired | off
+    "ALTER TABLE task_attempts ADD COLUMN harness_verify TEXT",
+    "ALTER TABLE task_attempts ADD COLUMN harness_autofinish TEXT",
 )
 
 
@@ -142,6 +157,12 @@ def log_attempt(row: dict, path=DB_PATH):
         "end_factor": row.get("end_factor"),
         "label_source": row.get("label_source", "honor_system"),
         "seed": int(row.get("seed", 0) or 0),
+        "arm_position": int(row.get("arm_position", 0) or 0),
+        # NULL, not a default string: a row written by a path that does not
+        # know about the harness (player logging, older runners) must be
+        # distinguishable from one that observed the layer switched off.
+        "harness_verify": row.get("harness_verify") or None,
+        "harness_autofinish": row.get("harness_autofinish") or None,
     }
     # Named column list (not positional VALUES) so the insert survives schema
     # drift — extra columns in the live table default to NULL instead of
