@@ -45,6 +45,18 @@ N=$(node -e 'process.stdout.write(String(require("./eval/benchmarks.json").lengt
 say(){ printf '\n\033[1;33m■ %s\033[0m\n' "$*"; }
 die(){ printf '\033[1;31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 
+# The unit is StartLimitIntervalSec=300 / StartLimitBurst=5 — five starts per
+# five minutes. A campaign restarts the bot once per arm plus once per
+# health-check intervention, so a 7-arm backtest trips the limit and systemd
+# then refuses to start with 'start-limit-hit' regardless of the bot being
+# perfectly healthy. reset-failed clears the counter. Without it a long
+# campaign dies partway through for a reason that has nothing to do with the
+# experiment (caught by preflight, 2026-08-09, five arms in).
+restart_bot(){
+  sudo systemctl reset-failed daedelus404.service >/dev/null 2>&1 || true
+  sudo systemctl restart daedelus404.service
+}
+
 # Checked after die() exists: called above its definition this printed
 # "die: command not found" and carried on with a non-numeric N, which is the
 # one case it was written to stop.
@@ -64,7 +76,7 @@ echo $$ > "$STATE_DIR/cycle_active"
 cleanup(){
   rm -f "$STATE_DIR/cycle_active" "$OFF_FLAG" "$TARGET_FILE"
   rm -f "$STATE_DIR"/harness_off_*
-  sudo systemctl restart daedelus404.service >/dev/null 2>&1 || true
+  restart_bot >/dev/null 2>&1 || true
   "$RECONCILE" >/dev/null 2>&1 || true
   say "field trial ended — flags cleared, bot returned to YOON"
 }
@@ -305,7 +317,7 @@ run_arm(){
   # Fresh bot process per arm: clean orchestrator history, and the arm's
   # harness mode is unambiguous from the first turn.
   say "arm $arm seed $seed: restarting bot (flags: $(ls "$STATE_DIR" | grep -c '^harness_off' || true) set)"
-  sudo systemctl restart daedelus404.service || die "bot restart failed"
+  restart_bot || die "bot restart failed"
   wait_mcp
   wait_spawn
   assert_target
@@ -359,7 +371,7 @@ run_arm(){
       say "arm $arm task $i: attempt recorded 0 steps ($deadruns in a row)"
       if [ "$deadruns" -ge 2 ]; then
         say "arm $arm: bot looks wedged — restarting before it eats the rest of the arm"
-        sudo systemctl restart daedelus404.service || die "bot restart failed"
+        restart_bot || die "bot restart failed"
         wait_mcp; wait_spawn; assert_target; clear_queue
         sleep 20
         deadruns=0
