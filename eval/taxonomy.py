@@ -25,11 +25,12 @@ Three independent signals, deliberately never collapsed (preregistration §3):
 import argparse, glob, json, os, sqlite3, sys
 from collections import Counter, defaultdict
 
-# Imported rather than reimplemented: two copies of the primary-set rule or the
-# claim rule would drift, and both decide what the paper's rates are computed
-# over. campaign_report guards its entry point, so importing runs nothing.
+# Imported rather than reimplemented: two copies of the primary-set rule, the
+# claim rule or the categories would drift, and all three decide what the
+# paper's rates are computed over.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from campaign_report import claimed, excluded_task_name  # noqa: E402
+from analysis_rules import (  # noqa: E402
+    CATEGORIES, claimed, classify, excluded_task_name)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 from eval_db import DB_PATH as DB  # noqa: E402  single env-aware definition
@@ -38,16 +39,6 @@ from eval_db import DB_PATH as DB  # noqa: E402  single env-aware definition
 # — resolving them relative to the checkout finds an empty directory in a
 # worktree and silently reports every claim as inferred.
 EV_DIR = os.path.join(os.path.dirname(os.path.abspath(DB)), 'eval', '.referee')
-
-CATEGORIES = [
-    'true_completion',          # claimed done, and it was
-    'false_completion',         # claimed done, world says otherwise
-    'reached_not_recognized',   # goal met, agent never claimed it
-    'capability_failure',       # tried, gave up, goal genuinely unmet
-    'budget_exhaustion',        # ran out of time with the goal unmet
-    'infrastructure',           # the rig, not the agent
-]
-
 
 def load_claims():
     """task_id -> what the AGENT said. Kept apart from the referee verdict on
@@ -80,30 +71,6 @@ def resolve_claim(row, claims):
     if outcome is not None:
         return outcome == 'done', False
     return bool(claimed(row['success'], row['failure_mode'])), True
-
-
-def classify(row, claim, discarded=frozenset()):
-    """One attempt -> one category. `row` is a task_attempts record.
-    `claim` is a bool: did the agent declare the task complete?
-
-    `discarded` holds attempt_ids recorded in the `exclusions` table."""
-    # Infrastructure first: a bot that could not act never produced a result to
-    # classify, and scoring it as a capability failure is how a credit outage
-    # once read as a 61pp layer effect (docs/paper/aborts.md).
-    if row['attempt_id'] in discarded:
-        return 'infrastructure'
-    if (row['steps'] or 0) == 0 and (row['failure_mode'] or '') == 'timeout':
-        return 'infrastructure'
-
-    success = bool(row['success'])
-
-    if success:
-        return 'true_completion' if claim else 'reached_not_recognized'
-    if claim:
-        return 'false_completion'
-    if (row['failure_mode'] or '') == 'timeout':
-        return 'budget_exhaustion'
-    return 'capability_failure'
 
 
 def main():

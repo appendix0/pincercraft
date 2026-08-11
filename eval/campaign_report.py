@@ -24,7 +24,8 @@ from collections import Counter, defaultdict
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'eval'))
 from eval_db import DB_PATH as DB  # noqa: E402  single env-aware definition
-BENCH = os.path.join(ROOT, 'eval', 'benchmarks.json')
+from analysis_rules import (  # noqa: E402  one definition of each rule
+    BENCH, LAYER_ENDPOINT, MEI, claimed, excluded_task_name, is_category)
 BOOTSTRAP_N = 10000
 # 'measurement' is the seeds-1-2 compound arm, superseded by the verify /
 # autofinish split. It stays in ARMS so the historical rows still print, but it
@@ -52,42 +53,6 @@ def wilson(k, n, z=1.96):
     return (max(0.0, (c - m) / d), min(1.0, (c + m) / d))
 
 
-def excluded_task_name():
-    """The pre-declared exclusion: the one benchmark whose criterion is not
-    inventory-shaped, so no referee verdict is possible until a block-scan
-    referee exists.
-
-    Keyed on an explicit `exclude_from_primary` flag, not on the presence of a
-    `note`: notes are documentation and several tasks carry one, so matching on
-    `note` picked whichever such row happened to sit first in the file. That
-    resolved correctly only by file ordering, and a reorder would have quietly
-    swapped the exclusion — dropping a referee-labeled task from the primary
-    endpoint and admitting the one task that can only be honor-system labeled.
-    Exactly one row must be marked; anything else is a benchmark-file error and
-    is worth stopping the report over, because every downstream rate is
-    computed against this set."""
-    with open(BENCH) as f:
-        rows = json.load(f)
-    marked = [r['description'] for r in rows if r.get('exclude_from_primary')]
-    if len(marked) != 1:
-        raise SystemExit(
-            f'{BENCH}: expected exactly 1 task with "exclude_from_primary": true, '
-            f'found {len(marked)}')
-    return marked[0]
-
-
-def claimed(success, failure_mode):
-    """What an honor-system pipeline would have recorded for this attempt.
-
-    The referee's verdict is `success`; the bot's own claim is recoverable
-    because the referee flags exactly where the two diverge."""
-    if failure_mode == 'false_done_referee':
-        return 1          # bot said done, world disagreed
-    if failure_mode == 'queue_never_finished':
-        return 0          # world says done, bot never claimed it
-    return success
-
-
 def load(con, seeds=None, tag='conf'):
     excl = excluded_task_name()
     # Discards are looked up by attempt_id in `exclusions`, not inferred from a
@@ -96,7 +61,9 @@ def load(con, seeds=None, tag='conf'):
     dropped = {r[0] for r in con.execute("SELECT attempt_id FROM exclusions")}
     rows = con.execute(
         "SELECT attempt_id, task_set, task_name, seed, success, failure_mode, label_source, "
-        "input_tokens, output_tokens, wall_clock_seconds "
+        # `steps` is needed by the shared classify(): a zero-step timeout is an
+        # infrastructure fault, not a capability failure.
+        "steps, input_tokens, output_tokens, wall_clock_seconds "
         # `_` is a single-character wildcard in LIKE, so an unescaped 'bench_%'
         # also matches e.g. 'benchmark_x'. Escaped, the prefix is literal.
         r"FROM task_attempts WHERE task_set LIKE ? ESCAPE '\' "
@@ -148,12 +115,11 @@ def arm_table(groups, arms, restrict=None):
               f'   {pct(c/n)}  {pct(c/n - v/n)}')
 
 
-def false_completion(r):
-    """1 when the agent claimed done and the referee's world read disagreed.
-
-    The paper's central quantity. Kept as a function of the row rather than a
-    stored column so it stays derived (see eval/taxonomy.py)."""
-    return 1 if r['failure_mode'] == 'false_done_referee' else 0
+# 1 when the agent claimed done and the referee's world read disagreed. The
+# paper's central quantity, derived rather than stored, and taken from the same
+# taxonomy rule every other endpoint uses so the primary endpoint cannot drift
+# away from the category of the same name.
+false_completion = is_category('false_completion')
 
 
 def cluster_bootstrap(a_rows, b_rows, n=BOOTSTRAP_N, seed=12345,
@@ -192,11 +158,21 @@ def cluster_bootstrap(a_rows, b_rows, n=BOOTSTRAP_N, seed=12345,
         'diff': sum(obs_a) / len(obs_a) - sum(obs_b) / len(obs_b),
         'lo': diffs[int(0.025 * len(diffs))],
         'hi': diffs[int(0.975 * len(diffs))],
-        # Fraction of resamples on the wrong side of zero: a bootstrap p-value
-        # for the one-sided direction the hypothesis predicts.
-        'p': min(1.0, 2 * min(sum(d <= 0 for d in diffs), sum(d >= 0 for d in diffs)) / len(diffs)),
+        # Two-sided bootstrap p, with the (r+1)/(B+1) correction. Without it a
+        # resample set that never crosses zero yields exactly 0, which printed
+        # as "p=0.0000" — a value no resampling procedure can justify, and one
+        # a reviewer is right to reject. The floor is 1/(B+1), reported as
+        # "<0.0001" at B=10000.
+        'p': min(1.0, 2 * (min(sum(d <= 0 for d in diffs),
+                               sum(d >= 0 for d in diffs)) + 1) / (len(diffs) + 1)),
+        'p_floor': 1.0 / (len(diffs) + 1),
         'tasks': len(tasks),
     }
+
+
+def fmt_p(b):
+    """A bootstrap p at the resolution the resample count can support."""
+    return f'<{b["p_floor"]:.4f}' if b['p'] <= 2 * b['p_floor'] else f'={b["p"]:.4f}'
 
 
 def holm(pairs):
@@ -324,7 +300,7 @@ def main(seeds=None, tag='conf'):
         b = cluster_bootstrap(groups['on'], groups['off'], value=false_completion)
         if b:
             print(f'\n  difference in false-completion rate: {pct(b["diff"])}')
-            print(f'  95% CI: [{pct(b["lo"])}, {pct(b["hi"])}]   bootstrap p={b["p"]:.4f}   '
+            print(f'  95% CI: [{pct(b["lo"])}, {pct(b["hi"])}]   bootstrap p{fmt_p(b)}   '
                   f'({b["tasks"]} tasks, {BOOTSTRAP_N} resamples)')
             spans = b['lo'] <= 0 <= b['hi']
             print(f'  H1 {"NOT supported — interval spans zero" if spans else "supported"}')
@@ -338,7 +314,7 @@ def main(seeds=None, tag='conf'):
         b = cluster_bootstrap(groups['on'], groups['off'])
         if b:
             print(f'  difference in verified success: {pct(b["diff"])}')
-            print(f'  95% CI: [{pct(b["lo"])}, {pct(b["hi"])}]   bootstrap p={b["p"]:.4f}   '
+            print(f'  95% CI: [{pct(b["lo"])}, {pct(b["hi"])}]   bootstrap p{fmt_p(b)}   '
                   f'({b["tasks"]} tasks, {BOOTSTRAP_N} resamples)')
             spans = b['lo'] <= 0 <= b['hi']
             print(f'  H2 {"NOT supported — interval spans zero" if spans else "supported"}')
@@ -353,20 +329,56 @@ def main(seeds=None, tag='conf'):
         present.append('measurement')
     if 'on' in groups and present:
         print('\n' + '-' * 74)
-        print('PER-LAYER ABLATION vs A-ON (exploratory — underpowered by design)')
+        print('PER-LAYER ABLATION vs A-ON, each on its target failure mode')
         print('-' * 74)
+        # Each layer is scored on the taxonomy category it targets, NOT on
+        # overall success. This is the pre-registered endpoint, and the
+        # confirmatory arms were sized for it: separating verify from autofinish
+        # on overall success needs n=372/arm against the 52/arm actually
+        # planned, so scoring them on success tests an unregistered hypothesis
+        # at a sample size chosen for a different one.
         results, ps = {}, []
         for arm in present:
-            b = cluster_bootstrap(groups['on'], groups[arm])
+            endpoint = LAYER_ENDPOINT[arm]
+            # Ablation minus A-ON: a positive number is the ablation RAISING the
+            # failure mode the layer is supposed to suppress, which is the
+            # direction the hypothesis predicts.
+            b = cluster_bootstrap(groups[arm], groups['on'],
+                                  value=is_category(endpoint))
             if b:
+                b['endpoint'] = endpoint
                 results[arm] = b
                 ps.append((arm, b['p']))
+        print(f'  {"layer":<12} {"target failure mode":<24} {"rise":>7}  '
+              f'{"95% CI":<26}  {"Holm-adj":>8}  verdict')
         for arm, p, adj in holm(ps):
             b = results[arm]
-            print(f'  {arm:<13} drop {pct(b["diff"])}  CI [{pct(b["lo"])}, {pct(b["hi"])}]  '
-                  f'p={p:.4f}  Holm-adj={adj:.4f}')
-        print(f'\n  {len(present)} arms at this seed count cannot resolve small effects. Read the intervals,')
-        print('  not the ranking.')
+            sel = is_category(b['endpoint'])
+            k_a, n_a = sum(sel(r) for r in groups[arm]), len(groups[arm])
+            ci = f'[{pct(b["lo"])},{pct(b["hi"])}]'
+            # When neither arm produced a single event, every resample is zero
+            # and the bootstrap returns [0,0] — an interval with no uncertainty
+            # in it, which is an artefact of the method and not a finding. Zero
+            # events in n bounds the rate; it does not pin it to zero. Fall back
+            # to the exact one-sided bound, which at these arm sizes is usually
+            # WIDER than the minimum effect of interest and therefore refuses
+            # the bounded-null verdict the degenerate interval would have won.
+            degenerate = k_a == 0 and b['lo'] == 0.0 and b['hi'] == 0.0
+            if degenerate:
+                ub = 1 - 0.05 ** (1 / n_a)
+                ci = f'0 events in {n_a}, rate <{pct(ub)}'
+                verdict = (f'bounded null (<{MEI:.0%})' if ub < MEI
+                           else 'inconclusive — n too small to bound')
+            elif b['lo'] > 0 and b['diff'] >= MEI:
+                verdict = 'dominant mechanism'
+            elif b['hi'] < MEI:
+                verdict = f'bounded null (<{MEI:.0%})'
+            else:
+                verdict = 'inconclusive'
+            print(f'  {arm:<12} {b["endpoint"]:<24} {pct(b["diff"]):>7}  '
+                  f'{ci:<26}  {adj:>8.4f}  {verdict}')
+        print(f'\n  Minimum effect of interest {MEI:.0%}, pre-declared. "Bounded null" means the')
+        print('  interval rules out an effect that large — not that none was found.')
 
     # Cost, for the efficiency line in the paper.
     print('\n' + '-' * 74)
