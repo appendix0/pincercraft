@@ -22,7 +22,8 @@ import json, os, random, sqlite3, sys
 from collections import Counter, defaultdict
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB = os.path.join(ROOT, 'pincercraft_evals.db')
+sys.path.insert(0, os.path.join(ROOT, 'eval'))
+from eval_db import DB_PATH as DB  # noqa: E402  single env-aware definition
 BENCH = os.path.join(ROOT, 'eval', 'benchmarks.json')
 BOOTSTRAP_N = 10000
 # 'measurement' is the seeds-1-2 compound arm, superseded by the verify /

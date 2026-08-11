@@ -15,7 +15,8 @@ label_source (referee-measured vs honor-system rows).
 """
 import sqlite3, sys, os, datetime, subprocess, re
 
-DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'pincercraft_evals.db')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from eval_db import DB_PATH as DB  # noqa: E402  single env-aware definition
 MARK = re.compile(r'agree:task_id=(\d+)')
 
 def head():
