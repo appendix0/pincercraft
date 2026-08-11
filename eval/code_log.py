@@ -6,7 +6,12 @@
 #       --change "..." --reason "..." [--commit <hash>]
 import sqlite3, subprocess, datetime, argparse, os
 
-DB = os.path.join(os.path.dirname(__file__), '..', 'pincercraft_evals.db')
+# Honour the same override as eval_db.py. Without it this resolves relative to
+# the checkout it is run from, so a run inside a git worktree silently creates a
+# throwaway DB (CREATE TABLE IF NOT EXISTS below) and reports success against it.
+DB = os.environ.get(
+    'PINCER_EVAL_DB',
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'pincercraft_evals.db'))
 
 def head():
     try:
