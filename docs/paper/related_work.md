@@ -116,6 +116,56 @@ prior work itself.
   environments, and perturbations amplify it. Supports our decision to hold the
   start state fixed and to report the arm-position confound.
 
+## 4.5 The environment class is load-bearing, not a convenience
+
+**Why this project runs in an open world, and why that is part of the claim
+rather than a detail of the setup.**
+
+Every large false-success measurement above was taken where **verifying ground
+truth is cheap**: tau2-bench checks a database row, AppWorld checks an API
+result, SpreadsheetBench checks a cell against an exact match. Those settings
+establish that the phenomenon exists and is common. They say nothing about the
+setting where verification is *itself the hard part* — and that is the setting
+that matters for anything acting in the physical world.
+
+An open world differs on every axis that makes verification expensive:
+
+| | API / tool benchmarks | open world |
+|---|---|---|
+| action space | enumerable, documented | effectively unbounded |
+| ground truth | look up a row, run a test | must independently read world state |
+| horizon | short, few dependencies | long, with tool and material chains |
+| agent's priors | API docs describe the affordances | affordances must be discovered |
+| failure | terminal | normal, and recovering from it is part of the task |
+
+**And in this class, the field still runs on the honor system.** Voyager's tasks
+are self-verified by a critic agent, and critic-approved code enters the skill
+library permanently — a wrong judgment contaminates the library and the error
+compounds on every reuse. Luban ([arXiv:2405.15414](https://arxiv.org/abs/2405.15414))
+builds on "autonomous embodied verification". MineEvolve
+([arXiv:2603.13131](https://arxiv.org/abs/2603.13131)) distils *successful*
+executions into reusable skills — success as judged by the agent's own loop.
+There is movement toward external scoring — MineExplorer
+([arXiv:2605.30931](https://arxiv.org/abs/2605.30931)) uses rule-based milestone
+evaluators — but it scores *exploration*, not the claimed-versus-verified gap.
+
+So the two literatures have not met. The papers that measure false success do it
+where checking is easy; the papers working where checking is hard still let the
+agent grade itself. **We found no work measuring the claimed-versus-verified gap
+in an open world, and none ablating a harness to see which layer closes it.**
+(Stated as a search result, not a proof of absence — this field is moving fast.)
+
+**Why it generalises past the game.** Physical AI lands in exactly this class:
+open, unfamiliar, no API to ask "did I succeed". An agent that cannot tell
+whether it succeeded is a different kind of problem once it has a body — the
+failure does not stay inside a shell. Minecraft is the arena because it is the
+cheapest environment with the real property (unbounded actions, expensive ground
+truth, long horizons, recovery-from-failure as part of the task), not because
+the target is a better Minecraft bot.
+
+This also answers the case-study objection in §6: one environment, yes — but
+deliberately the one where the existing results do not already apply.
+
 ## 5. Terminology decisions forced by this audit
 
 The standing rule is one name per concept. Where the field has already fixed a
@@ -140,12 +190,18 @@ name, findability beats our coinage — a paper that invents a synonym for
 | A deterministic harness drives false success to ~0 in a fixed model | **Open.** This is the paper. |
 | Per-layer ablation localises *which* layer does it | **Open, and nobody has run it** — 2607.17044 lists its absence as a limitation. |
 | Verification looks marginal on success and decisive on false success | **Open, and corroborated** by 2607.17044's +1.5 pp on task success. Strong framing: the field measured the right layer on the wrong endpoint. |
+| The gap has been measured where ground truth is cheap, not where it is expensive | **Open.** §4.5 — the two literatures have not met, and open-world agent practice still self-verifies. |
 
 **The repositioning.** We are not writing a measurement paper that discovers a
 gap. We are writing an **intervention paper**: the gap is known, its detection is
 known, and what is missing is a controlled demonstration that a deterministic
 layer under a fixed model removes it — with the per-layer ablation saying which
-part did the work, on the endpoint each layer actually targets.
+part did the work, on the endpoint each layer actually targets, **in an
+environment where establishing ground truth is expensive** (§4.5).
+
+The last clause is not garnish. Drop it and the paper is a small replication in
+a game; keep it and the paper is about the setting the existing results do not
+cover, which is the setting an embodied system actually operates in.
 
 That is a smaller claim than "we found the say-do gap" and a much more
 defensible one. It also survives the reviewer who knows this literature, which
