@@ -14,9 +14,12 @@ DB = os.environ.get(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'pincercraft_evals.db'))
 
 def head():
+    # Resolved from the working directory, i.e. the checkout that actually holds
+    # the commit being logged. Deriving it from the DB's directory instead would
+    # stamp the main checkout's HEAD onto a change committed in a worktree.
     try:
-        return subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'],
-            cwd=os.path.dirname(os.path.abspath(DB))).decode().strip()
+        return subprocess.check_output(
+            ['git', 'rev-parse', '--short', 'HEAD']).decode().strip()
     except Exception:
         return None
 
