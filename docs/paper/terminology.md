@@ -116,10 +116,16 @@ per-attempt form for endpoints and intervals; the gap is a summary statistic.
 Why the distinction earns its place: two arms can be statistically
 indistinguishable on task success and 33 points apart on false completion
 (A-OFF 60.0% / 33.3% vs the reflex-ablated arm 67.9% / 0.0%; task success
-p=0.59, false completion p=0.0008, exploratory). The layers specialise — the
-reflex layer buys task success and moves false completion by exactly zero,
-the grounded completion check does the reverse. A claim that one axis is a
+p=0.59, false completion p=0.0008, exploratory). A claim that one axis is a
 symptom of the other is contradicted by our own data.
+
+The demonstrated direction is **task success degrading without self-report
+accuracy degrading**: ablating the reflex layer costs ~19 points of task
+success and leaves false completion at 0/28. The converse — moving self-report
+accuracy while holding task success fixed — is **not yet cleanly shown**;
+ablating the grounded completion check alone moves both, at n=12. Do not write
+"the layers specialise" as an established result until the confirmatory
+campaign settles it.
 
 ## 6. Experimental structure
 
