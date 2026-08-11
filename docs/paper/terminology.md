@@ -94,6 +94,33 @@ grounded completion check (verify)     ->  false completion
 deterministic termination (autofinish) ->  reached-not-recognized
 ```
 
+### 5.1 The two axes
+
+The taxonomy above is a 2×2, and the paper's central structural claim is that
+its two dimensions move independently. They are named after the project's own
+**say-do gap**:
+
+| axis | canonical term | metric | its failure |
+|---|---|---|---|
+| **do** — did the world change as required? | **task success** (§3) | verified success rate | capability failure |
+| **say** — did the claim match the world? | **self-report accuracy** | false-completion rate | **false completion** |
+
+**Never call the *do* axis "capability".** `capability failure` is already one
+cell of the taxonomy; using the same word for the whole axis implies that cell
+is the axis's only outcome. Reserve *capability* for the taxonomy category.
+
+The **say-do gap** is the aggregate discrepancy on a set of attempts (claimed
+rate minus verified rate). **False completion** is its per-attempt form. Use the
+per-attempt form for endpoints and intervals; the gap is a summary statistic.
+
+Why the distinction earns its place: two arms can be statistically
+indistinguishable on task success and 33 points apart on false completion
+(A-OFF 60.0% / 33.3% vs the reflex-ablated arm 67.9% / 0.0%; task success
+p=0.59, false completion p=0.0008, exploratory). The layers specialise — the
+reflex layer buys task success and moves false completion by exactly zero,
+the grounded completion check does the reverse. A claim that one axis is a
+symptom of the other is contradicted by our own data.
+
 ## 6. Experimental structure
 
 | canonical term | code identifier | definition |
@@ -114,6 +141,8 @@ deterministic termination (autofinish) ->  reached-not-recognized
 | bare "seed" in prose | shuffled backtest | Owner directive. |
 | "the harness improves success" as the headline | "a stock agent overstates its own success by N points" | A-ON's zero false-completion rate is partly by construction — `verify` blocks unearned finishes by design. Lead with the size of the gap in the ablated arm. |
 | "eliminated" for a zero count | "no events observed in N, bounding the rate below X%" | Zero events needs a bound. 0/30 → one-sided 95% upper bound 9.5%. |
+| "capability" as an axis name | task success (§5.1) | `capability failure` is one taxonomy cell; reusing the word for the axis implies the axis has one outcome. |
+| "the reflex layer reduces false completion" | it moves task success only | Ablating it leaves false completion at 0/28. The zero is held by the grounded completion check, which stays on in that arm. |
 
 See [preregistration.md](preregistration.md) for the protocol and
 [protocol.md](protocol.md) for the frozen confirmatory procedure.
