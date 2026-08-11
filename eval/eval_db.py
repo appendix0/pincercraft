@@ -25,6 +25,22 @@ DB_PATH = os.environ.get(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "pincercraft_evals.db"),
 )
 
+# The default resolves next to the checkout the script runs from, so inside a
+# git worktree it points at a path that does not exist. Several tools here do
+# CREATE TABLE IF NOT EXISTS, which would create an empty DB there and report
+# success against it — receipts written to a directory that gets deleted with
+# the worktree. Refuse instead, and say what to do. A git worktree has `.git`
+# as a FILE; the primary checkout has it as a directory, so this never fires
+# during a normal campaign run.
+if "PINCER_EVAL_DB" not in os.environ and not os.path.exists(DB_PATH):
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if os.path.isfile(os.path.join(_root, ".git")):
+        raise SystemExit(
+            f"eval DB not found at {DB_PATH}\n"
+            f"This looks like a git worktree. The real ledger lives in the primary\n"
+            f"checkout; writing here would create a throwaway DB. Re-run with:\n"
+            f"  PINCER_EVAL_DB=<primary-checkout>/pincercraft_evals.db <command>")
+
 # Where play_logger.js appends player-driven attempt rows (one JSON object per line).
 PLAY_LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "play_attempts.jsonl")
 

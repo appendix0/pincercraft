@@ -6,17 +6,17 @@
 #       --change "..." --reason "..." [--commit <hash>]
 import sqlite3, subprocess, datetime, argparse, os
 
-# Honour the same override as eval_db.py. Without it this resolves relative to
-# the checkout it is run from, so a run inside a git worktree silently creates a
-# throwaway DB (CREATE TABLE IF NOT EXISTS below) and reports success against it.
-DB = os.environ.get(
-    'PINCER_EVAL_DB',
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'pincercraft_evals.db'))
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from eval_db import DB_PATH as DB  # noqa: E402  single env-aware definition
 
 def head():
+    # Resolved from the working directory, i.e. the checkout that actually holds
+    # the commit being logged. Deriving it from the DB's directory instead would
+    # stamp the main checkout's HEAD onto a change committed in a worktree.
     try:
-        return subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'],
-            cwd=os.path.dirname(os.path.abspath(DB))).decode().strip()
+        return subprocess.check_output(
+            ['git', 'rev-parse', '--short', 'HEAD']).decode().strip()
     except Exception:
         return None
 

@@ -16,9 +16,12 @@ Upload (needs an HF account; the repo name is a suggestion):
 import json
 import shutil
 import sqlite3
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / 'eval'))
+from eval_db import DB_PATH as DB  # noqa: E402  single env-aware definition
 OUT = ROOT / 'eval' / 'hf_export'
 
 CARD = (Path(__file__).resolve().parent / 'hf_card.md').read_text()
@@ -38,7 +41,7 @@ def main():
     (OUT / 'data').mkdir(parents=True)
     (OUT / 'episodes').mkdir()
 
-    db = sqlite3.connect(ROOT / 'pincercraft_evals.db')
+    db = sqlite3.connect(DB)
     db.row_factory = sqlite3.Row
     n_att = dump_table(db, 'task_attempts', OUT / 'data' / 'task_attempts.jsonl')
     n_gold = dump_table(db, 'gold_attempts', OUT / 'data' / 'gold_labels.jsonl')

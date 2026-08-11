@@ -24,8 +24,10 @@ that change have cards. Read the output, then label with:
 import json, os, sqlite3, sys, glob, re
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB = os.path.join(ROOT, 'pincercraft_evals.db')
-EV_DIR = os.path.join(ROOT, 'eval', '.referee')
+sys.path.insert(0, os.path.join(ROOT, 'eval'))
+from eval_db import DB_PATH as DB  # noqa: E402  single env-aware definition
+# Beside the ledger, not beside this file — see the note in taxonomy.py.
+EV_DIR = os.path.join(os.path.dirname(os.path.abspath(DB)), 'eval', '.referee')
 TARGET = 40
 # Pre-registration freeze. Labels before this are pilot data — they developed the
 # grammar they test, so §5 keeps them out of the confirmatory set rather than

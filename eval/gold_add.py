@@ -9,7 +9,8 @@
 # Multi-line action logs: pass --log-file - to read the log from stdin.
 import sqlite3, sys, subprocess, datetime, argparse, os
 
-DB = os.path.join(os.path.dirname(__file__), '..', 'pincercraft_evals.db')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from eval_db import DB_PATH as DB  # noqa: E402  single env-aware definition
 
 def head():
     try:
