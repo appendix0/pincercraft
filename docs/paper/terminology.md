@@ -82,9 +82,12 @@ the rule remains revisable.
 | **budget exhaustion** | — | fail | Ran out of time with the goal unmet. |
 | **infrastructure** | — | — | The rig failed, not the agent. Excluded per §8 and reported as a discard rate. |
 
-**"False completion" is the canonical term.** `false_done` and
-`false_done_referee` survive as a `failure_mode` string and in older prose; do
-not introduce further variants.
+**The manuscript's primary term is "false success"** — the name the field
+already uses ([arXiv:2606.09863](https://arxiv.org/abs/2606.09863)), adopted so
+the paper is findable by anyone searching for the phenomenon. **"False
+completion" remains the canonical term in this repository and in the code**
+(`false_completion`, `false_done_referee`), per the standing prose/identifier
+split; state the synonym once, on first use. Do not introduce further variants.
 
 Each layer targets one category, which is why these — not overall success — are
 the primary endpoints for a per-layer ablation:
@@ -96,9 +99,15 @@ deterministic termination (autofinish) ->  reached-not-recognized
 
 ### 5.1 The two axes
 
-The taxonomy above is a 2×2, and the paper's central structural claim is that
-its two dimensions move independently. They are named after the project's own
-**say-do gap**:
+The taxonomy above is a 2×2 whose two dimensions move independently. **This is
+established prior work, not our finding** — VIGIL ([arXiv:2605.08747](https://arxiv.org/abs/2605.08747))
+separates *world completion* from *self-termination* over 20 models and 1,000
+episodes, and its four outcome categories map one-to-one onto ours (see
+[related_work.md](related_work.md) §2). Cite it on first use; do not present the
+separation as ours. What is ours is the *cause* studied: VIGIL varies the model
+with the scaffold fixed, we vary the harness with the model fixed.
+
+The axes are named after the project's own **say-do gap**:
 
 | axis | canonical term | metric | its failure |
 |---|---|---|---|
@@ -146,6 +155,7 @@ campaign settles it.
 | "the split" | ablation | Owner directive; "split" is ambiguous with the verify/autofinish split. |
 | bare "seed" in prose | shuffled backtest | Owner directive. |
 | "the harness improves success" as the headline | "a stock agent overstates its own success by N points" | A-ON's zero false-completion rate is partly by construction — `verify` blocks unearned finishes by design. Lead with the size of the gap in the ablated arm. |
+| presenting the say-do gap or the two axes as our discovery | cite 2606.09863 and VIGIL, then state the intervention | Both are published, at larger scale than we can reach. Our contribution is the controlled same-model harness ablation ([related_work.md](related_work.md)). |
 | "eliminated" for a zero count | "no events observed in N, bounding the rate below X%" | Zero events needs a bound. 0/30 → one-sided 95% upper bound 9.5%. |
 | "capability" as an axis name | task success (§5.1) | `capability failure` is one taxonomy cell; reusing the word for the axis implies the axis has one outcome. |
 | "the reflex layer reduces false completion" | it moves task success only | Ablating it leaves false completion at 0/28. The zero is held by the grounded completion check, which stays on in that arm. |
