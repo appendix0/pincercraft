@@ -200,6 +200,24 @@ reset_state(){
   to run exploratory."
 }
 
+# Line count of bot.log when this campaign started. Everything past it is this
+# campaign's own output; everything before it belongs to earlier sessions and
+# must not be read as a live fault. Taken once, before the first arm.
+BOTLOG_MARK=$(wc -l < bot.log 2>/dev/null || echo 0)
+say "bot.log mark: $BOTLOG_MARK (health checks scan only past this line)"
+
+# True when a credit error was written SINCE the mark. Re-reads the line count
+# each call so a rotated or truncated bot.log (current count below the mark)
+# resets to scanning the whole file rather than silently scanning nothing —
+# failing toward detection, since a missed credit exhaustion poisons a whole arm.
+credit_error_since_mark(){
+  local now from
+  now=$(wc -l < bot.log 2>/dev/null || echo 0)
+  from=$BOTLOG_MARK
+  [ "$now" -lt "$from" ] && from=0
+  tail -n +$((from + 1)) bot.log 2>/dev/null | grep -qa 'credit balance is too low'
+}
+
 # Steps recorded for the attempt loop.sh just logged. Feeds the per-task health
 # check: a wedged or brain-dead bot logs 0. Empty output on any error, which the
 # caller reads as "healthy" — a broken query must not trigger restarts.
@@ -363,7 +381,17 @@ run_arm(){
     # never fires on a real result — only on a bot that is unable to act. Credit
     # exhaustion is not recoverable by a restart, so it parks (owner rule, same
     # as rc=42); a wedge is, so it restarts and carries on.
-    if tail -n 800 bot.log 2>/dev/null | grep -qa 'credit balance is too low'; then
+    #
+    # Scanned from BOTLOG_MARK, the line count at campaign start, NOT from a
+    # fixed `tail -n 800` window. bot.log is append-only across sessions, so a
+    # fixed window reaches back into previous runs: after the 2026-08-09 credit
+    # outage its errors sat at lines 122785–122805, and the resume on 2026-08-12
+    # parked itself after ONE healthy attempt (#711: verify=passed, referee
+    # +21 cobblestone) because those three-day-old lines were still inside the
+    # last 800. A campaign could never restart after an outage until 800 lines
+    # of new output had pushed them out. Real detection is unaffected — any
+    # credit error written during the campaign is still after the mark.
+    if credit_error_since_mark; then
       die "Anthropic API credit exhausted — the bot cannot act; parking the rig"
     fi
     if [ "$(last_steps)" = "0" ]; then
