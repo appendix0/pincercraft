@@ -177,8 +177,49 @@ bounded null — never run underpowered and read as a ranking.
 4. Power calculation done on the chosen endpoint and written into the
    pre-registration.
 5. No human player on the eval server; nothing else running against the DB.
-6. Health check active (credit → park, two zero-step attempts → restart).
+6. Health check active: credit → park; **two consecutive attempts with 0 steps
+   *and* no completion claim** → restart. The claim clause is load-bearing, not
+   a detail — see §8.1(c).
 7. A validation smoke proving each manipulated flag reaches the agent child
    process, and each new receipt field actually persists. **A field is not in
    the receipt until a live run has been shown to write it** — three fields
    looked correct and wrote NULL on 2026-08-09.
+8. **A `TAG=smoke` run of at least two arms, one of them ablated, completed and
+   inspected** — rows landed, `arm_position` and `harness_*` populated, referee
+   labelled, no spurious park or restart. Smoke rows are inert to the analysis
+   by design, so this cannot contaminate a rate.
+9. **The runner and analysis path read end to end since the last campaign**,
+   per §8.1.
+
+### 8.1 Read the rig before you run it
+
+Owner directive, 2026-08-12, after three launches were burned in one morning
+(53 attempts and ~2 h discarded) on two defects that were sitting in
+`field_trial.sh`, readable, before the first launch. Auditing the runner is
+cheaper than a restart, and far cheaper than a silently biased result.
+
+- **(a) Read the whole runner, not the diff.** Both defects were in
+  fault-detection code that had not been re-read since it was written.
+- **(b) Distrust fixed windows and cross-session state.** `tail -n N` over an
+  append-only log, hardcoded paths, anything whose meaning depends on a previous
+  run. The credit check grepped `tail -n 800 bot.log` and matched a three-day-old
+  outage, parking a healthy campaign after one attempt while the API returned 200
+  (`2e4f243`).
+- **(c) For every automatic intervention, ask: can this fire on a real result,
+  and can it fire unevenly across arms?** Any runner action correlated with the
+  endpoint is a confound. Treating 0 steps as a fault did both: an instant false
+  completion (#725, `done` in 0.27 s, cobblestone 96→96) is a *result*, and one
+  possible only where the grounded completion check is ablated — so the runner
+  would have restarted the bot mid-arm in `off` and `verify` and never under
+  A-ON (`7ea45ee`).
+- **(d) Re-derive inherited premises against real data.** The pre-registration
+  justified the health check as neutral measuring infrastructure on the grounds
+  that "a bot able to act never records 0 steps". That was false, and it had
+  been carried forward unexamined.
+- **(e) Audit the analysis path too, not only collection.** The 2026-08-10
+  endpoint defect — every arm scored on overall success instead of its
+  pre-registered target category — was the same class of error.
+
+The asymmetry that makes this worth doing: the log-window defect announced
+itself loudly and cost time. The 0-step defect would have **run silently to
+completion and biased the primary comparison.** Audit for the second kind.
