@@ -223,3 +223,45 @@ cheaper than a restart, and far cheaper than a silently biased result.
 The asymmetry that makes this worth doing: the log-window defect announced
 itself loudly and cost time. The 0-step defect would have **run silently to
 completion and biased the primary comparison.** Audit for the second kind.
+
+### 8.2 Required for the next campaign
+
+Owner decision, 2026-08-12: adopted for the *next* campaign, **not retrofitted
+into a running one** — bolting new tooling onto a frozen protocol mid-collection
+is the pattern the freeze exists to prevent. Every item below targets bugs that
+do not crash, which is the class that has actually cost us results.
+
+1. **An A/A arm.** Two arms configured identically and labelled differently; any
+   significant difference between them is a pipeline defect by construction, not
+   an effect. The standard guardrail in online controlled experimentation
+   (Kohavi, Tang & Xu, *Trustworthy Online Controlled Experiments*, 2020). This
+   is a design change — 8 arms, 416 runs — which is why it waits for a campaign
+   boundary. It would have caught **both** of this project's worst defects: the
+   arm-position confound that produced the spurious `gates` 30/30, and the
+   0-step restart asymmetry (§8.1c).
+2. **The analysis pipeline validated on synthetic data before it sees real
+   data.** Generate receipts with a *planted* effect of known size and confirm
+   the report recovers it, then plant nothing and confirm it reports null. Costs
+   no bot time. Would have caught every analysis-side defect to date: scoring
+   each arm on overall success rather than its registered endpoint, the
+   degenerate `[0,0]` interval certifying `autofinish` as a bounded null on
+   0/11, and the primary-set exclusion resolving by file ordering. **It need
+   only land before the numbers are read, not before collection ends** — running
+   it in that gap keeps it off the critical path and makes it verifiable that
+   the pipeline was fixed blind to the results.
+3. **Sample-ratio-mismatch and invariant assertions in `campaign_report.py`.**
+   Hard-assert the expected attempts per arm and stop on a mismatch: unequal n
+   in a balanced design means attempts are being dropped non-randomly. Roughly
+   twenty lines, and among the highest-yield checks in industrial practice.
+
+Lower priority, same spirit: **positive and negative control tasks inside the
+campaign** rather than only in referee calibration — a must-fail probe would
+have caught `redundantAcquire` rendering every `+N NEW <tool>` task
+unsatisfiable — and **fault injection for every runner intervention**: write a
+synthetic credit error and assert the detector fires; write a 0-step completion
+claim and assert it does not.
+
+Note what this list is *not*. Preregistration, a deviation log, receipt
+immutability, independent scoring and one-commit-per-comparison are already in
+place here and absent from most comparable work. The gap is narrower and more
+specific: mechanisms that catch defects which never crash.
