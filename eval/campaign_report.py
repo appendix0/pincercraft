@@ -14,9 +14,10 @@ written before the data existed:
 
 Nothing here is described as significant without its interval printed beside it.
 
-The platform task is excluded from referee aggregates by task identity, declared
-in advance (§4) — never by whether a given row happened to fall back to
-honor_system, which would condition the exclusion on the outcome.
+Task-level exclusions are applied by task identity, declared in advance (§4) —
+never by whether a given row happened to fall back to honor_system, which would
+condition the exclusion on the outcome. As of 2026-08-14 there are none: the
+platform task's exclusion was lifted once the block-scan referee could label it.
 """
 import json, os, random, sqlite3, sys
 from collections import Counter, defaultdict
@@ -54,7 +55,7 @@ def wilson(k, n, z=1.96):
 
 
 def load(con, seeds=None, tag='conf'):
-    excl = excluded_task_name()
+    excl = excluded_task_name(tag)
     # Discards are looked up by attempt_id in `exclusions`, not inferred from a
     # rewritten arm name — raw receipts are append-only, so `task_set` keeps
     # saying which arm the attempt actually ran under even after it is excluded.
@@ -202,7 +203,7 @@ def main(seeds=None, tag='conf'):
                  f'The default namespace is the CONFIRMATORY set; the exploratory '
                  f'backtests are --tag bench.')
 
-    excl = excluded_task_name()
+    excl = excluded_task_name(tag)
     discarded = [r for r in rows if r['discarded']]
     kept = [r for r in rows if not r['discarded']]
     primary = [r for r in kept if not r['excluded']]
@@ -215,8 +216,12 @@ def main(seeds=None, tag='conf'):
     # infrastructure fault was never evidence about the excluded task either,
     # so charging it to the §4 exclusion double-counts it.
     print(f'\nattempts: {len(rows)} total, {len(primary)} in the primary set')
-    print(f'excluded by prior declaration (§4): {len(kept) - len(primary)} '
-          f'— {(excl or "?")[:48]}...')
+    if excl:
+        print(f'excluded by prior declaration (§4): {len(kept) - len(primary)} '
+              f'— {excl[:48]}...')
+    else:
+        print('excluded by prior declaration (§4): none — the platform-task '
+              'exclusion was lifted for confirmatory data 2026-08-14')
     seeds_seen = sorted({r['seed'] for r in rows})
     print(f'seeds present: {seeds_seen}')
 

@@ -96,7 +96,7 @@ def main():
 
     seeds = {int(s) for s in a.seeds.split(',')} if a.seeds else None
     arms = set(a.arms.split(',')) if a.arms else None
-    excl_name = excluded_task_name()
+    excl_name = excluded_task_name(a.task_set_prefix)
 
     per_arm = defaultdict(Counter)
     n_pilot = n_excluded = n_inferred = 0
