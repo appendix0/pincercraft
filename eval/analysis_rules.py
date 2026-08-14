@@ -121,9 +121,12 @@ def is_category(name):
 # does it at a sample size chosen for a different, sharper quantity.
 #
 # terminology.md §5 names the target category for the two termination layers.
-# The three capability layers have no separately declared category; their target
-# is the one they can move, `capability_failure`, and it is written here rather
-# than left implicit so the endpoint appears beside every number in the output.
+# The remaining three (perception, gates, reflexes) have no separately declared
+# category; their target is the one they can move, `capability_failure`, and it
+# is written here rather than left implicit so the endpoint appears beside every
+# number in the output. Do not call these "the capability layers": terminology.md
+# §7 reserves `capability` for the taxonomy cell, since reusing it for a grouping
+# implies that cell is the only outcome those layers touch.
 LAYER_ENDPOINT = {
     'verify': 'false_completion',
     'autofinish': 'reached_not_recognized',
