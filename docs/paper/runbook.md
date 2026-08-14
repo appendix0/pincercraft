@@ -68,8 +68,8 @@ ARMS="on off perception gates reflexes measurement" SEEDS=3 \
   bash eval/field_trial.sh
 ```
 
-Seeds are the outer loop, so arms interleave and drift hits all arms equally.
-Task order is shuffled per seed and echoed into the run log.
+Shuffled backtests are the outer loop, so arms interleave and drift hits all
+arms equally. Task order is shuffled per backtest and echoed into the run log.
 
 The runner points the bot at **pincercraft-ts :25566** via `.runtime/target.json`,
 verifies the connection from the OS after spawn, and clears the file on exit so

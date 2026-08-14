@@ -143,7 +143,7 @@ campaign settles it.
 | **attempt** | one `task_attempts` row | One agent run at one task under one arm. The atomic unit of evidence. |
 | **arm position** | `arm_position` | Where the arm ran in its backtest's randomized order, 1-based. Recorded because it was a confound before it was randomized. |
 | **tier** | `difficulty_tier` | Task complexity band, 1–4. |
-| **primary set** | `exclude_from_primary` | Benchmark tasks in the primary analysis. The 5×5 platform task is excluded by prior commitment until block-scan referee coverage exists. |
+| **primary set** | `exclude_from_primary` | Benchmark tasks in the primary analysis. **Scoped by dataset, because the exclusion is a property of how the data was scored, not of the task** (`excluded_task_name(dataset)`). Confirmatory: all 13 tasks — the 5×5 platform task's exclusion was lifted 2026-08-14 once the block-scan referee could label it. Exploratory (`bench_*`): 12 tasks — the exclusion stands, because those platform attempts were honor-system scored and re-scoring them would mix two instruments in one dataset. |
 | **discard** | `exclusions` | An attempt removed for a declared infrastructure fault (§8). Never removed because the result looked wrong. |
 
 ## 7. Words to avoid
