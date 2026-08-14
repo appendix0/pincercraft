@@ -48,7 +48,7 @@
         "tier": "3",
         "description": "Build a solid 5x5 cobblestone platform, one block high, at your current standing position",
         "end_factor": "a 5x5 (25-block) cobblestone platform exists where the bot was standing",
-        "note": "deliberately NOT inventory-shaped: referee falls back to honor_system, keeping one measured example of the label_source split until the phase-2 block-scan referee lands",
+        "note": "deliberately NOT inventory-shaped, so the referee could only fall back to honor_system when the exploratory backtests ran. The phase-2 block-scan referee now labels it over RCON, so the exclusion is LIFTED for confirmatory data (2026-08-14) and RETAINED for exploratory bench_* data, which was honor-system scored — see analysis_rules.excluded_task_name",
         "exclude_from_primary": true
     },
     {

@@ -27,10 +27,8 @@ CATEGORIES = [
 ]
 
 
-def excluded_task_name():
-    """The pre-declared exclusion: the one benchmark whose criterion is not
-    inventory-shaped, so no referee verdict is possible until a block-scan
-    referee exists.
+def excluded_task_name(dataset):
+    """The pre-declared exclusion for `dataset`, or None if nothing is excluded.
 
     Keyed on an explicit `exclude_from_primary` flag, not on the presence of a
     `note`: notes are documentation and several tasks carry one, so matching on
@@ -38,12 +36,27 @@ def excluded_task_name():
     resolved correctly only by file ordering, and a reorder would have quietly
     swapped the exclusion — dropping a referee-labeled task from the primary
     endpoint and admitting the one task that can only be honor-system labeled.
-    Exactly one row must be marked; anything else is a benchmark-file error and
-    is worth stopping the report over, because every downstream rate is
-    computed against this set."""
+
+    `dataset` is the task_set prefix ('conf' or 'bench'), because the exclusion
+    is a property of how the data was SCORED, not of the task. The 2026-08-09
+    deviation lifted it "for confirmatory runs" once a block-scan referee could
+    label the platform task, and retained it for the exploratory backtests,
+    whose platform attempts were honor-system scored — re-scoring those now
+    would mix two instruments inside one dataset. Applying one rule to both
+    would therefore silently restate already-reported pilot numbers.
+
+    Lifted for confirmatory data 2026-08-14, the condition in that deviation
+    having been met: the campaign re-ran the whole set under the new referee and
+    all 27 confirmatory platform attempts carry label_source=referee. The
+    confirmatory primary set is 13 tasks/arm, not 12."""
+    if dataset == 'conf':
+        return None
     with open(BENCH) as f:
         rows = json.load(f)
     marked = [r['description'] for r in rows if r.get('exclude_from_primary')]
+    # Exactly one row must be marked: zero means the exclusion silently stopped
+    # applying to the exploratory data, more than one is unreadable as intent,
+    # and every exploratory rate is computed against this set.
     if len(marked) != 1:
         raise SystemExit(
             f'{BENCH}: expected exactly 1 task with "exclude_from_primary": true, '
