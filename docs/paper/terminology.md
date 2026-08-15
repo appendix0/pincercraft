@@ -52,7 +52,7 @@ when discussing other people's work.
 | **− preconditions** | B2 | `gates` | precondition layer removed |
 | **− reflexes** | B3 | `reflexes` | reflex layer removed |
 | **− completion check** | B4 | `verify` | grounded completion check removed |
-| **− completion recognition** | B5 | `autofinish` | completion recognition removed |
+| **− deterministic termination** | B5 | `autofinish` | deterministic termination removed |
 
 `A-ON`/`A-OFF`/`B1`–`B5` are **retired from new prose.** They survive only in
 [preregistration.md](preregistration.md) and are read through this table. Three
@@ -81,16 +81,25 @@ pre-registration)"*.
 | **precondition layer** | `gates` | Refuses actions that cannot work: craft preflight, redundant-acquire. |
 | **reflex layer** | `reflexes` | Acts without asking: tool-break guard, inventory tidy. |
 | **grounded completion check** | `verify` | Blocks a completion claim the world state does not support. Never closes a task. |
-| **completion recognition** | `autofinish` | Closes a task in code once the world state satisfies the criterion. Never blocks anything. |
+| **deterministic termination** | `autofinish` | Closes a task in code once the world state satisfies the criterion. Never blocks anything. |
 
-**`autofinish` is COMPLETION RECOGNITION, not "deterministic termination".**
-Renamed 2026-08-15. The old term collided with the 480-second watchdog, which
-also terminates a run and has its own taxonomy cell (`budget_exhaustion`) — two
-different stopping mechanisms sharing one word. The new name is chosen to match
-its own failure mode: ablate **completion recognition** and you get
-**reached-not-recognized**, so the layer and its endpoint explain each other
-without a legend. It also pairs with the **grounded completion check**: the check
-blocks a claim the world does not support, recognition fires one the world does.
+**`autofinish` is DETERMINISTIC TERMINATION. Do not rename it.** The term is
+load-bearing against the cited prior work: VIGIL's *say* axis is
+**self-termination** — the agent failing to close an episode it has in fact
+completed ([related_work.md](related_work.md) §2). Our layer is the exact
+contrast, and the pairing is the paper's mechanism in two words: **the model's
+self-termination fails, so the harness supplies deterministic termination.** A
+synonym coined by us forfeits that alignment and makes the contrast invisible to
+anyone who knows the VIGIL result.
+
+"Deterministic" is also the paper's own thesis word — it is what the whole
+harness is — so the layer's name states what makes it work.
+
+A 2026-08-15 rename to "completion recognition" was proposed on the grounds that
+"termination" collides with the 480-second watchdog. **Rejected and reverted the
+same day**: the watchdog path is called *timeout* and `budget_exhaustion`
+everywhere in this repo and is never called termination, so the collision was
+hypothetical, and it was not worth breaking a mapping onto published work.
 
 **`gates` is a PRECONDITION layer. Never call it a safety layer.** Player-facing
 safety — the stop reflex, the death handler, the Code of Conduct — is a separate
@@ -173,13 +182,13 @@ the endpoints for a per-layer ablation. The authority is `LAYER_ENDPOINT` in
 
 ```
 grounded completion check (verify)      ->  false completion
-completion recognition    (autofinish)  ->  reached-not-recognized
+deterministic termination (autofinish)  ->  reached-not-recognized
 perception layer   (perception)         ->  capability failure
 precondition layer (gates)              ->  capability failure
 reflex layer       (reflexes)           ->  capability failure
 ```
 
-The two completion layers have separately declared target categories; the other
+The two termination layers have separately declared target categories; the other
 three do not, and their endpoint is the one they can move. **Do not call those
 three "the capability layers"** — §7 reserves *capability* for the taxonomy cell,
 and the grouping name would imply that cell is the only outcome they touch.
@@ -246,11 +255,11 @@ matters most —
 |---|---|---|---|---|
 | no harness | 23 | 0 | 45.1% | 45.1% |
 | − reflexes | 1 | 1 | **0.0%** | **2.0%** |
-| − completion recognition | 3 | 2 | **1.9%** | **5.8%** |
+| − deterministic termination | 3 | 2 | **1.9%** | **5.8%** |
 
 The −reflexes arm's 0.0% gap does not mean it never lied; it means one false
 completion cancelled against one unrecognized success. And **reached-not-recognized
-is completion recognition's own target endpoint** — reporting that layer's *gap*
+is deterministic termination's own target endpoint** — reporting that layer's *gap*
 nets away the very effect the ablation is testing for. This is why §5's endpoint
 list is written in per-attempt categories.
 
@@ -321,9 +330,8 @@ a rig-reliability problem we did not have, in our own paper. Deviation recorded
 | counting supersessions in the discard rate | report faults and supersessions on separate lines | §6. Folding them together turned a 15.0% fault rate into a reported 28.2%. |
 | "the layers specialise" | the whole-harness effect is not attributable to a single layer at this n | H4 was **not supported**: no single-layer ablation cleared the 15pp MEI after Holm. |
 | `A-ON` / `A-OFF` in new prose | **full harness** / **no harness** (§1.1) | "A" is never expanded, and the label reads as A/B testing — a different methodology. Frozen docs keep it; read them through §1.1. |
-| `B1`–`B5` for layer arms | **− perception**, **− preconditions**, **− reflexes**, **− completion check**, **− completion recognition** (§1.1) | An index carries no information and costs a legend lookup per row. The frozen pre-registration already contradicts itself on the count (B1–B5 in §6, B1–B4 in §10). |
-| "deterministic termination" for `autofinish` | **completion recognition** (§2) | "Termination" collides with the 480 s watchdog, which also stops a run and owns `budget_exhaustion`. |
-| "the termination layers" for verify + autofinish | **the completion layers** | Same collision: neither of them is what ends a run on timeout. |
+| `B1`–`B5` for layer arms | **− perception**, **− preconditions**, **− reflexes**, **− completion check**, **− deterministic termination** (§1.1) | An index carries no information and costs a legend lookup per row. The frozen pre-registration already contradicts itself on the count (B1–B5 in §6, B1–B4 in §10). |
+| any synonym for `autofinish` other than **deterministic termination** | deterministic termination (§2) | It is the deliberate contrast to VIGIL's **self-termination**. A coined synonym forfeits the mapping onto published work. |
 
 See [preregistration.md](preregistration.md) for the protocol and
 [protocol.md](protocol.md) for the frozen confirmatory procedure.

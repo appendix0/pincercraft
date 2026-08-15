@@ -50,7 +50,7 @@ ARM_LABEL = {
     'gates': '- preconditions',
     'reflexes': '- reflexes',
     'verify': '- completion check',
-    'autofinish': '- completion recognition',
+    'autofinish': '- deterministic termination',
     'measurement': '- verify+autofinish (retired)',
 }
 

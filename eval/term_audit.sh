@@ -64,10 +64,8 @@ rule "A-ON / A-OFF -> full harness / no harness" \
      'A-ON|A-OFF'
 rule "B1-B5 as layer-arm names -> named ablations (- perception, ...)" \
      '\bB[1-5]\b'
-rule "'deterministic termination' -> completion recognition" \
-     'deterministic termination'
-rule "'the termination layers' -> the completion layers" \
-     'termination layers'
+rule "coined synonym for autofinish -> deterministic termination" \
+     'completion recognition|automatic task closure|completion trigger'
 
 echo
 echo "=== exempt (historical records — reported, never failed) ==="
@@ -79,7 +77,7 @@ done
 echo
 echo "=== canonical layer names in use ==="
 for t in "perception layer" "precondition layer" "reflex layer" \
-         "grounded completion check" "completion recognition" \
+         "grounded completion check" "deterministic termination" \
          "full harness" "no harness"; do
   n=$(grep -rniF "$t" docs/paper/*.md README.md 2>/dev/null | wc -l)
   printf '  %-28s %s\n' "$t" "$n"
