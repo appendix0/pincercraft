@@ -17,7 +17,8 @@ the split	ablation
 completion recognition	deterministic termination
 A-ON|A-OFF	full harness / no harness
 capability (layer|axis|arms)	task success
-harness improves	"a stock agent overstates itself by N points"
+harness improves	"the unharnessed agent overstates itself by N points"
+stock agent	the unharnessed agent (no arm measures upstream)
 layers specialis	no single layer cleared the MEI (H4 not supported)'
 
 fails=0
