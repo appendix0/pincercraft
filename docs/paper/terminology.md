@@ -297,7 +297,16 @@ the whole-harness effect to any one layer.
 | **discard** | `exclusions`, `source` not matching `%superseded%` | An attempt removed for a declared **infrastructure fault** (§8) — the rig failed, so the attempt never produced a result. Never removed because the result looked wrong. |
 | **supersession** | `exclusions`, `source LIKE '%superseded%'` | **Valid** data replaced wholesale by a declared re-run of the same arm under a corrected protocol. Not a fault, not a discard, and not removed for looking wrong. |
 | **discard rate** | computed in `eval/campaign_report.py` | discards ÷ (primary set + discards). **Counts faults only.** Supersessions are reported as a separate line and never folded in. |
-| **minimum effect of interest (MEI)** | `MEI` in `eval/analysis_rules.py` | The smallest per-layer effect worth claiming, pre-declared at 15pp. A layer moving its target category by less is reported as a **bounded null**, not chased with more n. |
+| **minimum effect of interest (MEI)** | `MEI` in `eval/analysis_rules.py` | The smallest per-layer effect worth claiming, pre-declared at 15pp. A layer moving its target category by less is reported as a **bounded null**, not chased with more n. The standard name for this quantity is the **smallest effect size of interest (SESOI)**; cite it once so the choice reads as method rather than coinage. |
+| **bounded null** | `verdict` in `eval/campaign_report.py` | The interval **excludes** any effect as large as the MEI. This is an **equivalence-testing** verdict (cf. TOST), *not* a failure to reject: it is a positive claim that the effect is smaller than 15pp, and it is only available because the threshold was fixed in advance. Distinguish it from **inconclusive**, where the interval spans both the MEI and zero and the data settle nothing. |
+
+**Anchor "bounded null" to the equivalence literature on first use.** It is the
+verdict on H4 — the campaign's headline *negative* result — and a methods
+reviewer who reads it as a bare null will read the whole finding as
+underpowered. What it actually says is stronger and narrower: *no single layer
+moved its target category by 15 points or more, and the interval rules that out.*
+Absence of evidence and evidence of absence are different claims, and only the
+pre-declared threshold lets us make the second one.
 
 **`discard` and `supersession` are different dispositions and must never share a
 number.** Both live in the `exclusions` table for receipt-immutability reasons —

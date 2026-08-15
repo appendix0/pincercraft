@@ -408,7 +408,7 @@ def main(seeds=None, tag='conf'):
                 b['endpoint'] = endpoint
                 results[arm] = b
                 ps.append((arm, b['p']))
-        print(f'  {"layer":<26} {"target failure mode":<24} {"rise":>7}  '
+        print(f'  {"layer":<28} {"target failure mode":<24} {"rise":>7}  '
               f'{"95% CI":<26}  {"Holm-adj":>8}  verdict')
         for arm, p, adj in holm(ps):
             b = results[arm]
@@ -434,10 +434,13 @@ def main(seeds=None, tag='conf'):
                 verdict = f'bounded null (<{MEI:.0%})'
             else:
                 verdict = 'inconclusive'
-            print(f'  {label(arm):<26} {b["endpoint"]:<24} {pct(b["diff"]):>7}  '
+            print(f'  {label(arm):<28} {b["endpoint"]:<24} {pct(b["diff"]):>7}  '
                   f'{ci:<26}  {adj:>8.4f}  {verdict}')
-        print(f'\n  Minimum effect of interest {MEI:.0%}, pre-declared. "Bounded null" means the')
-        print('  interval rules out an effect that large — not that none was found.')
+        print(f'\n  Minimum effect of interest {MEI:.0%}, pre-declared (the standard name for')
+        print('  this quantity is the smallest effect size of interest, SESOI).')
+        print('  "Bounded null" is an equivalence-testing verdict (cf. TOST): the interval')
+        print(f'  RULES OUT an effect as large as {MEI:.0%} — it is not a failure to reject.')
+        print('  "Inconclusive" means the interval spans both that threshold and zero.')
 
     # Cost, for the efficiency line in the paper.
     print('\n' + '-' * 74)
