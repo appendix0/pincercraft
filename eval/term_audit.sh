@@ -21,9 +21,14 @@ EXEMPT="docs/paper/preregistration.md docs/paper/results.md docs/paper/aborts.md
 fails=0
 
 # rule <label> <extended-regex>
+#
+# Blockquote lines (`>`) are skipped. Rename notes and staleness banners have to
+# name the term they are retiring — the same reason terminology.md itself is
+# never scanned. Live prose is not written in blockquotes, so this costs no
+# coverage.
 rule() {
   local label=$1 pat=$2 hits
-  hits=$(grep -rniE "$pat" $ENFORCED 2>/dev/null)
+  hits=$(grep -rniE "$pat" $ENFORCED 2>/dev/null | grep -vE '^[^:]+:[0-9]+:\s*>')
   if [ -n "$hits" ]; then
     printf '\nFAIL  %s\n' "$label"
     printf '%s\n' "$hits" | sed 's/^/      /'
@@ -55,6 +60,14 @@ rule "'the reflex layer reduces false completion' — it does not" \
      'reflex layer reduces false'
 rule "'scaffolding' for OUR system -> harness" \
      'our scaffold|the scaffold(ing)? (we|our)'
+rule "A-ON / A-OFF -> full harness / no harness" \
+     'A-ON|A-OFF'
+rule "B1-B5 as layer-arm names -> named ablations (- perception, ...)" \
+     '\bB[1-5]\b'
+rule "'deterministic termination' -> completion recognition" \
+     'deterministic termination'
+rule "'the termination layers' -> the completion layers" \
+     'termination layers'
 
 echo
 echo "=== exempt (historical records — reported, never failed) ==="
@@ -66,7 +79,8 @@ done
 echo
 echo "=== canonical layer names in use ==="
 for t in "perception layer" "precondition layer" "reflex layer" \
-         "grounded completion check" "deterministic termination"; do
+         "grounded completion check" "completion recognition" \
+         "full harness" "no harness"; do
   n=$(grep -rniF "$t" docs/paper/*.md README.md 2>/dev/null | wc -l)
   printf '  %-28s %s\n' "$t" "$n"
 done

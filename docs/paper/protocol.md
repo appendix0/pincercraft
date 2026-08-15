@@ -7,6 +7,14 @@ scientific commitments live in [preregistration.md](preregistration.md).
 If a run deviates from anything below, it is exploratory. There is no third
 category.
 
+> **Terminology updated 2026-08-15, procedure unchanged.** Arms are now named
+> **full harness** / **no harness** / **− layer** instead of `A-ON` / `A-OFF` /
+> `B1`–`B5`, and `autofinish` is **completion recognition** instead of
+> "deterministic termination" (terminology.md §1.1, §2). These are renames only:
+> no step, threshold, endpoint or commitment below changed, and the frozen
+> [preregistration.md](preregistration.md) is untouched — its wording *is* the
+> pre-commitment and is read through the mapping table in terminology.md §1.1.
+
 ---
 
 ## 0. Exploratory vs confirmatory
@@ -121,7 +129,7 @@ variable, and recorded per attempt:
 
 ## 5. Endpoints
 
-**Primary, A-ON vs A-OFF:** false-completion rate, with verified task success
+**Primary, full harness vs no harness:** false-completion rate, with verified task success
 secondary. Cluster bootstrap over tasks; Wilson intervals; zero-event arms
 reported with a one-sided upper bound rather than as "eliminated".
 
@@ -130,7 +138,7 @@ reported with a one-sided upper bound rather than as "eliminated".
 | arm | endpoint |
 |---|---|
 | grounded completion check (`verify`) | false completion |
-| deterministic termination (`autofinish`) | reached-not-recognized |
+| completion recognition (`autofinish`) | reached-not-recognized |
 | perception, precondition, reflex | verified success |
 
 Overall success is the wrong endpoint for the first two: it dilutes each layer
@@ -146,11 +154,11 @@ recorded before the campaign starts, not after. For reference at 80% power,
 
 | comparison | n per arm |
 |---|---|
-| false completion, A-ON vs A-OFF | 16 |
-| A-ON vs A-OFF (success) | 39 |
-| A-ON vs verify-ablated (success) | 174 |
+| false completion, full harness vs no harness | 16 |
+| full harness vs no harness (success) | 39 |
+| full harness vs − completion check (success) | 174 |
 | verify vs autofinish (success) | 372 |
-| A-ON vs autofinish-ablated (success) | 1,727 |
+| full harness vs − completion recognition (success) | 1,727 |
 
 Clustering by task inflates all of these. A comparison whose required n is not
 affordable is either re-specified onto a sharper endpoint or reported as a
@@ -211,7 +219,7 @@ cheaper than a restart, and far cheaper than a silently biased result.
   completion (#725, `done` in 0.27 s, cobblestone 96→96) is a *result*, and one
   possible only where the grounded completion check is ablated — so the runner
   would have restarted the bot mid-arm in `off` and `verify` and never under
-  A-ON (`7ea45ee`).
+  the full harness (`7ea45ee`).
 - **(d) Re-derive inherited premises against real data.** The pre-registration
   justified the health check as neutral measuring infrastructure on the grounds
   that "a bot able to act never records 0 steps". That was false, and it had
