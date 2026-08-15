@@ -59,7 +59,14 @@ def load(con, seeds=None, tag='conf'):
     # Discards are looked up by attempt_id in `exclusions`, not inferred from a
     # rewritten arm name — raw receipts are append-only, so `task_set` keeps
     # saying which arm the attempt actually ran under even after it is excluded.
-    dropped = {r[0] for r in con.execute("SELECT attempt_id FROM exclusions")}
+    # `source` comes along because two different dispositions live in this table
+    # (terminology.md §6): a DISCARD is an infrastructure fault, meaning the
+    # attempt was never evidence; a SUPERSESSION is valid data replaced wholesale
+    # by a declared re-run. Both leave the primary set, only the first is a rig
+    # failure, and folding them into one rate reported a 28.2% fault rate against
+    # a true 15.0%.
+    dropped = {r[0]: (r[1] or '') for r in
+               con.execute("SELECT attempt_id, source FROM exclusions")}
     rows = con.execute(
         "SELECT attempt_id, task_set, task_name, seed, success, failure_mode, label_source, "
         # `steps` is needed by the shared classify(): a zero-step timeout is an
@@ -79,6 +86,7 @@ def load(con, seeds=None, tag='conf'):
         #   discarded — §8 infrastructure fault, this attempt is not evidence
         #   excluded  — §4 prior commitment, this TASK has no referee coverage
         d['discarded'] = d['attempt_id'] in dropped
+        d['superseded'] = 'superseded' in dropped.get(d['attempt_id'], '')
         d['excluded'] = (d['task_name'] == excl)
         d['claimed'] = claimed(d['success'], d['failure_mode'])
         out.append(d)
@@ -93,14 +101,21 @@ def by_arm(rows):
 
 
 def arm_table(groups, arms, restrict=None):
-    """Verified rate and say-do gap per arm.
+    """Verified rate, say-do gap and false completion per arm.
 
     `restrict` limits every arm to the same task names. Without it the rates
     are each computed over whatever tasks that arm happens to hold, which is
     only meaningful when the arms ran the same set — hence the `tasks` column,
-    so an unequal design is visible in the table rather than implied by it."""
+    so an unequal design is visible in the table rather than implied by it.
+
+    The discordant cells b and c are printed because the say-do gap is (b-c)/n
+    while false completion is b/n: the two coincide only when c = 0, and an arm
+    with c > 0 nets one error against the other. Without these columns a reader
+    cannot tell a genuinely honest arm from a cancelling one — the reflex-ablated
+    arm shows a 0.0% gap holding one false completion and one unrecognized
+    success (terminology.md §5.2)."""
     print(f'{"arm":<13} {"n":>4} {"tasks":>6}  {"verified":>8}  {"95% CI":>16}'
-          f'   {"claimed":>8}  {"say-do gap":>10}')
+          f'   {"claimed":>8}  {"b":>3} {"c":>3}  {"say-do gap":>10}  {"false compl":>11}')
     for arm in arms:
         rs = groups.get(arm, [])
         if restrict is not None:
@@ -110,10 +125,12 @@ def arm_table(groups, arms, restrict=None):
         n = len(rs)
         v = sum(r['success'] for r in rs)
         c = sum(r['claimed'] for r in rs)
+        b_cell = sum(1 for r in rs if r['claimed'] and not r['success'])
+        c_cell = sum(1 for r in rs if not r['claimed'] and r['success'])
         lo, hi = wilson(v, n)
         t = len({r['task_name'] for r in rs})
         print(f'{arm:<13} {n:>4} {t:>6}  {pct(v/n)}  [{pct(lo)},{pct(hi)}]'
-              f'   {pct(c/n)}  {pct(c/n - v/n)}')
+              f'   {pct(c/n)}  {b_cell:>3} {c_cell:>3}  {pct(c/n - v/n)}  {pct(b_cell/n)}')
 
 
 # 1 when the agent claimed done and the referee's world read disagreed. The
@@ -238,13 +255,25 @@ def main(seeds=None, tag='conf'):
 
     # §8 discards, counted by reference. The arm name is intact on these rows,
     # so the rate can be broken down by the arm the attempt actually ran under.
-    if discarded:
-        per_arm = Counter(r['arm'] for r in discarded)
-        print(f'\ndiscarded as infrastructure faults (§8): {len(discarded)} attempt(s), '
-              f'{len(discarded) / len(rows) * 100:.1f}% discard rate')
+    # Faults and supersessions are reported on separate lines and never summed
+    # into one rate (terminology.md §6): a discard says this attempt is not
+    # evidence, a supersession says it was evidence that better evidence
+    # replaced. Only the first is a statement about rig reliability.
+    faults = [r for r in discarded if not r['superseded']]
+    superseded = [r for r in discarded if r['superseded']]
+    if faults:
+        per_arm = Counter(r['arm'] for r in faults)
+        print(f'\ndiscarded as infrastructure faults (§8): {len(faults)} attempt(s), '
+              f'{len(faults) / (len(primary) + len(faults)) * 100:.1f}% discard rate')
         for a, n in sorted(per_arm.items()):
             print(f'    - {a:<36} {n} attempt(s)')
         print('  cause and rule per attempt: `exclusions` table, docs/paper/aborts.md')
+    if superseded:
+        per_arm = Counter(r['arm'] for r in superseded)
+        print(f'\nsuperseded by a declared re-run: {len(superseded)} attempt(s) '
+              f'— NOT a fault, excluded from the discard rate above')
+        for a, n in sorted(per_arm.items()):
+            print(f'    - {a:<36} {n} attempt(s)')
 
     # Every section below iterates the ARMS catalogue, so an arm name that is
     # not in it contributes to nothing and vanishes without a count — a typo in
@@ -262,8 +291,10 @@ def main(seeds=None, tag='conf'):
     print('VERIFIED SUCCESS AND THE SAY-DO GAP, BY ARM')
     print('-' * 74)
     arm_table(groups, ARMS)
-    print('\nsay-do gap = claimed minus verified, on the same attempts.')
-    print('A positive gap is the agent overstating its own success.')
+    print('\nb = claimed but not verified.  c = verified but never claimed.')
+    print('say-do gap = (b-c)/n, a summary statistic — the two cancel.')
+    print('false compl = b/n, the endpoint — they do not. Equal only when c = 0.')
+    print('A positive gap is the agent overstating its own success (terminology.md §5.2).')
 
     # Arms that ran different task sets are not comparable row-to-row: the
     # benchmark grew from 10 tasks to 13, so an arm carrying tier 4 is scored
