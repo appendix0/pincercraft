@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Block-scan referee: verify a placed structure from server ground truth.
+"""Block-scan scorer: verify a placed structure from server ground truth.
 
     python3 eval/blockscan.py --x 1141 --y 86 --z -3 --size 5 --block cobblestone
 
@@ -9,7 +9,7 @@ Prints one JSON object:
      "observed": "25/25 at (1139,85,-5)", "best": 25, "needed": 25,
      "origin": {...}, "level": 85}
 
-The referee could not score the 5x5 platform task at all: its criterion is not
+The scorer could not score the 5x5 platform task at all: its criterion is not
 inventory-shaped, so every attempt fell through to the honor system — the bot's
 own word, which is the one thing the campaign exists not to trust. A human
 labeller could not close the gap either; the owner abstained on all three blind
@@ -17,7 +17,7 @@ platform cards because the evidence file recorded inventory only.
 
 Ground truth comes from the SERVER over RCON (`execute if block`), not from the
 bot's own world model, so it is independent of the agent in the same way the
-inventory referee is. Chunks are force-loaded for the scan and released after —
+inventory scorer is. Chunks are force-loaded for the scan and released after —
 RCON runs with no player nearby, and an unloaded chunk answers "not loaded"
 rather than reporting the blocks that are really there.
 

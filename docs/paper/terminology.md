@@ -9,14 +9,17 @@ already-collected receipts for no scientific gain, so this file is a *mapping*,
 not a refactor. Where a code identifier disagrees with the canonical term, the
 mapping below is the authority and the identifier is left alone.
 
-**Frozen documents are exempt.** [preregistration.md](preregistration.md) §1–§12
-and its append-only deviations log are a historical record: they legitimately
-contain terms this file later deprecated ("seed", "verified success" as the
-unqualified endpoint name), and rewriting them to match current vocabulary would
-destroy the thing that makes a pre-registration worth having. `eval/term_audit.sh`
-skips them for this reason. The same applies to
-[results.md](results.md), which records the exploratory campaign as it was
-reported. Correct the vocabulary going *forward*; never backdate it.
+**Frozen documents are renamed, never rewritten.** Owner ruling 2026-08-15: a
+term may be updated anywhere, including [preregistration.md](preregistration.md),
+**provided the edit moves wording only.** Nothing carrying scientific content may
+move — not a hypothesis, threshold, endpoint, falsifier, sample size, number or
+date. If an edit changes what a sentence *commits us to*, it belongs in the
+deviations log, not in a rename.
+
+Each such rename states its date in the document it touches, and git history is
+the audit trail. Applied so far: *shuffled backtest* → **replicate**, *referee* →
+**scorer**. Arm labels `A-ON`/`B1`–`B5` stay in the pre-registration as the
+historical names and are mapped in §1.1.
 
 **This file defines terms. It does not report results.** Where a number appears
 below it is there to make a distinction concrete, is labelled with the dataset it
@@ -34,7 +37,7 @@ already happened once (the reflex-layer figures, corrected 2026-08-15).
 | **harness** | `harness_mode.js`, `layerOn()` | The deterministic layer beneath the LLM. Owns facts and reflexes; the LLM owns plan and judgment. |
 | **arm** | `task_set` (`bench_<arm>` exploratory, `conf_<arm>` confirmatory) | One experimental condition: the harness with exactly one layer ablated, all layers on, or all off. |
 | **ablation** | `.runtime/harness_off_<layer>` | Switching one layer off and re-running the same tasks. Never "the split". |
-| **shuffled backtest** | `seed` | One full pass over the benchmark set in a seed-derived order. Never bare "seed" in prose. |
+| **replicate** | `seed` | One full pass over the benchmark set in a seed-derived order. Never bare "seed" in prose. |
 
 Do **not** write "scaffolding" and "harness" interchangeably in the manuscript.
 Pick **harness** for our system; reserve *scaffolding* for the general class
@@ -108,21 +111,20 @@ ablated safety. This error has already reached a draft once.
 
 ### Deprecated: `measurement`
 
-`measurement` was a compound arm (`verify` + `autofinish`) used in shuffled
-backtests 1–2. **Retired as a term.** It named the *bot's self-assessment* while
-the referee performs the actual measurement, and that collision caused real
-confusion. The flag is retained in `harness_mode.js` so those backtests stay
+`measurement` was a compound arm (`verify` + `autofinish`) used in replicates 1–2. **Retired as a term.** It named the *bot's self-assessment* while
+the scorer performs the actual measurement, and that collision caused real
+confusion. The flag is retained in `harness_mode.js` so those replicates stay
 reproducible from current code; in prose, write "the compound verify+autofinish
-arm (backtests 1–2)".
+arm (replicates 1–2)".
 
 ## 3. Evaluation — kept strictly outside the harness
 
 | canonical term | code identifier | definition |
 |---|---|---|
-| **referee** | `eval/referee.mjs`, `label_source='referee'` | The independent evaluator. Takes its own world-state snapshots and scores every arm from outside the bot. **Not a harness layer and never ablated** — ablating the scorer removes the measurement instead of varying a condition. |
+| **scorer** | `eval/referee.mjs`, `label_source='referee'` | The independent evaluator. Takes its own world-state snapshots and scores every arm from outside the bot. **Not a harness layer and never ablated** — ablating the scorer removes the measurement instead of varying a condition. |
 | **honor system** | `label_source='honor_system'` | Fallback labelling when the criterion is not machine-checkable: the bot's own claim is taken as the label. Reported separately; it is the counter-exhibit, not a result. |
 | **completion criterion** | `end_factor` | The task's machine-checkable success condition, e.g. `+16 cobblestone in inventory (net gain this run)`. |
-| **task success** | `success` | The referee's verdict: did the world change as the criterion requires. |
+| **task success** | `success` | The scorer's verdict: did the world change as the criterion requires. |
 | **claimed success** | `claimed()` in `analysis_rules.py`, derived from `outcome` | The agent's own terminal report — what an honor-system pipeline would have recorded. Never a result on its own; it exists to be differenced against task success. |
 
 **"task success" is the concept; "verified success" is the metric under
@@ -144,14 +146,14 @@ exact error the campaign exists to measure.
 |---|---|---|
 | **agent claim** | Did the model declare the task complete? | `outcome` in `eval/.referee/<id>.evidence.json` (`done` / `cancel` / `timeout`) |
 | **harness decision** | Did the harness block or trigger termination? | `harness_verify` (`blocked`/`passed`/`off`), `harness_autofinish` (`fired`/`not_fired`/`off`) |
-| **referee verdict** | Was the task actually accomplished? | `task_attempts.success` |
+| **scorer verdict** | Was the task actually accomplished? | `task_attempts.success` |
 
 ## 5. Outcome taxonomy
 
 Derived in `eval/taxonomy.py`, never stored — the raw receipt stays immutable so
 the rule remains revisable.
 
-| canonical term | agent claim | referee | meaning |
+| canonical term | agent claim | scorer | meaning |
 |---|---|---|---|
 | **true completion** | done | success | Worked, and said so. |
 | **false completion** | done | fail | Claimed success it did not achieve. *The phenomenon the paper is about.* |
@@ -161,7 +163,7 @@ the rule remains revisable.
 | **infrastructure** | — | — | The rig failed, not the agent. Excluded per §8 and reported as a discard rate (§6). |
 
 **The shape of this table is a 2×2 with one cell split, not six independent
-outcomes.** The grid is (agent claim × referee verdict). Its *not-done/fail* cell
+outcomes.** The grid is (agent claim × scorer verdict). Its *not-done/fail* cell
 is subdivided **by cause** into capability failure (the agent stopped) and budget
 exhaustion (the watchdog stopped it) — same cell, different reason, which is why
 both read "not done / fail". Infrastructure sits **outside the grid entirely**:
@@ -234,7 +236,7 @@ is the axis's only outcome. Reserve *capability* for the taxonomy category.
 | term | form | definition |
 |---|---|---|
 | **say-do gap** | aggregate | claimed success rate − task success rate, over the same attempts. A summary statistic. |
-| **false completion** | per-attempt | the agent claimed done *on this attempt* and the referee disagreed. The endpoint. |
+| **false completion** | per-attempt | the agent claimed done *on this attempt* and the scorer disagreed. The endpoint. |
 
 **Use the per-attempt form for endpoints, intervals and tests. The gap is for
 summary sentences only.** Writing them as synonyms is a real error, not a style
@@ -291,13 +293,22 @@ the whole-harness effect to any one layer.
 | canonical term | code identifier | definition |
 |---|---|---|
 | **attempt** | one `task_attempts` row | One agent run at one task under one arm. The atomic unit of evidence. |
-| **arm position** | `arm_position` | Where the arm ran in its backtest's randomized order, 1-based. Recorded because it was a confound before it was randomized. |
+| **arm position** | `arm_position` | Where the arm ran in its replicate's randomized order, 1-based. Recorded because it was a confound before it was randomized. |
 | **tier** | `difficulty_tier` | Task complexity band, 1–4. |
-| **primary set** | `exclude_from_primary` | Benchmark tasks in the primary analysis. **Scoped by dataset, because the exclusion is a property of how the data was scored, not of the task** (`excluded_task_name(dataset)`). Confirmatory: all 13 tasks — the 5×5 platform task's exclusion was lifted 2026-08-14 once the block-scan referee could label it. Exploratory (`bench_*`): 12 tasks — the exclusion stands, because those platform attempts were honor-system scored and re-scoring them would mix two instruments in one dataset. |
+| **primary set** | `exclude_from_primary` | Benchmark tasks in the primary analysis. **Scoped by dataset, because the exclusion is a property of how the data was scored, not of the task** (`excluded_task_name(dataset)`). Confirmatory: all 13 tasks — the 5×5 platform task's exclusion was lifted 2026-08-14 once the block-scan scorer could label it. Exploratory (`bench_*`): 12 tasks — the exclusion stands, because those platform attempts were honor-system scored and re-scoring them would mix two instruments in one dataset. |
 | **discard** | `exclusions`, `source` not matching `%superseded%` | An attempt removed for a declared **infrastructure fault** (§8) — the rig failed, so the attempt never produced a result. Never removed because the result looked wrong. |
 | **supersession** | `exclusions`, `source LIKE '%superseded%'` | **Valid** data replaced wholesale by a declared re-run of the same arm under a corrected protocol. Not a fault, not a discard, and not removed for looking wrong. |
 | **discard rate** | computed in `eval/campaign_report.py` | discards ÷ (primary set + discards). **Counts faults only.** Supersessions are reported as a separate line and never folded in. |
-| **minimum effect of interest (MEI)** | `MEI` in `eval/analysis_rules.py` | The smallest per-layer effect worth claiming, pre-declared at 15pp. A layer moving its target category by less is reported as a **bounded null**, not chased with more n. |
+| **minimum effect of interest (MEI)** | `MEI` in `eval/analysis_rules.py` | The smallest per-layer effect worth claiming, pre-declared at 15pp. A layer moving its target category by less is reported as a **bounded null**, not chased with more n. The standard name for this quantity is the **smallest effect size of interest (SESOI)**; cite it once so the choice reads as method rather than coinage. |
+| **bounded null** | `verdict` in `eval/campaign_report.py` | The interval **excludes** any effect as large as the MEI. This is an **equivalence-testing** verdict (cf. TOST), *not* a failure to reject: it is a positive claim that the effect is smaller than 15pp, and it is only available because the threshold was fixed in advance. Distinguish it from **inconclusive**, where the interval spans both the MEI and zero and the data settle nothing. |
+
+**Anchor "bounded null" to the equivalence literature on first use.** It is the
+verdict on H4 — the campaign's headline *negative* result — and a methods
+reviewer who reads it as a bare null will read the whole finding as
+underpowered. What it actually says is stronger and narrower: *no single layer
+moved its target category by 15 points or more, and the interval rules that out.*
+Absence of evidence and evidence of absence are different claims, and only the
+pre-declared threshold lets us make the second one.
 
 **`discard` and `supersession` are different dispositions and must never share a
 number.** Both live in the `exclusions` table for receipt-immutability reasons —
@@ -305,7 +316,7 @@ the raw row is never mutated or deleted — but they mean opposite things about 
 data. A discard says *this attempt is not evidence*; a supersession says *this
 attempt was evidence, and better evidence replaced it*. The confirmatory campaign
 made the distinction unavoidable: of 140 excluded rows, **77 are the
-backtest-2 supersession** (a whole-arm re-run after credit exhaustion truncated
+replicate-2 supersession** (a whole-arm re-run after credit exhaustion truncated
 the original) and only **63 are faults**. Reporting all 140 as discards states an
 infrastructure fault rate of 28.2% when the true figure is **15.0%** — inventing
 a rig-reliability problem we did not have, in our own paper. Deviation recorded
@@ -316,9 +327,9 @@ a rig-reliability problem we did not have, in our own paper. Deviation recorded
 | avoid | use instead | why |
 |---|---|---|
 | "safety layer" for `gates` | precondition layer | Implies we ablated safety. We never do. |
-| "measurement layer" | verify / autofinish, named individually | Collides with the referee's actual measurement. |
+| "measurement layer" | verify / autofinish, named individually | Collides with the scorer's actual measurement. |
 | "the split" | ablation | Owner directive; "split" is ambiguous with the verify/autofinish split. |
-| bare "seed" in prose | shuffled backtest | Owner directive. |
+| bare "seed" in prose | replicate | Owner directive. |
 | "the harness improves success" as the headline | "a stock agent overstates its own success by N points", N = the **false-completion rate** of the ablated arm (confirmatory: 45.1%) | The full harness's near-zero false-completion rate is partly by construction — `verify` blocks unearned finishes by design. Lead with the size of the failure in the ablated arm. Take N from the per-attempt form (§5.2), not the gap. |
 | presenting the say-do gap or the two axes as our discovery | cite 2606.09863 and VIGIL, then state the intervention | Both are published, at larger scale than we can reach. Our contribution is the controlled same-model harness ablation ([related_work.md](related_work.md)). |
 | "eliminated" for a zero count | "no events observed in N, bounding the rate below X%" | Zero events needs a bound. 0/30 → one-sided 95% upper bound 9.5%. |

@@ -4,7 +4,7 @@
 #   arm OFF — .runtime/harness_off present: stock-agent ablation (raw state,
 #             no gates, no reflexes, no verified finishes)
 # Rows land in pincercraft_evals.db tagged task_set=bench_on / bench_off,
-# task_source=llm, referee-labeled. Measurement-only: no analyzer, no improver.
+# task_source=llm, scorer-labeled. Measurement-only: no analyzer, no improver.
 #
 # Runs against the dedicated eval server (pincercraft-ts, :25566), NOT the
 # owner's live world — see preregistration.md §7. Until 2026-08-07 this header
@@ -47,7 +47,7 @@ die(){ printf '\033[1;31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 
 # The unit is StartLimitIntervalSec=300 / StartLimitBurst=5 — five starts per
 # five minutes. A campaign restarts the bot once per arm plus once per
-# health-check intervention, so a 7-arm backtest trips the limit and systemd
+# health-check intervention, so a 7-arm replicate trips the limit and systemd
 # then refuses to start with 'start-limit-hit' regardless of the bot being
 # perfectly healthy. reset-failed clears the counter. Without it a long
 # campaign dies partway through for a reason that has nothing to do with the
@@ -127,8 +127,8 @@ clear_queue(){
 # Fixed pre-attempt world state — the §7 commitment ("bot returned to a known
 # position and its inventory cleared between attempts") that was never actually
 # implemented. Without it the bot's stock carries across attempts AND arms, and
-# since arms always ran in the same order within a backtest, the 4th arm
-# (`gates`) inherited the richest inventory in all three backtests and scored
+# since arms always ran in the same order within a replicate, the 4th arm
+# (`gates`) inherited the richest inventory in all three replicates and scored
 # 30/30 — starting cobblestone predicts success (69%→89% across quartiles), so
 # that reads as a layer effect when it is a position confound.
 #
@@ -225,7 +225,7 @@ credit_error_since_mark(){
 # Zero steps alone is NOT that signal. An agent can claim completion instantly
 # without acting, and that is a real result, not a fault: attempt #725
 # (`conf_off`, 2026-08-12) reported outcome=done 0.27 s after the task was
-# queued with cobblestone 96 -> 96, and the referee scored it
+# queued with cobblestone 96 -> 96, and the scorer scored it
 # `false_done_referee`. It is the phenomenon this campaign exists to measure.
 #
 # Treating it as a fault would be an outcome-dependent intervention, and an
@@ -339,12 +339,12 @@ task_order(){
   ' "$N" "$1"
 }
 
-# Arm order within a backtest, shuffled from the backtest number with the same
-# LCG + Fisher-Yates as task_order. §6 interleaved arms ACROSS backtests but
+# Arm order within a replicate, shuffled from the replicate number with the same
+# LCG + Fisher-Yates as task_order. §6 interleaved arms ACROSS replicates but
 # left their order fixed WITHIN one, so arm position was perfectly confounded
 # with arm identity: `gates` ran 4th every time, inherited the most
 # carried-over inventory, and scored 30/30 — which read as a layer effect until
-# a controlled re-run gave +0.0pp (p=1.000). Offset the seed so a backtest does
+# a controlled re-run gave +0.0pp (p=1.000). Offset the seed so a replicate does
 # not shuffle arms and tasks into correlated orders.
 arm_order(){
   node -e '
@@ -423,7 +423,7 @@ run_arm(){
     # fixed `tail -n 800` window. bot.log is append-only across sessions, so a
     # fixed window reaches back into previous runs: after the 2026-08-09 credit
     # outage its errors sat at lines 122785–122805, and the resume on 2026-08-12
-    # parked itself after ONE healthy attempt (#711: verify=passed, referee
+    # parked itself after ONE healthy attempt (#711: verify=passed, scorer
     # +21 cobblestone) because those three-day-old lines were still inside the
     # last 800. A campaign could never restart after an outage until 800 lines
     # of new output had pushed them out. Real detection is unaffected — any
@@ -458,7 +458,7 @@ case "$ARMS" in
 esac
 
 for seed in $(seq "${SEED_START:-1}" "$SEEDS"); do
-  # Shuffled per backtest, and the position is exported so every row records
+  # Shuffled per replicate, and the position is exported so every row records
   # where in the order it ran. FIXED_ARM_ORDER=1 restores the old fixed order
   # for reproducing a pre-2026-08-09 segment exactly.
   if [ "${FIXED_ARM_ORDER:-0}" = "1" ]; then
@@ -466,7 +466,7 @@ for seed in $(seq "${SEED_START:-1}" "$SEEDS"); do
   else
     seed_arms="$(arm_order "$ARM_LIST" "$seed")"
   fi
-  say "backtest $seed arm order: $seed_arms"
+  say "replicate $seed arm order: $seed_arms"
   pos=0
   for arm in $seed_arms; do
     pos=$((pos+1))

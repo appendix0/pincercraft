@@ -17,7 +17,7 @@ Nothing here is described as significant without its interval printed beside it.
 Task-level exclusions are applied by task identity, declared in advance (§4) —
 never by whether a given row happened to fall back to honor_system, which would
 condition the exclusion on the outcome. As of 2026-08-14 there are none: the
-platform task's exclusion was lifted once the block-scan referee could label it.
+platform task's exclusion was lifted once the block-scan scorer could label it.
 """
 import json, os, random, sqlite3, sys
 from collections import Counter, defaultdict
@@ -107,7 +107,7 @@ def load(con, seeds=None, tag='conf'):
         d['arm'] = d['task_set'][len(tag) + 1:]
         # Two independent reasons a row leaves the primary analysis, kept apart:
         #   discarded — §8 infrastructure fault, this attempt is not evidence
-        #   excluded  — §4 prior commitment, this TASK has no referee coverage
+        #   excluded  — §4 prior commitment, this TASK has no scorer coverage
         d['discarded'] = d['attempt_id'] in dropped
         d['superseded'] = 'superseded' in dropped.get(d['attempt_id'], '')
         d['excluded'] = (d['task_name'] == excl)
@@ -156,7 +156,7 @@ def arm_table(groups, arms, restrict=None):
               f'   {pct(c/n)}  {b_cell:>3} {c_cell:>3}  {pct(c/n - v/n)}  {pct(b_cell/n)}')
 
 
-# 1 when the agent claimed done and the referee's world read disagreed. The
+# 1 when the agent claimed done and the scorer's world read disagreed. The
 # paper's central quantity, derived rather than stored, and taken from the same
 # taxonomy rule every other endpoint uses so the primary endpoint cannot drift
 # away from the category of the same name.
@@ -241,7 +241,7 @@ def main(seeds=None, tag='conf'):
     if not rows:
         sys.exit(f'no rows for task_set {tag}_*, seed > 0.\n'
                  f'The default namespace is the CONFIRMATORY set; the exploratory '
-                 f'backtests are --tag bench.')
+                 f'replicates are --tag bench.')
 
     excl = excluded_task_name(tag)
     discarded = [r for r in rows if r['discarded']]
@@ -265,12 +265,12 @@ def main(seeds=None, tag='conf'):
     seeds_seen = sorted({r['seed'] for r in rows})
     print(f'seeds present: {seeds_seen}')
 
-    # Any non-referee row in the primary set means a criterion failed to parse.
+    # Any non-scorer row in the primary set means a criterion failed to parse.
     # That is a data-quality problem, not a result, so it is surfaced loudly
     # rather than quietly averaged in.
     strays = [r for r in primary if r['label_source'] != 'referee']
     if strays:
-        print(f'\n  WARNING: {len(strays)} primary-set row(s) are not referee-labeled.')
+        print(f'\n  WARNING: {len(strays)} primary-set row(s) are not scorer-labeled.')
         print('  Their end_factor did not parse to an inventory shape. Fix the')
         print('  criterion and re-run those attempts — do not report them as measured.')
         for r in strays[:5]:
@@ -408,7 +408,7 @@ def main(seeds=None, tag='conf'):
                 b['endpoint'] = endpoint
                 results[arm] = b
                 ps.append((arm, b['p']))
-        print(f'  {"layer":<26} {"target failure mode":<24} {"rise":>7}  '
+        print(f'  {"layer":<28} {"target failure mode":<24} {"rise":>7}  '
               f'{"95% CI":<26}  {"Holm-adj":>8}  verdict')
         for arm, p, adj in holm(ps):
             b = results[arm]
@@ -434,10 +434,13 @@ def main(seeds=None, tag='conf'):
                 verdict = f'bounded null (<{MEI:.0%})'
             else:
                 verdict = 'inconclusive'
-            print(f'  {label(arm):<26} {b["endpoint"]:<24} {pct(b["diff"]):>7}  '
+            print(f'  {label(arm):<28} {b["endpoint"]:<24} {pct(b["diff"]):>7}  '
                   f'{ci:<26}  {adj:>8.4f}  {verdict}')
-        print(f'\n  Minimum effect of interest {MEI:.0%}, pre-declared. "Bounded null" means the')
-        print('  interval rules out an effect that large — not that none was found.')
+        print(f'\n  Minimum effect of interest {MEI:.0%}, pre-declared (the standard name for')
+        print('  this quantity is the smallest effect size of interest, SESOI).')
+        print('  "Bounded null" is an equivalence-testing verdict (cf. TOST): the interval')
+        print(f'  RULES OUT an effect as large as {MEI:.0%} — it is not a failure to reject.')
+        print('  "Inconclusive" means the interval spans both that threshold and zero.')
 
     # Cost, for the efficiency line in the paper.
     print('\n' + '-' * 74)

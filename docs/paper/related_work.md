@@ -93,8 +93,8 @@ layer. Second, their **stated limitations name our design**:
 - single scored runs; preliminary ablations covering two of four specialists
 - proprietary weights, corpus and prompts not released
 
-We have the controlled same-model ablation, repeated shuffled backtests, an
-independent referee, and open receipts. That is the gap, stated by the closest
+We have the controlled same-model ablation, repeated replicates, an
+independent scorer, and open receipts. That is the gap, stated by the closest
 prior work itself.
 
 ## 4. Supporting context
@@ -175,7 +175,7 @@ name, findability beats our coinage — a paper that invents a synonym for
 | our term | field term | decision |
 |---|---|---|
 | false completion | **false success** (2606.09863) | **Adopt "false success" as primary** in the manuscript; keep `false_completion` as the code identifier and note the synonym once. The standing rule already separates prose from identifiers. |
-| task success (the *do* axis) | **world completion** (VIGIL) | Keep "task success" — it is what our referee measures — but cite VIGIL's W on first use so the mapping is explicit. |
+| task success (the *do* axis) | **world completion** (VIGIL) | Keep "task success" — it is what our scorer measures — but cite VIGIL's W on first use so the mapping is explicit. |
 | self-report accuracy (the *say* axis) | **self-termination** (VIGIL) | VIGIL's term is narrower (it is about closing the episode). Keep ours, define it against theirs. |
 | reached-not-recognized | **post-attainment drift** (VIGIL) | Adopt theirs on first use, then ours. Ours is more literal; theirs is citable. |
 | capability failure | **missed execution** (VIGIL) | Same treatment. |

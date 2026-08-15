@@ -8,7 +8,7 @@ the owner (whose only task is labelling) and whoever resumes the campaign.
 ## Owner: how to do the ~40 blind labels
 
 This is the only step that cannot be automated, because the whole claim is that
-the referee agrees with an *independent* human. You do not need to be in-game.
+the scorer agrees with an *independent* human. You do not need to be in-game.
 
 **1. Generate cards**
 
@@ -18,7 +18,7 @@ python3 eval/evidence.py cards --out /tmp/cards.md
 ```
 
 Each card shows the task, what the bot claimed, and the inventory before/after.
-The referee's verdict is deliberately withheld — that comparison is the
+The scorer's verdict is deliberately withheld — that comparison is the
 measurement, and it is worthless if you saw the machine's answer first.
 
 **2. Judge each one**
@@ -68,8 +68,8 @@ ARMS="on off perception gates reflexes measurement" SEEDS=3 \
   bash eval/field_trial.sh
 ```
 
-Shuffled backtests are the outer loop, so arms interleave and drift hits all
-arms equally. Task order is shuffled per backtest and echoed into the run log.
+Replicates are the outer loop, so arms interleave and drift hits all
+arms equally. Task order is shuffled per replicate and echoed into the run log.
 
 The runner points the bot at **pincercraft-ts :25566** via `.runtime/target.json`,
 verifies the connection from the OS after spawn, and clears the file on exit so

@@ -3,7 +3,7 @@
 
 Writes eval/hf_export/ (gitignored):
     README.md               dataset card
-    data/task_attempts.jsonl   full attempt ledger (referee + honor labels)
+    data/task_attempts.jsonl   full attempt ledger (scorer + honor labels)
     data/gold_labels.jsonl     human gold labels (calibration set)
     data/metrics.jsonl         per-task token/cache/cost metrics
     data/code_changes.jsonl    self-improvement loop: what it changed and why

@@ -20,7 +20,7 @@ endpoint for a per-layer ablation and these categories are sharp ones:
 Three independent signals, deliberately never collapsed (preregistration §3):
     agent    what the model claimed   evidence.outcome
     harness  what the harness did     harness_verify / harness_autofinish
-    referee  what was actually true   task_attempts.success
+    scorer  what was actually true   task_attempts.success
 """
 import argparse, glob, json, os, sqlite3, sys
 from collections import Counter, defaultdict
@@ -41,7 +41,7 @@ from eval_db import DB_PATH as DB  # noqa: E402  single env-aware definition
 EV_DIR = os.path.join(os.path.dirname(os.path.abspath(DB)), 'eval', '.referee')
 
 def load_claims():
-    """task_id -> what the AGENT said. Kept apart from the referee verdict on
+    """task_id -> what the AGENT said. Kept apart from the scorer verdict on
     purpose: collapsing them is exactly the error the campaign measures.
 
     `task_id` is unique per attempt (verified over all 287 bench+conf rows), so
@@ -75,7 +75,7 @@ def resolve_claim(row, claims):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--seeds', help='comma-separated backtest numbers')
+    ap.add_argument('--seeds', help='comma-separated replicate numbers')
     ap.add_argument('--arms', help='comma-separated arm names')
     ap.add_argument('--task-set-prefix', default='bench')
     ap.add_argument('--include-pilot', action='store_true',
@@ -103,7 +103,7 @@ def main():
     for r in rows:
         # Default to the campaign proper. Seed 0 is the July field trial, run
         # before the protocol was frozen and under a different rig; pooling it
-        # with campaign backtests silently mixes two regimes, and it carries no
+        # with campaign replicates silently mixes two regimes, and it carries no
         # evidence files at all.
         if not a.include_pilot and (r['seed'] or 0) == 0:
             n_pilot += 1

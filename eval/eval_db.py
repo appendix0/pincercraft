@@ -121,7 +121,7 @@ _MIGRATIONS = (
     # non-independent, so the seed has to be recoverable per row rather than
     # inferred from timestamps. 0 = pre-campaign rows.
     "ALTER TABLE task_attempts ADD COLUMN seed INTEGER DEFAULT 0",
-    # Position of this arm within its backtest's run order, 1-based. Arm order
+    # Position of this arm within its replicate's run order, 1-based. Arm order
     # used to be fixed, which made position perfectly confounded with arm
     # identity: `gates` always ran 4th, inherited the richest carried-over
     # inventory, and scored 30/30 — read as a layer effect until a controlled
@@ -129,7 +129,7 @@ _MIGRATIONS = (
     # has to be recorded to be adjustable for. 0 = not part of a campaign arm.
     "ALTER TABLE task_attempts ADD COLUMN arm_position INTEGER DEFAULT 0",
     # The harness's OWN decisions, kept separate from the agent's claim
-    # (evidence.outcome) and the referee's verdict (success). Without these the
+    # (evidence.outcome) and the scorer's verdict (success). Without these the
     # three-way separation is not recoverable from the row: we could see what
     # the bot said and what was true, but not what the harness did about it.
     #   harness_verify:     blocked | passed | off
