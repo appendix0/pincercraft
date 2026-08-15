@@ -9,8 +9,9 @@ category.
 
 > **Terminology updated 2026-08-15, procedure unchanged.** Arms are now named
 > **full harness** / **no harness** / **− layer** instead of `A-ON` / `A-OFF` /
-> `B1`–`B5` (terminology.md §1.1). Layer names are unchanged — `autofinish`
-> remains **deterministic termination**. This is a rename only:
+> `B1`–`B5` (terminology.md §1.1); *shuffled backtest* is now **replicate** and
+> *referee* is now **scorer**. Layer names are unchanged — `autofinish`
+> remains **deterministic termination**. These are renames only:
 > no step, threshold, endpoint or commitment below changed, and the frozen
 > [preregistration.md](preregistration.md) is untouched — its wording *is* the
 > pre-commitment and is read through the mapping table in terminology.md §1.1.
@@ -19,7 +20,7 @@ category.
 
 ## 0. Exploratory vs confirmatory
 
-**Shuffled backtests 1–3 (attempts up to #616) are EXPLORATORY.** They may
+**Replicates 1–3 (attempts up to #616) are EXPLORATORY.** They may
 generate hypotheses, expose failure modes, and size future experiments. They
 must not supply a number to the paper's claims.
 
@@ -84,15 +85,15 @@ replicates becomes necessary.
 
 ## 2. Arms and ordering
 
-- **Arm order is randomized per shuffled backtest**, from the backtest number
+- **Arm order is randomized per replicate**, from the replicate number
   via the same LCG + Fisher–Yates as task order, offset so arms and tasks do not
   correlate. `FIXED_ARM_ORDER=1` exists only to reproduce a pre-2026-08-09
   segment.
 - **`arm_position` is recorded on every attempt** so the variable remains
   adjustable for in analysis.
-- **Task order is shuffled per backtest**, so tier never correlates with world
+- **Task order is shuffled per replicate**, so tier never correlates with world
   depletion.
-- The backtest is the **outer** loop and the arm the inner one, so drift over a
+- The replicate is the **outer** loop and the arm the inner one, so drift over a
   multi-day campaign hits all arms roughly equally.
 - Every arm in a comparison runs **the same task set on the same commit**. Arms
   are never mixed across code versions; if a fix lands mid-campaign, every
@@ -111,7 +112,7 @@ variable, and recorded per attempt:
 | `code_timeout_mins` | 5 |
 | `num_examples` | 2 |
 | benchmark set | `eval/benchmarks.json`, 13 tasks, tiers 1–4 |
-| referee | `eval/referee.mjs`, never ablated |
+| scorer | `eval/referee.mjs`, never ablated |
 | per-attempt budget | `WATCH_TIMEOUT=480 s` |
 
 ## 4. Stopping and budget rules — declared in advance
@@ -193,7 +194,7 @@ bounded null — never run underpowered and read as a ranking.
    the receipt until a live run has been shown to write it** — three fields
    looked correct and wrote NULL on 2026-08-09.
 8. **A `TAG=smoke` run of at least two arms, one of them ablated, completed and
-   inspected** — rows landed, `arm_position` and `harness_*` populated, referee
+   inspected** — rows landed, `arm_position` and `harness_*` populated, scorer
    labelled, no spurious park or restart. Smoke rows are inert to the analysis
    by design, so this cannot contaminate a rate.
 9. **The runner and analysis path read end to end since the last campaign**,
@@ -263,7 +264,7 @@ do not crash, which is the class that has actually cost us results.
    twenty lines, and among the highest-yield checks in industrial practice.
 
 Lower priority, same spirit: **positive and negative control tasks inside the
-campaign** rather than only in referee calibration — a must-fail probe would
+campaign** rather than only in scorer calibration — a must-fail probe would
 have caught `redundantAcquire` rendering every `+N NEW <tool>` task
 unsatisfiable — and **fault injection for every runner intervention**: write a
 synthetic credit error and assert the detector fires; write a 0-step completion

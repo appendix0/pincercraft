@@ -1,16 +1,16 @@
-# Campaign results — exploratory, shuffled backtests 1–2
+# Campaign results — exploratory, replicates 1–2
 
-120 attempts, six arms, two shuffled backtests, 2026-08-07. Collected under
+120 attempts, six arms, two replicates, 2026-08-07. Collected under
 [preregistration.md](preregistration.md), on the dedicated eval world
 (pincercraft-ts) rather than the owner's live world.
 
-Primary set is 9 tasks × 2 shuffled backtests = 18 per arm; the platform task is
+Primary set is 9 tasks × 2 replicates = 18 per arm; the platform task is
 excluded by prior declaration (§4), which **still stands for this exploratory
 dataset** — these platform attempts were honor-system scored, and the 2026-08-14
 lift applies only to the confirmatory set (terminology.md §6).
 
 > **Stale below this line.** The numbers in this file are the exploratory
-> backtests 1–2 only. Backtest 3 was later collected, and the confirmatory
+> replicates 1–2 only. Replicate 3 was later collected, and the confirmatory
 > campaign supersedes all of it for every claim in the paper. Left in place as
 > the exploratory record; do not quote it as a result.
 
@@ -26,7 +26,7 @@ lift applies only to the confirmatory set (terminology.md §6).
 | measurement | 27.8% | [12.5, 50.9] | 44.4% | 16.7% |
 
 **Primary endpoint (H2): still not supported.** ON − OFF = 22.2%, 95% CI
-[−5.6%, +50.0%], p = 0.15. The gap widened from shuffled backtest 1 (11.1%) and now nearly
+[−5.6%, +50.0%], p = 0.15. The gap widened from replicate 1 (11.1%) and now nearly
 excludes zero, but it does not. Reported as it came out, per §11.
 
 **Per-layer ablation vs ON:**
@@ -125,7 +125,7 @@ measuring anything a user cares about.
    predates the verify/autofinish split and describes the compound;
    `harness_off_measurement` is retained as a compound flag so these runs stay
    reproducible.
-2. **Two shuffled backtests, n = 18 per arm.** Intervals are wide; the per-layer
+2. **Two replicates, n = 18 per arm.** Intervals are wide; the per-layer
    analysis is exploratory as pre-declared.
 3. **The task set is too easy on a fresh world — measured, not suspected.**
    A-ON scored **3/3 on eight of the nine primary tasks**; only the stone
@@ -152,7 +152,7 @@ measuring anything a user cares about.
 22.2% and its interval still spans zero.
 
 **Does:** the say-do gap, and more sharply than before. OFF claimed 100% and
-delivered 66.7% — six silent false completions, caught only because the referee
+delivered 66.7% — six silent false completions, caught only because the scorer
 measured the world rather than reading the transcript. ON's claims matched its
 deliveries exactly, twice over.
 

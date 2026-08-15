@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT">
   <img src="https://img.shields.io/badge/fork%20of-Mindcraft-informational" alt="Fork of Mindcraft">
   <img src="https://img.shields.io/badge/lies%20to%20itself-no-brightgreen" alt="Lies to itself: no">
-  <img src="https://img.shields.io/badge/referee--verified-9%2F9%20harness%20on%20·%201%2F9%20off-blueviolet" alt="Referee-verified: 9/9 with the harness, 1/9 without">
+  <img src="https://img.shields.io/badge/scorer--verified-9%2F9%20harness%20on%20·%201%2F9%20off-blueviolet" alt="Scorer-verified: 9/9 with the harness, 1/9 without">
 </p>
 
 <p align="center">
@@ -37,18 +37,18 @@ Inventory counts, *"can I mine this?"*, the recipe gap, *"is this task actually 
 
 ## The problem, named and measured
 
-The distance between what an agent *says* it did and what the world's ledger *shows* — the **say-do gap** — is the problem this repo exists to close. We ran the same ten benchmark tasks with the harness on and off, every attempt graded by a deterministic referee from the world-state delta; the model's own "done!" counts for nothing:
+The distance between what an agent *says* it did and what the world's ledger *shows* — the **say-do gap** — is the problem this repo exists to close. We ran the same ten benchmark tasks with the harness on and off, every attempt graded by a deterministic scorer from the world-state delta; the model's own "done!" counts for nothing:
 
 | | claimed "done" | the world agreed |
 |---|---|---|
 | **Harness on** | 9/9 | **9/9** |
 | **Harness off** | 9/9 | **1/9** |
 
-Same model, same tasks, same server — the only variable is whether code or the LLM owns the facts. The gap is a loop-design problem, not a model problem, which means a bigger model won't close it and a referee will. (The referee itself was calibrated against blind human labels first: 11/12, 92%.) Full table, caveats included, in [Receipts](#receipts).
+Same model, same tasks, same server — the only variable is whether code or the LLM owns the facts. The gap is a loop-design problem, not a model problem, which means a bigger model won't close it and a scorer will. (The scorer itself was calibrated against blind human labels first: 11/12, 92%.) Full table, caveats included, in [Receipts](#receipts).
 
 ## The five features that matter
 
-Five features, one underlying split. **System1** is the deterministic layer: perception, gates, reflexes, and the referee (§1 below), plus the loop guards in §3 — all code, all CPU, all free to run. **System2** is the LLM — invoked only to plan and to write code (§2) — the only part that costs a token. It's the same dual-process pattern physical-AI models like NVIDIA's GR00T use (fast reactive control vs. slow reasoning), applied to an agent loop instead of a robot arm: keep the fast layer in code, spend the slow layer's budget on judgment. Cache-first prompt layout (§3) keeps even that budget small — 79% of measured tokens are cache reads, not fresh billing. → [`modes.js`](src/agent/modes.js) (11 named reflexes), [`live_state.js`](src/agent/live_state.js), [`orchestrator_v2.js`](src/agent/orchestrator_v2.js)
+Five features, one underlying split. **System1** is the deterministic layer: perception, gates, reflexes, and the scorer (§1 below), plus the loop guards in §3 — all code, all CPU, all free to run. **System2** is the LLM — invoked only to plan and to write code (§2) — the only part that costs a token. It's the same dual-process pattern physical-AI models like NVIDIA's GR00T use (fast reactive control vs. slow reasoning), applied to an agent loop instead of a robot arm: keep the fast layer in code, spend the slow layer's budget on judgment. Cache-first prompt layout (§3) keeps even that budget small — 79% of measured tokens are cache reads, not fresh billing. → [`modes.js`](src/agent/modes.js) (11 named reflexes), [`live_state.js`](src/agent/live_state.js), [`orchestrator_v2.js`](src/agent/orchestrator_v2.js)
 
 ### 1. The deterministic layer — code owns every fact
 
@@ -60,7 +60,7 @@ The flagship, and the reason the fork exists. Everything the bot *believes* is c
 
 **1-3 · Reflexes.** Failure shapes that don't deserve an LLM round get hard-coded responses: an empty wide search parks the task and asks the player instead of looping (it once spent 24 rounds hunting spiders on a peaceful world — never again), a broken tool re-equips, a full inventory gets handled before it blocks the task.
 
-**1-4 · The referee.** Task success is measured, not claimed: snapshot inventory before, re-measure after, label from the world-state delta. The bot's own "done!" counts for nothing. Every attempt lands in a SQLite ledger with tokens, wall clock, failure mode, and who labeled it — referee or honor system ([receipts below](#receipts)). → [`eval/referee.mjs`](eval/referee.mjs)
+**1-4 · The scorer.** Task success is measured, not claimed: snapshot inventory before, re-measure after, label from the world-state delta. The bot's own "done!" counts for nothing. Every attempt lands in a SQLite ledger with tokens, wall clock, failure mode, and who labeled it — scorer or honor system ([receipts below](#receipts)). → [`eval/referee.mjs`](eval/referee.mjs)
 
 ### 2. It thinks, then shuts up
 
@@ -76,11 +76,11 @@ Conduct comes in two parts. The staple Code of Conduct — no griefing, no chest
 
 ### 5. Appendix: a self-improvement loop, open for study
 
-A closed eval loop invents tasks (easy first, ramping on clean successes), runs them, referee-labels the outcomes, finds the weak spot, and drafts a fix to `src/` — **on a branch, stopped for human review**. Nothing merges itself. The loop is how most of the fixes in the [changelog](docs/CHANGELOG.md) were found, and it's why the repo doubles as a case study: every attempt it ever made is in the ledger, episode traces included, failures and all. → [`eval/`](eval/)
+A closed eval loop invents tasks (easy first, ramping on clean successes), runs them, scorer-labels the outcomes, finds the weak spot, and drafts a fix to `src/` — **on a branch, stopped for human review**. Nothing merges itself. The loop is how most of the fixes in the [changelog](docs/CHANGELOG.md) were found, and it's why the repo doubles as a case study: every attempt it ever made is in the ledger, episode traces included, failures and all. → [`eval/`](eval/)
 
 ## Receipts
 
-The referee exists because we caught the old honor system red-handed: eval cycle 2 asked the bot to *gather 32 cobblestone*, it already held 37, declared done in five seconds having moved zero blocks — and the LLM grader scored it a success. The deterministic delta check fails it: gained 0, needed 32. That disagreement is the whole thesis in one row of the database.
+The scorer exists because we caught the old honor system red-handed: eval cycle 2 asked the bot to *gather 32 cobblestone*, it already held 37, declared done in five seconds having moved zero blocks — and the LLM grader scored it a success. The deterministic delta check fails it: gained 0, needed 32. That disagreement is the whole thesis in one row of the database.
 
 For a worked before/after with real transcripts — the same impossible task with and without the harness — see [the search-miss receipt](docs/receipts/2026-07-12-search-miss-before-after.md).
 
@@ -90,13 +90,13 @@ Physical-AI teams calibrate broad automated data against a small, expensive, hum
 
 | Tier | What | Rows | Role |
 |---|---|---|---|
-| Apex — calibration | blind human verdicts (`gold_attempts`) | 12 comparable | certifies the referee (11/12, 92% agreement) |
-| Middle — scale | referee labels from world-state delta (`task_attempts`) | 158 of 192 | cheap, automated, trustworthy *because* calibrated |
+| Apex — calibration | blind human verdicts (`gold_attempts`) | 12 comparable | certifies the scorer (11/12, 92% agreement) |
+| Middle — scale | scorer labels from world-state delta (`task_attempts`) | 158 of 192 | cheap, automated, trustworthy *because* calibrated |
 | Base — raw | the model's own honor-system word (`task_attempts`) | 34 of 192 | the counter-exhibit — included on purpose, never headlined |
 
-**How the apex count works**, since the table above is the number a reader will check. `gold_attempts` holds **23** human-judged rows, but they are not all calibration. **16** carry an `agree:task_id=N` tag binding the verdict to one specific attempt; the other 7 are curated examples that certify nothing. Of those 16, **12** have a referee verdict to compare against — 11 agree, hence **11/12 = 92%** — and 4 compare against an honor-system label, where agreement is **0/4**. That 0/4 is not a defect in the apex; it is [the finding](#receipts). Only tagged rows are calibration, and only `eval/agreement.py label` writes them — `eval/gold_add.py` adds curated rows to the same table and does not touch the agreement math.
+**How the apex count works**, since the table above is the number a reader will check. `gold_attempts` holds **23** human-judged rows, but they are not all calibration. **16** carry an `agree:task_id=N` tag binding the verdict to one specific attempt; the other 7 are curated examples that certify nothing. Of those 16, **12** have a scorer verdict to compare against — 11 agree, hence **11/12 = 92%** — and 4 compare against an honor-system label, where agreement is **0/4**. That 0/4 is not a defect in the apex; it is [the finding](#receipts). Only tagged rows are calibration, and only `eval/agreement.py label` writes them — `eval/gold_add.py` adds curated rows to the same table and does not touch the agreement math.
 
-**The apex has not grown with the base.** The 2026-08-07 ablation campaign added 120 referee-labeled rows and zero human ones, so the middle tier is now ~13× the comparable apex, against ~4× when the 92% figure was earned. Worse, those 16 blind labels are *pilot* data: they helped develop the end_factor grammar they test, so [the pre-registration](docs/paper/preregistration.md) §5 forbids pooling them with confirmatory results. **The campaign's numbers currently rest on an apex that does not certify them.** Closing that is a fixed n=40 blind-labelling pass, tooled and pending — see the [runbook](docs/paper/runbook.md). Until it lands, campaign figures are reported as uncertified.
+**The apex has not grown with the base.** The 2026-08-07 ablation campaign added 120 scorer-labeled rows and zero human ones, so the middle tier is now ~13× the comparable apex, against ~4× when the 92% figure was earned. Worse, those 16 blind labels are *pilot* data: they helped develop the end_factor grammar they test, so [the pre-registration](docs/paper/preregistration.md) §5 forbids pooling them with confirmatory results. **The campaign's numbers currently rest on an apex that does not certify them.** Closing that is a fixed n=40 blind-labelling pass, tooled and pending — see the [runbook](docs/paper/runbook.md). Until it lands, campaign figures are reported as uncertified.
 
 This matters beyond the labels: any metric *derived* from a verified success — cost per verified success, the say-do gap itself — inherits the apex dependency. Only raw instrument readings (tokens per run, wall clock) stand outside the pyramid, because the model never self-reports them.
 
@@ -104,7 +104,7 @@ Field Trial v1, below, is the pyramid's output: ten tasks, two arms, built entir
 
 ### Field Trial v1 — harness on vs. harness off (2026-07-19)
 
-The promised benchmark: the same ten fixed tasks run twice — once with the full harness, once with it ablated (raw state injection, no gates, no reflexes, no verified finishes; player-safety stays on in both arms). Every attempt referee-labeled from the world-state delta, every row in the ledger under `task_set = bench_on` / `bench_off`.
+The promised benchmark: the same ten fixed tasks run twice — once with the full harness, once with it ablated (raw state injection, no gates, no reflexes, no verified finishes; player-safety stays on in both arms). Every attempt scorer-labeled from the world-state delta, every row in the ledger under `task_set = bench_on` / `bench_off`.
 
 | Tier | Benchmark | Harness ON | Harness OFF |
 |---|---|---|---|
@@ -119,9 +119,9 @@ The promised benchmark: the same ten fixed tasks run twice — once with the ful
 | 3 | Craft 3 ladders | ✅ verified | ✅ verified |
 | 3 | 5×5 platform *(honor-system)* | "pass" — 191s of actual building | "pass" — claimed at 35s, no building |
 
-**Referee-verified success: 9/9 with the harness, 1/9 without.** Both arms *claimed* 9/9. The off-arm failure shape is uniform — declare done within seconds, referee measures nothing gained. The one honest off-arm pass (ladders) had the materials already on hand. And the platform row is the honor-system exhibit hiding in plain sight: builds have no referee coverage yet, so both arms "pass" — including the 35-second claim with zero blocks placed. That's why honor labels never make a headline here.
+**Scorer-verified success: 9/9 with the harness, 1/9 without.** Both arms *claimed* 9/9. The off-arm failure shape is uniform — declare done within seconds, scorer measures nothing gained. The one honest off-arm pass (ladders) had the materials already on hand. And the platform row is the honor-system exhibit hiding in plain sight: builds have no scorer coverage yet, so both arms "pass" — including the 35-second claim with zero blocks placed. That's why honor labels never make a headline here.
 
-Fine print, because receipts cut both ways: the off arm inherited a stocked inventory from the on arm's runs (an *easier* setup) and still went 1/9 — the gap is conservative. The referee itself was calibrated first: **11/12 (92%)** agreement with blind human labels across gain, loss, and cancel criteria. Token cost tells the same story — the harness arm spent ~413k input / 6.5k output tokens doing the actual work; the ablated arm spent ~318k / 2k mostly generating claims.
+Fine print, because receipts cut both ways: the off arm inherited a stocked inventory from the on arm's runs (an *easier* setup) and still went 1/9 — the gap is conservative. The scorer itself was calibrated first: **11/12 (92%)** agreement with blind human labels across gain, loss, and cancel criteria. Token cost tells the same story — the harness arm spent ~413k input / 6.5k output tokens doing the actual work; the ablated arm spent ~318k / 2k mostly generating claims.
 
 ## Structural symmetry with physical-AI safety systems
 
@@ -129,13 +129,13 @@ This is a Minecraft agent, but the architecture it converged on is the one the r
 
 | PincerCraft | Physical-AI counterpart | Where it appears |
 |---|---|---|
-| Deterministic referee — verdict from world-state delta, never the agent's word | ER model gating VLA tool calls | ASIMOV-Agentic, safety orchestration |
+| Deterministic scorer — verdict from world-state delta, never the agent's word | ER model gating VLA tool calls | ASIMOV-Agentic, safety orchestration |
 | Say-do preempt — async interrupt aborts the running task | Safety tool calling — fault message triggers `robot_stop()` | ASIMOV-Agentic §2.3 |
 | CoC gates — `canMine` / `hasTool` preconditions refuse the action | Safety constraint following — payload, gripper width, contamination limits | ASIMOV-Agentic §2.1 |
 | Craft-preflight gate — bounce a plan the world can't support | VLA feasibility awareness — shield the policy from out-of-distribution subtasks | ASIMOV-Agentic §2.4 |
 | Plan-mode entry on ambiguous asks | Instruction ambiguity — pause and query the operator | ASIMOV-Agentic §2.5 |
 | Honor-system rows, kept as the counter-exhibit | Self-reported episode success labels in robot datasets | e.g. `next.success` in LeRobot |
-| Referee calibrated against blind human labels (11/12) | *no widely adopted counterpart* | — |
+| Scorer calibrated against blind human labels (11/12) | *no widely adopted counterpart* | — |
 
 The last row is the interesting one. DeepMind's supervising gate is itself a statistical model — an LLM judging an LLM — and their own numbers show it wobbling: on human-proximity monitoring, holding false stops under 5% costs a false-negative rate above 40%. The gate here is deterministic code reading world state, so it cannot hallucinate its own compliance, and it was calibrated against blind human labels before being trusted at scale. Calibrating the judge is ordinary practice in measurement and still rare in agent evaluation.
 

@@ -5,13 +5,13 @@
     status                                    progress toward the n=40 target
 
 The calibration protocol (docs/paper/preregistration.md §5) needs a human to
-judge an attempt from ground truth WITHOUT seeing the referee's verdict. This
+judge an attempt from ground truth WITHOUT seeing the scorer's verdict. This
 renders one card per attempt containing the task, what the bot claimed, and the
-inventory before/after — and deliberately omits the referee's call and the DB's
+inventory before/after — and deliberately omits the scorer's call and the DB's
 `success` column.
 
 Showing ground truth to the labeller is intentional and is not circular: the
-referee applies one rule to that state, the human sees everything and can catch
+scorer applies one rule to that state, the human sees everything and can catch
 a criterion the rule mis-encodes. Attempt #322 — an LLM-authored `end_factor`
 written backwards — was exactly that case, and a protocol that hid the inventory
 from the human would have scored it as agreement.
@@ -88,10 +88,10 @@ def card(rec, con):
     L.append('')
     L.append(f'- **Task:** {rec.get("description", "?")}')
     L.append(f'- **Stated criterion:** `{rec.get("end_factor") or "(none)"}`')
-    # The arm is deliberately NOT shown. Hiding only the referee's verdict is
+    # The arm is deliberately NOT shown. Hiding only the scorer's verdict is
     # not enough: knowing an attempt came from an ablated arm primes the
     # labeller toward failure, and the labels are the apex that certifies the
-    # referee — a bias channel there propagates into every rate the paper
+    # scorer — a bias channel there propagates into every rate the paper
     # reports. Tier and duration stay; neither identifies the condition.
     L.append(f'- **Tier:** {tier}'
              + (f' · {secs:.0f}s' if isinstance(secs, (int, float)) else ''))
@@ -154,7 +154,7 @@ def cards(show_all, limit, out_path):
         f'labels on record.',
         '',
         'For each card: read the task, read what the bot claimed, look at what actually '
-        'changed, and decide whether the task was genuinely accomplished. The referee\'s '
+        'changed, and decide whether the task was genuinely accomplished. The scorer\'s '
         'verdict is deliberately not shown — that comparison is the measurement.',
         '',
         'Judge the *task as written*, not the criterion. If the criterion is wrong but the '

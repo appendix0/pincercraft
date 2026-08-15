@@ -6,7 +6,7 @@
 #
 # Env knobs:  MODE=explore|bench  WATCH_TIMEOUT=900  TASKGIVER_BUDGET=0.50  IMPROVER_BUDGET=2.00
 #             RUN_ANALYZER=0 RUN_IMPROVER=0  — measurement-only cycles (e.g. the
-#             referee-agreement run: task + referee verdict + DB row, no LLM
+#             scorer-agreement run: task + scorer verdict + DB row, no LLM
 #             diagnosis and no fix branch).
 set -uo pipefail
 
@@ -43,7 +43,7 @@ curl -sf -m 5 -X POST http://127.0.0.1:8765/mcp -H "Authorization: Bearer $TOKEN
 say "preflight ok — MCP reachable, mode=$MODE"
 
 # ── 1. give a task ─────────────────────────────────────────────────────────
-# Pre-add referee baseline: read BEFORE the task exists, so an instantly
+# Pre-add scorer baseline: read BEFORE the task exists, so an instantly
 # completable task can't outrace its own snapshot (run-3 false-FAIL race).
 node eval/referee.mjs preinv >/dev/null 2>&1 || true
 QSTART=$(wc -l < "$QLOG")
@@ -93,7 +93,7 @@ if [ -z "$TASKID" ]; then
   exit 43
 fi
 
-# Referee snapshot: pre-task inventory + the task's end_factor (from the ef=
+# Scorer snapshot: pre-task inventory + the task's end_factor (from the ef=
 # field on the queue.log add line). Runs right after the id appears — with
 # add+start the bot may already be moving, so a late baseline can only shrink
 # the measured delta (bias toward false FAIL, never false pass). Non-fatal:
@@ -123,11 +123,11 @@ LEND=$(wc -l < "$BOTLOG"); WALL=$(( $(date +%s) - T0 ))
 say "task #$TASKID → $OUTCOME in ${WALL}s (bot.log lines $LSTART–$LEND)"
 
 # ── 2a. what the HARNESS did, as distinct from what the agent claimed and what
-# the referee measured. Read from this run's own bot.log slice so the three
+# the scorer measured. Read from this run's own bot.log slice so the three
 # outcomes are independently recoverable per attempt:
 #   agent   -> $OUTCOME        (did the model declare completion?)
 #   harness -> below           (did verify block it / did autofinish trigger?)
-#   referee -> $VERDICT        (was the world state actually correct?)
+#   scorer -> $VERDICT        (was the world state actually correct?)
 # Without this the middle term lived only in bot.log, unlinked to the row, so
 # no analysis could separate "the agent got it right" from "the harness caught
 # it". `off` is read from the ablation flag rather than inferred from silence —
@@ -151,13 +151,13 @@ else
 fi
 say "harness: verify=$HVERIFY autofinish=$HAUTOFIN"
 
-# ── 2b. referee verdict — success from world state, not the bot's say-so ────
+# ── 2b. scorer verdict — success from world state, not the bot's say-so ────
 # Independent re-read of the inventory vs the pre-task snapshot. When the
 # end_factor parses to an inventory shape, THIS is the success label; the
-# queue outcome only labels rows the referee can't measure (honor_system).
+# queue outcome only labels rows the scorer can't measure (honor_system).
 VERDICT=$(node eval/referee.mjs judge "$TASKID" "$OUTCOME" 2>/dev/null)
 [ -n "$VERDICT" ] || VERDICT='{"parseable":false,"label_source":"honor_system","referee_failure_mode":null}'
-say "referee: $VERDICT"
+say "scorer: $VERDICT"
 
 # ── 3. metrics → metrics.jsonl ─────────────────────────────────────────────
 M=$(node eval/metrics.mjs "$BOTLOG" --range "$LSTART" "$LEND")
@@ -179,7 +179,7 @@ claude -p "$(cat "$EVAL/prompts/analyzer.md")
 ## Task
 #$TASKID — $DESC   (outcome: $OUTCOME)
 
-## Referee verdict (deterministic inventory check — trust this over the bot's claims)
+## Scorer verdict (deterministic inventory check — trust this over the bot's claims)
 $VERDICT
 
 ## Metrics
@@ -189,7 +189,7 @@ $M
 $(cat "$SLICE")" --output-format text > "$DIAG"
 else
   DIAG=/dev/null
-  say "analyzer skipped (RUN_ANALYZER=0) — referee verdict is the only label"
+  say "analyzer skipped (RUN_ANALYZER=0) — scorer verdict is the only label"
 fi
 
 # ── 4a. configuration and trace pointer ────────────────────────────────────
@@ -228,7 +228,7 @@ ROW=$(node -e '
         seed=process.argv[13], armpos=process.argv[14],
         hverify=process.argv[15], hautofin=process.argv[16],
         modelcfg=process.argv[17], episode=process.argv[18];
-  // Referee verdict is the label when it could measure; queue outcome only
+  // Scorer verdict is the label when it could measure; queue outcome only
   // labels unmeasurable criteria (label_source records which one applied).
   const success = typeof v.success==="boolean" ? v.success : outcome==="done";
   const row={ task_id:id, task_name:name, difficulty_tier:tier, task_set:taskset,

@@ -34,19 +34,19 @@ def excluded_task_name(dataset):
     `note`: notes are documentation and several tasks carry one, so matching on
     `note` picked whichever such row happened to sit first in the file. That
     resolved correctly only by file ordering, and a reorder would have quietly
-    swapped the exclusion — dropping a referee-labeled task from the primary
+    swapped the exclusion — dropping a scorer-labeled task from the primary
     endpoint and admitting the one task that can only be honor-system labeled.
 
     `dataset` is the task_set prefix ('conf' or 'bench'), because the exclusion
     is a property of how the data was SCORED, not of the task. The 2026-08-09
-    deviation lifted it "for confirmatory runs" once a block-scan referee could
-    label the platform task, and retained it for the exploratory backtests,
+    deviation lifted it "for confirmatory runs" once a block-scan scorer could
+    label the platform task, and retained it for the exploratory replicates,
     whose platform attempts were honor-system scored — re-scoring those now
     would mix two instruments inside one dataset. Applying one rule to both
     would therefore silently restate already-reported pilot numbers.
 
     Lifted for confirmatory data 2026-08-14, the condition in that deviation
-    having been met: the campaign re-ran the whole set under the new referee and
+    having been met: the campaign re-ran the whole set under the new scorer and
     all 27 confirmatory platform attempts carry label_source=referee. The
     confirmatory primary set is 13 tasks/arm, not 12."""
     if dataset == 'conf':
@@ -67,8 +67,8 @@ def excluded_task_name(dataset):
 def claimed(success, failure_mode):
     """Did the AGENT declare the task complete?
 
-    The referee's verdict is `success`; the bot's own claim is recoverable
-    because the referee flags exactly where the two diverge."""
+    The scorer's verdict is `success`; the bot's own claim is recoverable
+    because the scorer flags exactly where the two diverge."""
     if failure_mode == 'false_done_referee':
         return 1          # bot said done, world disagreed
     if failure_mode == 'queue_never_finished':
@@ -134,7 +134,7 @@ LAYER_ENDPOINT = {
     'gates': 'capability_failure',
     'reflexes': 'capability_failure',
     # The retired compound arm targets whatever its two halves did; false
-    # completion is the one it was read on in backtests 1-2.
+    # completion is the one it was read on in replicates 1-2.
     'measurement': 'false_completion',
 }
 

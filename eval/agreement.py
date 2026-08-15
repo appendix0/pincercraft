@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Referee-agreement tooling for the supervised run.
+"""Scorer-agreement tooling for the supervised run.
 
     label  <task_id> <0|1> [notes...]   record YOUR success call for an attempt
-    report                              referee-vs-human agreement table
+    report                              scorer-vs-human agreement table
 
 `label` writes a gold_attempts row (human call, per the gold-DB rule: rows are
 added only on an explicit command — running this IS the command), tied to the
@@ -10,8 +10,8 @@ task_attempts row by `agree:task_id=N` in notes, since gold_attempts has no
 task_id column and task_name joins are fragile.
 
 `report` is the credibility anchor for the benchmark campaign: % of attempts
-where the deterministic referee's verdict matched the human's, split by
-label_source (referee-measured vs honor-system rows).
+where the deterministic scorer's verdict matched the human's, split by
+label_source (scorer-measured vs honor-system rows).
 """
 import sqlite3, sys, os, datetime, subprocess, re
 
@@ -77,7 +77,7 @@ def report():
               f'{"AGREE" if agree else "DISAGREE":<9} {att[2][:60]}')
     print()
     if ref_n:
-        print(f'referee-measured agreement: {ref_ok}/{ref_n} ({100*ref_ok/ref_n:.0f}%)  ← the anchor number')
+        print(f'scorer-measured agreement: {ref_ok}/{ref_n} ({100*ref_ok/ref_n:.0f}%)  ← the anchor number')
     if hon_n:
         print(f'honor-system rows (queue outcome vs human): {hon_ok}/{hon_n} ({100*hon_ok/hon_n:.0f}%)')
 
