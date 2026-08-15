@@ -9,8 +9,8 @@ category.
 
 > **Terminology updated 2026-08-15, procedure unchanged.** Arms are now named
 > **full harness** / **no harness** / **− layer** instead of `A-ON` / `A-OFF` /
-> `B1`–`B5`, and `autofinish` is **completion recognition** instead of
-> "deterministic termination" (terminology.md §1.1, §2). These are renames only:
+> `B1`–`B5` (terminology.md §1.1). Layer names are unchanged — `autofinish`
+> remains **deterministic termination**. This is a rename only:
 > no step, threshold, endpoint or commitment below changed, and the frozen
 > [preregistration.md](preregistration.md) is untouched — its wording *is* the
 > pre-commitment and is read through the mapping table in terminology.md §1.1.
@@ -138,7 +138,7 @@ reported with a one-sided upper bound rather than as "eliminated".
 | arm | endpoint |
 |---|---|
 | grounded completion check (`verify`) | false completion |
-| completion recognition (`autofinish`) | reached-not-recognized |
+| deterministic termination (`autofinish`) | reached-not-recognized |
 | perception, precondition, reflex | verified success |
 
 Overall success is the wrong endpoint for the first two: it dilutes each layer
@@ -158,7 +158,7 @@ recorded before the campaign starts, not after. For reference at 80% power,
 | full harness vs no harness (success) | 39 |
 | full harness vs − completion check (success) | 174 |
 | verify vs autofinish (success) | 372 |
-| full harness vs − completion recognition (success) | 1,727 |
+| full harness vs − deterministic termination (success) | 1,727 |
 
 Clustering by task inflates all of these. A comparison whose required n is not
 affordable is either re-specified onto a sharper endpoint or reported as a
