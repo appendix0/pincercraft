@@ -2,12 +2,12 @@
 # Check live paper prose against docs/paper/terminology.md §7 ("words to avoid").
 # Run it by eye before writing manuscript text.
 #
-# Scans live docs only. The frozen documents (preregistration, results, aborts)
-# keep the labels they were written with; terminology.md §1.1 maps them.
+# Scans live docs only. The frozen records (preregistration, aborts) keep the
+# labels they were written with; terminology.md §1.1 maps them.
 # terminology.md itself is skipped -- it has to name the terms it bans.
 
 cd "$(git rev-parse --show-toplevel)" || exit 1
-FILES="docs/paper/protocol.md docs/paper/related_work.md docs/paper/runbook.md README.md"
+FILES="docs/paper/protocol.md docs/paper/related_work.md docs/paper/runbook.md docs/paper/results.md README.md"
 
 # banned pattern <TAB> what to use instead
 RULES='backtests?	replicate
