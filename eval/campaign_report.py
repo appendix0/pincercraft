@@ -345,7 +345,7 @@ def main(seeds=None, tag='conf'):
     # its own interval.
     if 'on' in groups and 'off' in groups:
         print('\n' + '-' * 74)
-        print('PRIMARY ENDPOINT — FALSE COMPLETION, FULL HARNESS vs NO HARNESS')
+        print('CO-PRIMARY ENDPOINT — FALSE COMPLETION, FULL HARNESS vs NO HARNESS')
         print('-' * 74)
         for arm in ('on', 'off'):
             k = sum(false_completion(r) for r in groups[arm])
@@ -364,11 +364,18 @@ def main(seeds=None, tag='conf'):
             spans = b['lo'] <= 0 <= b['hi']
             print(f'  H1 {"NOT supported — interval spans zero" if spans else "supported"}')
 
-    # Secondary endpoint: overall task success. Underpowered by comparison, and
-    # partly a capability question rather than a self-report one.
+    # Primary endpoint, per the frozen preregistration §4: "Primary endpoint:
+    # verified success rate, A-ON vs A-OFF. Co-primary: say-do gap." The report
+    # previously called false completion primary and this secondary, which is the
+    # opposite of the pre-commitment. Both are supported, so no conclusion moves —
+    # but reporting a different primary endpoint than the one registered is
+    # exactly what pre-registration exists to prevent, so the freeze wins and the
+    # labels follow it. False completion is the per-attempt form of the co-primary
+    # say-do gap (terminology.md §5.2); it is printed first because it is the
+    # phenomenon the paper is about, and the ordering is presentational only.
     if 'on' in groups and 'off' in groups:
         print('\n' + '-' * 74)
-        print('SECONDARY ENDPOINT — VERIFIED SUCCESS, FULL HARNESS vs NO HARNESS')
+        print('PRIMARY ENDPOINT — TASK SUCCESS, FULL HARNESS vs NO HARNESS')
         print('-' * 74)
         b = cluster_bootstrap(groups['on'], groups['off'])
         if b:
