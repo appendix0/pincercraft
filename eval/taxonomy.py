@@ -63,7 +63,7 @@ def resolve_claim(row, claims):
     When one is missing the claim is INFERRED from `failure_mode` using the same
     rule as campaign_report, rather than defaulted to "did not claim": a missing
     measurement is not a signal value, and treating it as one invented ten
-    phantom reached-not-recognized outcomes in A-ON the first time this ran.
+    phantom reached-not-recognized outcomes in the full harness the first time this ran.
 
     The fallback is validated, not assumed — the two derivations agree on
     256/256 attempts that carry both."""

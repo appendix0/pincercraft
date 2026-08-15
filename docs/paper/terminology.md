@@ -32,13 +32,46 @@ already happened once (the reflex-layer figures, corrected 2026-08-15).
 | canonical term | code identifier | definition |
 |---|---|---|
 | **harness** | `harness_mode.js`, `layerOn()` | The deterministic layer beneath the LLM. Owns facts and reflexes; the LLM owns plan and judgment. |
-| **arm** | `task_set` (`bench_<arm>` exploratory, `conf_<arm>` confirmatory) | One experimental condition: the harness with exactly one layer ablated, all layers on (A-ON), or all off (A-OFF). |
+| **arm** | `task_set` (`bench_<arm>` exploratory, `conf_<arm>` confirmatory) | One experimental condition: the harness with exactly one layer ablated, all layers on, or all off. |
 | **ablation** | `.runtime/harness_off_<layer>` | Switching one layer off and re-running the same tasks. Never "the split". |
 | **shuffled backtest** | `seed` | One full pass over the benchmark set in a seed-derived order. Never bare "seed" in prose. |
 
 Do **not** write "scaffolding" and "harness" interchangeably in the manuscript.
 Pick **harness** for our system; reserve *scaffolding* for the general class
 when discussing other people's work.
+
+### 1.1 Arm names
+
+**The manuscript names every arm by what it is, never by a letter or an index.**
+
+| manuscript | frozen docs | code | what it is |
+|---|---|---|---|
+| **full harness** | A-ON | `on` | every layer on, as shipped |
+| **no harness** | A-OFF | `off` | every layer off |
+| **− perception** | B1 | `perception` | perception layer removed |
+| **− preconditions** | B2 | `gates` | precondition layer removed |
+| **− reflexes** | B3 | `reflexes` | reflex layer removed |
+| **− completion check** | B4 | `verify` | grounded completion check removed |
+| **− completion recognition** | B5 | `autofinish` | completion recognition removed |
+
+`A-ON`/`A-OFF`/`B1`–`B5` are **retired from new prose.** They survive only in
+[preregistration.md](preregistration.md) and are read through this table. Three
+reasons they fail a reader:
+
+1. **"A" is never expanded.** It is a bare letter; the only gloss anywhere is one
+   row of the pre-registration's arm table.
+2. **It reads as A/B testing**, which is a different methodology. A reviewer
+   scanning a results table misparses it before reaching the legend.
+3. **An index carries no information.** `B3` requires a round-trip to the legend
+   on every row, and we lost track of it ourselves: the frozen pre-registration
+   says `B1–B5` in its design table (§6) and `B1–B4` in its analysis plan (§10),
+   a stale count left over from before the verify/autofinish split. Five layer
+   arms exist and five comparisons were run.
+
+The minus form matches how ablation tables are read in this literature —
+`Full`, `w/o X`, `− X` — so no legend traffic is needed. On first use in the
+manuscript, state the mapping once: *"the full harness (A-ON in the
+pre-registration)"*.
 
 ## 2. The five layers
 
@@ -48,7 +81,16 @@ when discussing other people's work.
 | **precondition layer** | `gates` | Refuses actions that cannot work: craft preflight, redundant-acquire. |
 | **reflex layer** | `reflexes` | Acts without asking: tool-break guard, inventory tidy. |
 | **grounded completion check** | `verify` | Blocks a completion claim the world state does not support. Never closes a task. |
-| **deterministic termination** | `autofinish` | Closes a task in code once the world state satisfies the criterion. Never blocks anything. |
+| **completion recognition** | `autofinish` | Closes a task in code once the world state satisfies the criterion. Never blocks anything. |
+
+**`autofinish` is COMPLETION RECOGNITION, not "deterministic termination".**
+Renamed 2026-08-15. The old term collided with the 480-second watchdog, which
+also terminates a run and has its own taxonomy cell (`budget_exhaustion`) — two
+different stopping mechanisms sharing one word. The new name is chosen to match
+its own failure mode: ablate **completion recognition** and you get
+**reached-not-recognized**, so the layer and its endpoint explain each other
+without a legend. It also pairs with the **grounded completion check**: the check
+blocks a claim the world does not support, recognition fires one the world does.
 
 **`gates` is a PRECONDITION layer. Never call it a safety layer.** Player-facing
 safety — the stop reflex, the death handler, the Code of Conduct — is a separate
@@ -131,13 +173,13 @@ the endpoints for a per-layer ablation. The authority is `LAYER_ENDPOINT` in
 
 ```
 grounded completion check (verify)      ->  false completion
-deterministic termination (autofinish)  ->  reached-not-recognized
+completion recognition    (autofinish)  ->  reached-not-recognized
 perception layer   (perception)         ->  capability failure
 precondition layer (gates)              ->  capability failure
 reflex layer       (reflexes)           ->  capability failure
 ```
 
-The two termination layers have separately declared target categories; the other
+The two completion layers have separately declared target categories; the other
 three do not, and their endpoint is the one they can move. **Do not call those
 three "the capability layers"** — §7 reserves *capability* for the taxonomy cell,
 and the grouping name would imply that cell is the only outcome they touch.
@@ -196,28 +238,29 @@ false completion =  b      / n      <- they do not
 ```
 
 They are equal **iff c = 0**, and the gap is silent exactly where *c* lives.
-Confirmatory data: the two coincide in A-ON and A-OFF (both have c = 0, which is
-why they look like one metric), and diverge where it matters most —
+Confirmatory data: the two coincide in the full harness and the no-harness arm
+(both have c = 0, which is why they look like one metric), and diverge where it
+matters most —
 
 | arm | b | c | say-do gap | false completion |
 |---|---|---|---|---|
-| A-OFF | 23 | 0 | 45.1% | 45.1% |
-| reflex-ablated | 1 | 1 | **0.0%** | **2.0%** |
-| autofinish-ablated | 3 | 2 | **1.9%** | **5.8%** |
+| no harness | 23 | 0 | 45.1% | 45.1% |
+| − reflexes | 1 | 1 | **0.0%** | **2.0%** |
+| − completion recognition | 3 | 2 | **1.9%** | **5.8%** |
 
-The reflex-ablated arm's 0.0% gap does not mean it never lied; it means one false
+The −reflexes arm's 0.0% gap does not mean it never lied; it means one false
 completion cancelled against one unrecognized success. And **reached-not-recognized
-is `autofinish`'s own target endpoint** — reporting that layer's *gap* nets away
-the very effect the ablation is testing for. This is why §5's endpoint list is
-written in per-attempt categories.
+is completion recognition's own target endpoint** — reporting that layer's *gap*
+nets away the very effect the ablation is testing for. This is why §5's endpoint
+list is written in per-attempt categories.
 
 ### 5.3 The axes move independently — and which direction is shown
 
 Two arms can be statistically indistinguishable on task success and far apart on
-false completion. Confirmatory, the reflex-ablated arm against the
-verify-ablated arm:
+false completion. Confirmatory, the −reflexes arm against the
+−completion check arm:
 
-| endpoint | reflex-ablated | verify-ablated | difference | p |
+| endpoint | − reflexes | − completion check | difference | p |
 |---|---|---|---|---|
 | task success | 58.8% | 54.3% | +4.5pp, CI [−20.8, +28.9] | 0.71 |
 | false completion | 2.0% | 17.4% | −15.4pp, CI [−29.3, −4.5] | **0.0036** |
@@ -267,16 +310,20 @@ a rig-reliability problem we did not have, in our own paper. Deviation recorded
 | "measurement layer" | verify / autofinish, named individually | Collides with the referee's actual measurement. |
 | "the split" | ablation | Owner directive; "split" is ambiguous with the verify/autofinish split. |
 | bare "seed" in prose | shuffled backtest | Owner directive. |
-| "the harness improves success" as the headline | "a stock agent overstates its own success by N points", N = the **false-completion rate** of the ablated arm (confirmatory: 45.1%) | A-ON's near-zero false-completion rate is partly by construction — `verify` blocks unearned finishes by design. Lead with the size of the failure in the ablated arm. Take N from the per-attempt form (§5.2), not the gap. |
+| "the harness improves success" as the headline | "a stock agent overstates its own success by N points", N = the **false-completion rate** of the ablated arm (confirmatory: 45.1%) | The full harness's near-zero false-completion rate is partly by construction — `verify` blocks unearned finishes by design. Lead with the size of the failure in the ablated arm. Take N from the per-attempt form (§5.2), not the gap. |
 | presenting the say-do gap or the two axes as our discovery | cite 2606.09863 and VIGIL, then state the intervention | Both are published, at larger scale than we can reach. Our contribution is the controlled same-model harness ablation ([related_work.md](related_work.md)). |
 | "eliminated" for a zero count | "no events observed in N, bounding the rate below X%" | Zero events needs a bound. 0/30 → one-sided 95% upper bound 9.5%. |
 | "capability" as an axis name | task success (§5.1) | `capability failure` is one taxonomy cell; reusing the word for the axis implies the axis has one outcome. |
-| "the reflex layer reduces false completion" | it does not move false completion measurably | Confirmatory: ablating it gives 1/51 against A-ON's 2/52 (+1.9pp, CI spans zero). The floor is held by the grounded completion check, which stays on in that arm. |
+| "the reflex layer reduces false completion" | it does not move false completion measurably | Confirmatory: ablating it gives 1/51 against the full harness's 2/52 (+1.9pp, CI spans zero). The floor is held by the grounded completion check, which stays on in that arm. |
 | "agent overstatement" / "overstatement rate" as a metric | **say-do gap** (aggregate) or **false completion** (per-attempt), §5.2 | There is no third metric. "Overstates" is the *verb* §3 attaches to a positive gap; promoting it to a noun creates a name with no definition behind it. |
 | say-do gap and false completion used as synonyms | pick one per §5.2 | They are equal only when c = 0. Treating them as one metric hides the reached-not-recognized cell — which is `autofinish`'s own endpoint. |
 | "verified success" as a free-standing synonym for task success | **task success**; qualify to "verified success rate" only opposite *claimed* success rate | §3. One concept with two interchangeable names is the drift this file exists to stop. |
 | counting supersessions in the discard rate | report faults and supersessions on separate lines | §6. Folding them together turned a 15.0% fault rate into a reported 28.2%. |
 | "the layers specialise" | the whole-harness effect is not attributable to a single layer at this n | H4 was **not supported**: no single-layer ablation cleared the 15pp MEI after Holm. |
+| `A-ON` / `A-OFF` in new prose | **full harness** / **no harness** (§1.1) | "A" is never expanded, and the label reads as A/B testing — a different methodology. Frozen docs keep it; read them through §1.1. |
+| `B1`–`B5` for layer arms | **− perception**, **− preconditions**, **− reflexes**, **− completion check**, **− completion recognition** (§1.1) | An index carries no information and costs a legend lookup per row. The frozen pre-registration already contradicts itself on the count (B1–B5 in §6, B1–B4 in §10). |
+| "deterministic termination" for `autofinish` | **completion recognition** (§2) | "Termination" collides with the 480 s watchdog, which also stops a run and owns `budget_exhaustion`. |
+| "the termination layers" for verify + autofinish | **the completion layers** | Same collision: neither of them is what ends a run on timeout. |
 
 See [preregistration.md](preregistration.md) for the protocol and
 [protocol.md](protocol.md) for the frozen confirmatory procedure.

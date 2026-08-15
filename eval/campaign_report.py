@@ -8,7 +8,7 @@ written before the data existed:
 
   - verified success per arm, Wilson 95% interval
   - the say-do gap per arm (claimed vs verified on the SAME attempts)
-  - A-ON vs every other arm, cluster bootstrap with task as the resampling unit
+  - the full harness vs every other arm, cluster bootstrap with task as the unit
     (the 3 seeds within a task are not independent, so task is the cluster)
   - Holm-Bonferroni across the per-layer comparisons
 
@@ -36,6 +36,29 @@ BOOTSTRAP_N = 10000
 # and silently inflate every adjusted p-value in the family.
 ARMS = ['on', 'off', 'perception', 'gates', 'reflexes', 'verify', 'autofinish', 'measurement']
 LAYER_ARMS = ['perception', 'gates', 'reflexes', 'verify', 'autofinish']
+
+# Manuscript names, printed instead of the code identifiers (terminology.md §1.1).
+# The identifiers stay in the DB and in every `task_set` — renaming those would
+# break reproducibility of collected receipts — but the report is what gets read
+# and quoted, so it speaks the manuscript's language. A-ON/A-OFF/B1-B5 are retired
+# from new prose: "A" is never expanded and reads as A/B testing, and an index
+# costs a legend lookup per row.
+ARM_LABEL = {
+    'on': 'full harness',
+    'off': 'no harness',
+    'perception': '- perception',
+    'gates': '- preconditions',
+    'reflexes': '- reflexes',
+    'verify': '- completion check',
+    'autofinish': '- completion recognition',
+    'measurement': '- verify+autofinish (retired)',
+}
+
+
+def label(arm):
+    """Manuscript name for an arm, falling back to the raw identifier so an arm
+    added to ARMS without a label still prints rather than vanishing."""
+    return ARM_LABEL.get(arm, arm)
 
 
 def wilson(k, n, z=1.96):
@@ -111,10 +134,10 @@ def arm_table(groups, arms, restrict=None):
     The discordant cells b and c are printed because the say-do gap is (b-c)/n
     while false completion is b/n: the two coincide only when c = 0, and an arm
     with c > 0 nets one error against the other. Without these columns a reader
-    cannot tell a genuinely honest arm from a cancelling one — the reflex-ablated
-    arm shows a 0.0% gap holding one false completion and one unrecognized
+    cannot tell a genuinely honest arm from a cancelling one — the -reflexes arm
+    shows a 0.0% gap holding one false completion and one unrecognized
     success (terminology.md §5.2)."""
-    print(f'{"arm":<13} {"n":>4} {"tasks":>6}  {"verified":>8}  {"95% CI":>16}'
+    print(f'{"arm":<28} {"n":>4} {"tasks":>6}  {"verified":>8}  {"95% CI":>16}'
           f'   {"claimed":>8}  {"b":>3} {"c":>3}  {"say-do gap":>10}  {"false compl":>11}')
     for arm in arms:
         rs = groups.get(arm, [])
@@ -129,7 +152,7 @@ def arm_table(groups, arms, restrict=None):
         c_cell = sum(1 for r in rs if not r['claimed'] and r['success'])
         lo, hi = wilson(v, n)
         t = len({r['task_name'] for r in rs})
-        print(f'{arm:<13} {n:>4} {t:>6}  {pct(v/n)}  [{pct(lo)},{pct(hi)}]'
+        print(f'{label(arm):<28} {n:>4} {t:>6}  {pct(v/n)}  [{pct(lo)},{pct(hi)}]'
               f'   {pct(c/n)}  {b_cell:>3} {c_cell:>3}  {pct(c/n - v/n)}  {pct(b_cell/n)}')
 
 
@@ -322,13 +345,13 @@ def main(seeds=None, tag='conf'):
     # its own interval.
     if 'on' in groups and 'off' in groups:
         print('\n' + '-' * 74)
-        print('PRIMARY ENDPOINT — FALSE COMPLETION, A-ON vs A-OFF')
+        print('PRIMARY ENDPOINT — FALSE COMPLETION, FULL HARNESS vs NO HARNESS')
         print('-' * 74)
         for arm in ('on', 'off'):
             k = sum(false_completion(r) for r in groups[arm])
             n_a = len(groups[arm])
             lo, hi = wilson(k, n_a)
-            line = f'  {arm:<4} {k}/{n_a} = {pct(k / n_a):>7}   95% CI [{pct(lo)}, {pct(hi)}]'
+            line = f'  {label(arm):<14} {k}/{n_a} = {pct(k / n_a):>7}   95% CI [{pct(lo)}, {pct(hi)}]'
             if k == 0:
                 # Zero events is not "eliminated". State what it rules out.
                 line += f'   one-sided 95% upper bound {pct(1 - 0.05 ** (1 / n_a))}'
@@ -345,7 +368,7 @@ def main(seeds=None, tag='conf'):
     # partly a capability question rather than a self-report one.
     if 'on' in groups and 'off' in groups:
         print('\n' + '-' * 74)
-        print('SECONDARY ENDPOINT — VERIFIED SUCCESS, A-ON vs A-OFF')
+        print('SECONDARY ENDPOINT — VERIFIED SUCCESS, FULL HARNESS vs NO HARNESS')
         print('-' * 74)
         b = cluster_bootstrap(groups['on'], groups['off'])
         if b:
@@ -365,7 +388,7 @@ def main(seeds=None, tag='conf'):
         present.append('measurement')
     if 'on' in groups and present:
         print('\n' + '-' * 74)
-        print('PER-LAYER ABLATION vs A-ON, each on its target failure mode')
+        print('PER-LAYER ABLATION vs THE FULL HARNESS, each on its target failure mode')
         print('-' * 74)
         # Each layer is scored on the taxonomy category it targets, NOT on
         # overall success. This is the pre-registered endpoint, and the
@@ -376,7 +399,7 @@ def main(seeds=None, tag='conf'):
         results, ps = {}, []
         for arm in present:
             endpoint = LAYER_ENDPOINT[arm]
-            # Ablation minus A-ON: a positive number is the ablation RAISING the
+            # Ablation minus full harness: a positive number is the ablation RAISING the
             # failure mode the layer is supposed to suppress, which is the
             # direction the hypothesis predicts.
             b = cluster_bootstrap(groups[arm], groups['on'],
@@ -385,7 +408,7 @@ def main(seeds=None, tag='conf'):
                 b['endpoint'] = endpoint
                 results[arm] = b
                 ps.append((arm, b['p']))
-        print(f'  {"layer":<12} {"target failure mode":<24} {"rise":>7}  '
+        print(f'  {"layer":<26} {"target failure mode":<24} {"rise":>7}  '
               f'{"95% CI":<26}  {"Holm-adj":>8}  verdict')
         for arm, p, adj in holm(ps):
             b = results[arm]
@@ -411,7 +434,7 @@ def main(seeds=None, tag='conf'):
                 verdict = f'bounded null (<{MEI:.0%})'
             else:
                 verdict = 'inconclusive'
-            print(f'  {arm:<12} {b["endpoint"]:<24} {pct(b["diff"]):>7}  '
+            print(f'  {label(arm):<26} {b["endpoint"]:<24} {pct(b["diff"]):>7}  '
                   f'{ci:<26}  {adj:>8.4f}  {verdict}')
         print(f'\n  Minimum effect of interest {MEI:.0%}, pre-declared. "Bounded null" means the')
         print('  interval rules out an effect that large — not that none was found.')
@@ -420,7 +443,7 @@ def main(seeds=None, tag='conf'):
     print('\n' + '-' * 74)
     print('COST PER VERIFIED SUCCESS')
     print('-' * 74)
-    print(f'{"arm":<13} {"in-tok/run":>11} {"sec/run":>9} {"in-tok per success":>20}')
+    print(f'{"arm":<28} {"in-tok/run":>11} {"sec/run":>9} {"in-tok per success":>20}')
     for arm in ARMS:
         rs = groups.get(arm, [])
         if not rs:
@@ -429,7 +452,7 @@ def main(seeds=None, tag='conf'):
         tok = sum(r['input_tokens'] or 0 for r in rs)
         sec = sum(r['wall_clock_seconds'] or 0 for r in rs)
         per = f'{tok / v:>20,.0f}' if v else f'{"n/a (0 successes)":>20}'
-        print(f'{arm:<13} {tok/len(rs):>11,.0f} {sec/len(rs):>9.1f} {per}')
+        print(f'{label(arm):<28} {tok/len(rs):>11,.0f} {sec/len(rs):>9.1f} {per}')
     print()
 
 
