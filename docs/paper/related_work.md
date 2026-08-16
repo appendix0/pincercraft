@@ -207,6 +207,39 @@ That is a smaller claim than "we found the say-do gap" and a much more
 defensible one. It also survives the reviewer who knows this literature, which
 the previous framing would not have.
 
+## 6.5 Citation verification status (2026-08-16)
+
+This audit was run by an AI, which is the highest-leverage disclosure risk in the
+paper: fabricated arXiv IDs and misattributed figures are the characteristic
+failure mode, and a reviewer who finds one discards the section. A machine
+pre-screen was run against the arXiv API — **all 10 cited IDs resolve and every
+returned title matches what this file claims it is.** Abstract-level figures were
+then checked against the text here.
+
+| checked against the abstract | status |
+|---|---|
+| 2606.09863 — 9,876 tau2-bench / 8 families; 1,879 AppWorld / 4 families; 45–48%; 3%; 75.8%; judge AUROC 0.65 / 0.54; TF-IDF 0.83 / 0.95; 4–8×; 3,300× | **all confirmed** |
+| 2605.08747 — 20 models; 1,000 frozen episodes; egocentric RGB; deterministic report check; 19.7 pp; the four outcome categories | **all confirmed**, and the category names map exactly as §2 claims |
+| 2607.17044 — verification loop +1.5 pp; +11.0 pp total uplift; catch ≈0.20, fix 0.75, no false-alarm regressions; specialist-swap eliminates most rescues | **all confirmed** |
+
+**Three claims in this file cannot be settled from abstracts and need a human to
+open the PDF.** They are listed individually so the job is bounded:
+
+1. **2607.17044's stated limitation, "no controlled same-model scaffold ablation."**
+   *This is the load-bearing one* — §3 and §6 use it to argue that the closest
+   prior work names our contribution as its own gap. It is not in the abstract.
+   If it is not in the paper, the positioning in §6 weakens and must be rewritten
+   as our own framing rather than theirs.
+2. **2606.09863's "per-model rates span 13% to 89%."** Not in the abstract.
+3. **2607.17044's "+9.5 pp of scaffolding."** The abstract gives the +11.0 pp
+   total and says most of it is scaffolding/routing/specialists, but does not
+   itemise 9.5.
+
+A machine confirming a machine's citations is weaker evidence than it looks —
+the pre-screen rules out fabricated IDs and wrong titles, which is worth having,
+and does **not** discharge the disclosure obligation. Sign-off on the three items
+above must be human.
+
 ## 7. Actions
 
 - [ ] Rewrite terminology.md §5.1 to cite VIGIL rather than imply priority.
