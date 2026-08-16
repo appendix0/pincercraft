@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT">
   <img src="https://img.shields.io/badge/fork%20of-Mindcraft-informational" alt="Fork of Mindcraft">
   <img src="https://img.shields.io/badge/lies%20to%20itself-no-brightgreen" alt="Lies to itself: no">
-  <img src="https://img.shields.io/badge/scorer--verified-9%2F9%20harness%20on%20·%201%2F9%20off-blueviolet" alt="Scorer-verified: 9/9 with the harness, 1/9 without">
+  <img src="https://img.shields.io/badge/scorer--verified-67%25%20on%20·%2029%25%20off%20(n%3D356)-blueviolet" alt="Scorer-verified success: 67.3% with the harness, 29.4% without, over 356 attempts">
 </p>
 
 <p align="center">
@@ -37,14 +37,18 @@ Inventory counts, *"can I mine this?"*, the recipe gap, *"is this task actually 
 
 ## The problem, named and measured
 
-The distance between what an agent *says* it did and what the world's ledger *shows* — the **say-do gap** — is the problem this repo exists to close. We ran the same ten benchmark tasks with the harness on and off, every attempt graded by a deterministic scorer from the world-state delta; the model's own "done!" counts for nothing:
+The distance between what an agent *says* it did and what the world's ledger *shows* — the **say-do gap** — is the problem this repo exists to close. A pre-registered campaign ran 13 benchmark tasks × 7 arms × 4 replicates — **356 attempts**, one model, one world, one commit — every attempt graded by a deterministic scorer from the world-state delta; the model's own "done!" counts for nothing:
 
 | | claimed "done" | the world agreed |
 |---|---|---|
-| **Harness on** | 9/9 | **9/9** |
-| **Harness off** | 9/9 | **1/9** |
+| **Harness on** (n=52) | 71.2% | **67.3%** |
+| **Harness off** (n=51) | 74.5% | **29.4%** |
 
-Same model, same tasks, same server — the only variable is whether code or the LLM owns the facts. The gap is a loop-design problem, not a model problem, which means a bigger model won't close it and a scorer will. (The scorer itself was calibrated against blind human labels first: 11/12, 92%.) Full table, caveats included, in [Receipts](#receipts).
+**The two arms claim success at statistically indistinguishable rates and deliver less than half as much. The harness does not make the agent claim less — it makes the claims true.** Verified success +37.9pp, 95% CI [+20.2, +56.9]; false completion −41.3pp, [−60.8, −23.1]. Under ablation the agent overstated its success on 23 of 51 attempts and understated on none (McNemar p = 2.4 × 10⁻⁷).
+
+Same model, same tasks, same server — the only variable is whether code or the LLM owns the facts. The gap is a loop-design problem, not a model problem, which means a bigger model won't close it and a scorer will. Full tables, limitations included, in [results.md](docs/paper/results.md).
+
+> Earlier copy here headlined a **9/9 vs 1/9** pilot at a single seed. That result is real and is preserved below, but it is superseded: the confirmatory campaign measured less than half that gap, and [the pre-registration](docs/paper/preregistration.md) §11 committed in advance to headlining whatever the confirmatory run produced. It does.
 
 ## The five features that matter
 
@@ -90,19 +94,39 @@ Physical-AI teams calibrate broad automated data against a small, expensive, hum
 
 | Tier | What | Rows | Role |
 |---|---|---|---|
-| Apex — calibration | blind human verdicts (`gold_attempts`) | 12 comparable | certifies the scorer (11/12, 92% agreement) |
-| Middle — scale | scorer labels from world-state delta (`task_attempts`) | 158 of 192 | cheap, automated, trustworthy *because* calibrated |
-| Base — raw | the model's own honor-system word (`task_attempts`) | 34 of 192 | the counter-exhibit — included on purpose, never headlined |
+| Apex — calibration | blind human verdicts (`gold_attempts`) | 85 tagged | certifies the scorer, per verdict cell |
+| Middle — scale | scorer labels from world-state delta (`task_attempts`) | 356 primary | cheap, automated, trustworthy *because* calibrated |
+| Base — raw | the model's own honor-system word | the counter-exhibit | **0/5** agreement with blind humans — included on purpose, never headlined |
 
-**How the apex count works**, since the table above is the number a reader will check. `gold_attempts` holds **23** human-judged rows, but they are not all calibration. **16** carry an `agree:task_id=N` tag binding the verdict to one specific attempt; the other 7 are curated examples that certify nothing. Of those 16, **12** have a scorer verdict to compare against — 11 agree, hence **11/12 = 92%** — and 4 compare against an honor-system label, where agreement is **0/4**. That 0/4 is not a defect in the apex; it is [the finding](#receipts). Only tagged rows are calibration, and only `eval/agreement.py label` writes them — `eval/gold_add.py` adds curated rows to the same table and does not touch the agreement math.
+**How the apex count works**, since it is the number a reader will check. `gold_attempts` holds **92** human-judged rows and they are not all calibration: **85** carry an `agree:task_id=N` tag binding the verdict to one specific attempt, and **7** are curated examples that certify nothing. Only tagged rows are calibration, and only `eval/agreement.py label` writes them.
 
-**The apex has not grown with the base.** The 2026-08-07 ablation campaign added 120 scorer-labeled rows and zero human ones, so the middle tier is now ~13× the comparable apex, against ~4× when the 92% figure was earned. Worse, those 16 blind labels are *pilot* data: they helped develop the end_factor grammar they test, so [the pre-registration](docs/paper/preregistration.md) §5 forbids pooling them with confirmatory results. **The campaign's numbers currently rest on an apex that does not certify them.** Closing that is a fixed n=40 blind-labelling pass, tooled and pending — see the [runbook](docs/paper/runbook.md). Until it lands, campaign figures are reported as uncertified.
+The 85 split into **three sets that are never pooled**, because they were drawn from different populations by different rules:
+
+| set | drawn how | agreement |
+|---|---|---|
+| pilot (pre-freeze) | convenience | 11/12 = 92% |
+| confirmatory (2026-08-08) | convenience, glob order | 39/39 = 100%, Wilson [91.0, 100.0] |
+| **stratified (2026-08-16)** | **by scorer verdict, from the campaign itself** | **read per cell, below** |
+
+**Why a fourth pass was needed even at 39/39.** That figure is a prevalence-weighted aggregate: 34 of its 39 labels are *true completions*, and none of the 39 judges an attempt from the confirmatory campaign. The scorer's **false-completion** verdict — what every headline number here depends on — was validated on **2 attempts**. So 30 more were drawn from the campaign's own primary set, oversampling that cell, with the sampling rule, seed and decision rule registered and the draw sealed behind a hash *before* any card was rendered:
+
+| cell | labelled | agreement | Wilson 95% |
+|---|---|---|---|
+| **scorer says false completion** | 21 | **95.2%** | **[77.3, 99.2]** |
+| ⤷ inventory-delta path (328 of 356 rows) | 17 | **100%** | **[81.6, 100.0]** |
+| ⤷ block-scan path | 4 | 75% | [30.1, 95.4] |
+| scorer says success | 4 | 100% | [51.0, 100.0] |
+| scorer says fail, no claim | 4 | 100% | [51.0, 100.0] |
+
+**Two things this does not claim.** The block-scan scorer (structure criteria, 28 rows) is **engineering-validated against RCON-placed ground truth, not human-calibrated** — a labeller sees an inventory delta and cannot check geometry, which is why the one disagreement landed there. And the reweighted overall agreement carries a conservative bound of 52.9%, because the label budget was deliberately spent on the cell that matters rather than spread evenly. Details and the abstention record: [results.md §2.1](docs/paper/results.md).
 
 This matters beyond the labels: any metric *derived* from a verified success — cost per verified success, the say-do gap itself — inherits the apex dependency. Only raw instrument readings (tokens per run, wall clock) stand outside the pyramid, because the model never self-reports them.
 
-Field Trial v1, below, is the pyramid's output: ten tasks, two arms, built entirely on the calibrated middle tier. All three tiers, raw: [`Appendix0/pincercraft-say-do-gap`](https://huggingface.co/datasets/Appendix0/pincercraft-say-do-gap) on Hugging Face.
+The confirmatory campaign is the pyramid's output: 13 tasks, 7 arms, 4 replicates, built entirely on the calibrated middle tier. Field Trial v1 below is the superseded pilot that motivated it. All three tiers, raw: [`Appendix0/pincercraft-say-do-gap`](https://huggingface.co/datasets/Appendix0/pincercraft-say-do-gap) on Hugging Face.
 
-### Field Trial v1 — harness on vs. harness off (2026-07-19)
+### Field Trial v1 — harness on vs. harness off (2026-07-19) · **superseded pilot**
+
+> **Superseded by the confirmatory campaign.** Single seed, n=1 per task, fixed arm order, no state reset between attempts. The rows below are accurate as collected and are kept because they are the receipts that motivated the real design — but every claim in this README now rests on the 356-attempt campaign above, not on this. Single-seed results of this shape regress, and this one did: 89pp here against +37.9pp measured properly.
 
 The promised benchmark: the same ten fixed tasks run twice — once with the full harness, once with it ablated (raw state injection, no gates, no reflexes, no verified finishes; player-safety stays on in both arms). Every attempt scorer-labeled from the world-state delta, every row in the ledger under `task_set = bench_on` / `bench_off`.
 
@@ -121,7 +145,7 @@ The promised benchmark: the same ten fixed tasks run twice — once with the ful
 
 **Scorer-verified success: 9/9 with the harness, 1/9 without.** Both arms *claimed* 9/9. The off-arm failure shape is uniform — declare done within seconds, scorer measures nothing gained. The one honest off-arm pass (ladders) had the materials already on hand. And the platform row is the honor-system exhibit hiding in plain sight: builds have no scorer coverage yet, so both arms "pass" — including the 35-second claim with zero blocks placed. That's why honor labels never make a headline here.
 
-Fine print, because receipts cut both ways: the off arm inherited a stocked inventory from the on arm's runs (an *easier* setup) and still went 1/9 — the gap is conservative. The scorer itself was calibrated first: **11/12 (92%)** agreement with blind human labels across gain, loss, and cancel criteria. Token cost tells the same story — the harness arm spent ~413k input / 6.5k output tokens doing the actual work; the ablated arm spent ~318k / 2k mostly generating claims.
+Fine print, because receipts cut both ways: the off arm inherited a stocked inventory from the on arm's runs (an *easier* setup) and still went 1/9 — the gap is conservative. The scorer at the time carried the pilot calibration, **11/12 (92%)**, whose Wilson lower bound was 65%; the current figures are above. Token cost tells the same story — the harness arm spent ~413k input / 6.5k output tokens doing the actual work; the ablated arm spent ~318k / 2k mostly generating claims.
 
 ## Structural symmetry with physical-AI safety systems
 
@@ -135,7 +159,7 @@ This is a Minecraft agent, but the architecture it converged on is the one the r
 | Craft-preflight gate — bounce a plan the world can't support | VLA feasibility awareness — shield the policy from out-of-distribution subtasks | ASIMOV-Agentic §2.4 |
 | Plan-mode entry on ambiguous asks | Instruction ambiguity — pause and query the operator | ASIMOV-Agentic §2.5 |
 | Honor-system rows, kept as the counter-exhibit | Self-reported episode success labels in robot datasets | e.g. `next.success` in LeRobot |
-| Scorer calibrated against blind human labels (11/12) | *no widely adopted counterpart* | — |
+| Scorer calibrated against blind human labels, stratified by verdict cell | *no widely adopted counterpart* | — |
 
 The last row is the interesting one. DeepMind's supervising gate is itself a statistical model — an LLM judging an LLM — and their own numbers show it wobbling: on human-proximity monitoring, holding false stops under 5% costs a false-negative rate above 40%. The gate here is deterministic code reading world state, so it cannot hallucinate its own compliance, and it was calibrated against blind human labels before being trusted at scale. Calibrating the judge is ordinary practice in measurement and still rare in agent evaluation.
 
