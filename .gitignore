@@ -44,3 +44,4 @@ eval/cycle*.log
 eval/.referee/
 eval/hf_export/
 .claude/
+docs/paper/calibration_sample.json
