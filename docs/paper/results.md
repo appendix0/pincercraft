@@ -287,6 +287,17 @@ The grounded completion check is the closest and points the predicted way — it
 unadjusted interval excludes zero — but it does not survive multiplicity and sits
 below the MEI. Do not report it as the mechanism.
 
+**And that unadjusted interval is carried by the platform task.** Dropping the
+one criterion the block-scan scorer alone decides, `− completion check` falls
+from **+13.5pp [+1.2, +26.1]** to **+9.8pp [−1.5, +21.4]** — the interval now
+spans zero (§10). Three of that arm's eight false completions sit on the task
+with four human labels and one disagreement (§2.1). The other four layers move
+by roughly a point either way and none changes verdict. So the single per-layer
+result that looked closest to detectable is also the single one resting on the
+least-certified instrument in the rig, and the correct reading is that H4 is
+unsupported by a slightly wider margin than §7's table alone suggests — not that
+the completion check is nearly significant.
+
 **The `gates` anomaly did not reproduce.** In the exploratory campaign the
 precondition layer scored 100% (30/30), above the full harness, and was resolved
 as an arm-position confound rather than a layer effect. Under per-attempt reset
@@ -539,6 +550,23 @@ which the H0 calibration predates. Dropping it:
 
 Both effects are **larger** without it. Including it is conservative.
 
+**On the per-layer table the same drop is not conservative**, which is why §10
+previously ran this check only where it could not hurt:
+
+| layer removed | target category | as reported | platform dropped |
+|---|---|---|---|
+| **− completion check** | false completion | **+13.5 [+1.2, +26.1]** | **+9.8 [−1.5, +21.4]** |
+| − deterministic termination | reached-not-recognized | +3.8 [+0.0, +9.6] | +4.2 [+0.0, +10.4] |
+| − perception | capability failure | +9.6 [−9.6, +25.0] | +10.4 [−8.3, +27.1] |
+| − preconditions | capability failure | +9.6 [−11.5, +26.9] | +10.4 [−12.5, +29.2] |
+| − reflexes | capability failure | +10.2 [−5.8, +27.6] | +9.0 [−8.3, +27.7] |
+
+Only `− completion check` changes character, and it is the one arm whose
+endpoint the platform task can contribute to. Its interval excludes zero **only
+with** the task that no blind human label certifies (§2.1). No verdict in §7
+changes — all five were already inconclusive or bounded nulls after Holm — but
+the arm that looked closest is the arm leaning hardest on the block-scan scorer.
+
 **Zero-step attempts.** 8 attempts in the primary set recorded 0 steps and timed
 out — the bot never acted. `analysis_rules.classify()` calls these
 `infrastructure`, but they are not in `exclusions`, so the endpoint tables still
@@ -555,6 +583,33 @@ after seeing which way it moves the result is precisely what the pre-registratio
 forbids, and keeping them costs us effect size rather than manufacturing it.
 **This is a known inconsistency** between the taxonomy rule and the exclusions
 table, flagged here rather than silently resolved.
+
+**Permutation test — a design-based cross-check.** Regenerate with
+`python3 eval/permutation_test.py`. The headline intervals come from a cluster
+bootstrap over **13 task clusters**, against conventional guidance of 30–50+, so
+its coverage is plausibly optimistic; and its p inverts the estimate's sampling
+distribution rather than constructing a null. A permutation test needs neither.
+Every arm runs the same task set within a replicate, so a full-harness and a
+no-harness attempt at the same (replicate × task) form a matched pair, and under
+the null the two labels are exchangeable — the design-based analogue of §6's
+McNemar.
+
+| endpoint | pairs | observed | permutation p | bootstrap p |
+|---|---|---|---|---|
+| task success | 51 | **+39.2pp** | 0.0003 | ≤ 0.0002 |
+| false completion | 51 | **−41.2pp** | ≤ 0.0001 | ≤ 0.0002 |
+
+Sign-flip over matched pairs, 10,000 permutations. Both effects survive a
+procedure that makes **no independence assumption across tasks**, which is
+precisely the assumption the 13-cluster bootstrap is exposed on. The two methods
+agree to about a point on both endpoints. That is the useful part: they are
+wrong in different ways, so agreement is evidence and not a restatement.
+
+*Not run:* the GLMM cross-check (`success ~ arm + (1|task) + (1|replicate)`). It
+requires `statsmodels`, and this analysis path is deliberately stdlib-only so
+that every number in this file reproduces under a bare `python3`. Recorded as an
+open item rather than quietly dropped; the permutation test addresses the same
+concern without the dependency.
 
 **Position reset (the 2026-08-15 deviation).** The reset teleport never fired.
 Over the 486 consecutive confirmatory attempt pairs, measuring where attempt N

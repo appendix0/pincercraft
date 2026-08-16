@@ -296,6 +296,30 @@ def robustness(groups):
           f'{BOOTSTRAP_N:,} resamples. Both drops enlarge both')
     print('effects, so the reported figures are the conservative ones.')
 
+    # The same drop, applied to the per-layer table. §10 ran it only on the two
+    # headline endpoints, which is where it is least consequential: dropping the
+    # platform task ENLARGES both of those, so omitting the check there costs
+    # nothing. On the per-layer table it can go the other way, and it does —
+    # the platform task is the one criterion the block-scan scorer alone decides
+    # (§2.1: engineering-validated, four human labels), so any layer whose
+    # effect leans on it is leaning on the least-certified instrument in the rig.
+    print('\n' + '-' * 74)
+    print('ROBUSTNESS — PER-LAYER TABLE WITHOUT THE PLATFORM TASK')
+    print('-' * 74)
+    print(f'  {"layer":<28} {"target failure mode":<24} '
+          f'{"as reported":>22}  {"platform dropped":>22}')
+    for arm in [a for a in LAYER_ENDPOINT if a in groups and a != 'measurement']:
+        endpoint = LAYER_ENDPOINT[arm]
+        sel = is_category(endpoint)
+        cells = []
+        for f in (lambda rs: rs, plat):
+            b = cluster_bootstrap(f(groups[arm]), f(on), value=sel)
+            cells.append('n/a' if not b else
+                         f"{b['diff']*100:+.1f} [{b['lo']*100:+.1f},{b['hi']*100:+.1f}]")
+        print(f'  {label(arm):<28} {endpoint:<24} {cells[0]:>22}  {cells[1]:>22}')
+    print('\n  A layer whose interval excludes zero only WITH the platform task is')
+    print('  resting on the one criterion no blind human label certifies.')
+
 
 def main(seeds=None, tag='conf', robust=False):
     if not os.path.exists(DB):
