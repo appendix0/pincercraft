@@ -36,20 +36,25 @@ TARGET = 40
 from analysis_rules import FREEZE  # noqa: E402,F401  re-exported for callers
 
 
-def labeled_ids(con, since=None):
+def labeled_ids(con, since=None, strat=None):
     """task_ids already carrying a human call, so cards aren't re-issued.
 
     `since` restricts to labels recorded on/after a date — used to count the
-    confirmatory set without the pilot rows."""
+    confirmatory set without the pilot rows. `strat` filters the 2026-08-16
+    stratified set: True for only those, False to exclude them, None for all.
+
+    The three sets are counted separately everywhere because they were drawn
+    from different populations by different rules, and the pre-registration
+    forbids pooling any two of them."""
     q = "SELECT notes FROM gold_attempts WHERE notes LIKE '%agree:task_id=%'"
     params = ()
     if since:
-        # The n=40 confirmatory target counts the convenience-sampled set only.
-        # The 2026-08-16 stratified labels carry a later timestamp, so without
-        # this they would be counted toward a target they were not drawn for and
-        # report progress of 70/40 against a set that is complete at 40.
-        q += " AND timestamp >= ? AND notes NOT LIKE '%strat=%'"
+        q += " AND timestamp >= ?"
         params = (since,)
+    if strat is True:
+        q += " AND notes LIKE '%strat=%'"
+    elif strat is False:
+        q += " AND notes NOT LIKE '%strat=%'"
     out = set()
     for (notes,) in con.execute(q, params).fetchall():
         m = re.search(r'agree:task_id=(\d+)', notes or '')
@@ -208,12 +213,18 @@ def cards(show_all, limit, out_path, ids=None):
 def status():
     con = sqlite3.connect(DB)
     done = labeled_ids(con)
-    confirm = labeled_ids(con, since=FREEZE)
+    confirm = labeled_ids(con, since=FREEZE, strat=False)
+    strat = labeled_ids(con, strat=True)
     recs = load_evidence()
     have = {int(r.get('task_id', 0)) for r in recs}
     print(f'confirmatory labels    : {len(confirm)}/{TARGET}   (on/after {FREEZE})')
-    print(f'pilot labels           : {len(done - confirm)}        (pre-freeze, reported '
-          f'separately, not pooled)')
+    # Subtract the stratified set explicitly. Deriving pilot as done-confirm
+    # counted every stratified label as a pilot one, reporting 45 pilot labels
+    # against a true 16 -- the same pooling error in the other direction.
+    print(f'pilot labels           : {len(done - confirm - strat)}        (pre-freeze, '
+          f'reported separately, not pooled)')
+    print(f'stratified labels      : {len(strat)}        (2026-08-16, by scorer '
+          f'verdict; see eval/calib_report.py)')
     print(f'attempts with evidence : {len(recs)}')
     print(f'awaiting a label       : {len(have - done)}')
     if len(confirm) < TARGET:
