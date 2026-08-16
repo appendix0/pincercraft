@@ -2,6 +2,7 @@
 """Blind-labelling evidence cards.
 
     cards  [--all] [--limit N] [--out FILE]   render cards for human labelling
+           [--seal FILE | --ids 1,2,3]        render a specific draw, in its order
     status                                    progress toward the n=40 target
 
 The calibration protocol (docs/paper/preregistration.md §5) needs a human to
@@ -132,14 +133,35 @@ def card(rec, con):
     return '\n'.join(L)
 
 
-def cards(show_all, limit, out_path):
+def seal_order(path):
+    """The presentation order committed to by `calib_sample.py draw`.
+
+    Read from the seal rather than retyped, because a 30-id list transcribed by
+    hand is a silent way to render a card the draw never selected."""
+    with open(path) as f:
+        return [int(m.group(1)) for m in
+                (re.match(r'\s*\d+\.\s*#(\d+)\s*$', line) for line in f) if m]
+
+
+def cards(show_all, limit, out_path, ids=None):
     con = sqlite3.connect(DB)
     done = labeled_ids(con)
     recs = load_evidence()
     if not recs:
         sys.exit(f'no evidence files in {EV_DIR} — these are written by '
                  '`referee.mjs judge`, so run a cycle first')
-    pending = [r for r in recs if show_all or int(r.get('task_id', 0)) not in done]
+    if ids:
+        # An explicit draw is rendered in the order given and is NOT filtered
+        # against `done`: which attempts are in the set was decided by the
+        # registered sampling rule, not by what happens to be unlabelled.
+        by_id = {int(r.get('task_id', 0)): r for r in recs}
+        missing = [t for t in ids if t not in by_id]
+        if missing:
+            sys.exit(f'no evidence file for task_id(s) {missing} — a drawn attempt '
+                     f'with no card cannot be silently skipped; amend the draw')
+        pending = [by_id[t] for t in ids]
+    else:
+        pending = [r for r in recs if show_all or int(r.get('task_id', 0)) not in done]
     if not pending:
         sys.exit(f'all {len(recs)} attempts with evidence are already labeled '
                  f'({len(done)} human labels on record)')
@@ -147,11 +169,16 @@ def cards(show_all, limit, out_path):
         pending = pending[:limit]
 
     confirm = labeled_ids(con, since=FREEZE)
+    header = (f'{len(pending)} attempt(s) to judge, from the sealed stratified draw '
+              f'(preregistration 2026-08-16). This set is reported per cell and is '
+              f'**not** pooled with the earlier {len(confirm)} labels.'
+              if ids else
+              f'{len(pending)} attempt(s) to judge. **{len(confirm)}/{TARGET}** '
+              f'confirmatory labels on record.')
     body = [
         '# Blind labelling cards',
         '',
-        f'{len(pending)} attempt(s) to judge. **{len(confirm)}/{TARGET}** confirmatory '
-        f'labels on record.',
+        header,
         '',
         'For each card: read the task, read what the bot claimed, look at what actually '
         'changed, and decide whether the task was genuinely accomplished. The scorer\'s '
@@ -195,11 +222,16 @@ if __name__ == '__main__':
     if args and args[0] == 'cards':
         limit = None
         out = None
+        ids = None
         if '--limit' in args:
             limit = int(args[args.index('--limit') + 1])
         if '--out' in args:
             out = args[args.index('--out') + 1]
-        cards('--all' in args, limit, out)
+        if '--ids' in args:
+            ids = [int(x) for x in args[args.index('--ids') + 1].split(',')]
+        if '--seal' in args:
+            ids = seal_order(args[args.index('--seal') + 1])
+        cards('--all' in args, limit, out, ids)
     elif args == ['status']:
         status()
     else:
