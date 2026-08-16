@@ -167,6 +167,13 @@ and no layer clears the threshold alone.** The effect is distributed across the
 harness rather than localised in one component. This is a negative result on a
 hypothesis we registered, and it is reported as it came out.
 
+**§8.1.2 supplies the mechanism.** Split on whether the kit already satisfied the
+goal, every single-layer ablation holds the failure at or near zero and only the
+whole-harness ablation reaches 75%. The layers are redundant on this failure
+mode, so each one is individually undetectable by construction — which is what a
+15-point per-layer threshold was always going to find. H4's null is explained
+rather than merely reported.
+
 The grounded completion check is the closest and points the predicted way — its
 unadjusted interval excludes zero — but it does not survive multiplicity and sits
 below the MEI. Do not report it as the mechanism.
@@ -292,6 +299,90 @@ The pattern holds without them.
 inventory that makes stock/flow confusion *available*. Both arms received the
 identical kit, so the comparison is sound, but the absolute rate would not
 transfer to an empty-inventory setting. What transfers is the failure mode.
+
+#### 8.1.1 The manipulation — emptying the bag removes the failure
+
+Everything above is an association measured *within* one arm. The matched test
+is causal for the **harness**; nothing in it is causal for the **stock**. This
+follow-up supplies that manipulation. It was **pre-declared in full** —
+prediction, thresholds and the meaning of a null — before any attempt ran
+(preregistration, 2026-08-15), and the decision rule is applied in code by
+`eval/stock_strip_report.py` rather than by eye.
+
+The six stock-satisfied tasks were re-run under `harness_off` for 4 replicates,
+each with a kit that drops **only that task's target item** and keeps every
+enabler, so the work required is unchanged and the sole variable is whether the
+goal was already satisfied at the start.
+
+| no harness, same six tasks | false completion |
+|---|---|
+| kit supplies the target item (§8.1, as collected) | **18/24 = 75%** |
+| target item removed from the kit | **0/24 = 0%** |
+
+**Fisher exact, two-sided: p < 0.0001.** Pre-declared rule (≤33% confirms,
+34–49% inconclusive, ≥50% refutes) returns **confirmed** at 0%.
+
+Twenty of the 24 succeeded, most overshooting the target (+37 cobblestone
+against a +16 ask, +48 sticks against +12). The four that failed did so
+**openly** — three timeouts and a cancel on the tier-4 *Mine 64* task, one short
+chop — and *not one of them claimed completion*. That is the distinction the
+endpoint measures: with an empty bag the agent either did the work or failed
+without reporting success. One attempt (#1202) mined 71 cobblestone against a
++64 target and never claimed it — the opposite error, `reached-not-recognized`,
+which is `deterministic termination`'s own endpoint and absent from this arm by
+construction.
+
+Rig integrity: 24 of 24 collected, all at one commit (`fccb7a3`), all
+`label_source = referee`, and **zero attempts began holding ≥ N of their target**
+— the report refuses to interpret the result otherwise, since that would be a
+kit failure rather than a finding. The arm restarts the bot before every
+attempt, where `conf_off` restarted once per arm; the confirmatory data bounds
+that difference at 4/6 = 67% for positions 1–4, far above the 33% threshold, so
+the cadence cannot manufacture this result.
+
+#### 8.1.2 Why no single layer was found responsible
+
+Splitting every arm on the same variable shows why the per-layer ablation (§7)
+found nothing:
+
+| arm | kit supplies the target | kit empty of it |
+|---|---|---|
+| full harness | 1/24 = 4% | 0/24 = 0% |
+| **no harness** | **18/24 = 75%** | 4/23 = 17% |
+| − perception | **0/24 = 0%** | 0/24 = 0% |
+| − preconditions | **0/24 = 0%** | 0/24 = 0% |
+| − reflexes | **0/23 = 0%** | 1/24 = 4% |
+| − completion check | 2/21 = 10% | 3/21 = 14% |
+| − deterministic termination | **0/24 = 0%** | 0/24 = 0% |
+
+Removing any **single** layer leaves the failure at or near zero; only removing
+**all five** produces 75%. The failure therefore has one trigger and several
+independent guards, any one of which is sufficient. **That is the mechanism
+behind H4's null:** no single-layer ablation could reach the pre-declared
+15-point threshold, because four other layers still caught the case. H4 is not
+merely unsupported — the harness is redundant on this failure mode, and the
+redundancy is what makes each layer individually undetectable.
+
+#### 8.1.3 What starting stock does not explain
+
+The unharnessed arm still false-completes **4/23 = 17%** with an empty bag:
+
+```
+#750   +3 ladder   start 0  end 0   9 steps
+#753   +8 dirt     start 0  end 0   0 steps
+#1067  +8 torch    start 0  end 0   5 steps
+#1124  +8 torch    start 0  end 0   3 steps
+```
+
+Empty bag, some work attempted, nothing gained, completion claimed anyway. This
+is a **second and smaller failure mode**, and starting stock does not account for
+it. Reported here rather than folded into the mechanism.
+
+Note also that §8.1.1's 0/24 and this 17% are **not** the same comparison: the
+stripped arm covers the six originally-stocked tasks (tiers 1–4, skewed low),
+while the empty-start six are the harder set (torches, ladders, iron). The
+manipulation shows that removing the stock removes the failure *on those six
+tasks*; it does not bound the residual to zero in general.
 
 ## 9. Cost
 
