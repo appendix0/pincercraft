@@ -234,6 +234,37 @@ in the predicted direction is worth more than the point estimate.
 **Difference −41.3pp, 95% CI [−60.8, −23.1], p ≤ 0.0002. H1 supported.**
 (Resolution floor, as in §4.)
 
+### 5.1 The 45.1% is two numbers, and only one of them travels
+
+Regenerate with `python3 eval/stock_strata.py`. Reported here rather than in a
+limitation, because a reader given only the pooled figure will generalise the
+half of it that is a property of our kit.
+
+Splitting on whether the reset kit already supplied ≥ N of the task's target
+item — 6 of the 13 tasks, by design (protocol.md §1):
+
+| stratum | no harness | full harness | Fisher exact |
+|---|---|---|---|
+| kit supplies the target item | **18/24 = 75%** [55, 88] | 1/24 = 4% [1, 20] | 5.7 × 10⁻⁷ |
+| kit empty of it | **4/23 = 17%** [7, 37] | 0/24 = 0% [0, 14] | 0.0496 |
+
+**Both arms received the identical kit, so each stratum is a fair comparison,
+and the harness effect survives in both.** What does not survive is the level:
+45.1% is the average of a 75% cell and a 17% cell, and the 75% cell exists
+because the kit was built to hold the campaign median of each consumable. In an
+empty-inventory setting the ablated arm would false-complete far less often. The
+**contrast** is the transferable finding; the **rate** is conditional on a
+starting inventory that makes stock/flow confusion available at all.
+
+Two honest qualifications. The empty-bag contrast is the weaker of the two —
+p = 0.0496, four events against zero — so what §8.1.3 calls a "second and
+smaller failure mode" is real but thinly evidenced. And the stratum rule is
+defined only for delta-shaped criteria, so the platform task appears in neither
+row: a structure criterion has no "already held N" state.
+
+§8.1.1 supplies the manipulation that makes this causal rather than
+correlational, and §8.1.2 shows the same split is what explains H4's null.
+
 ## 6. H3 — the gap closes under the harness
 
 McNemar exact, claimed vs verified within the same attempts.
@@ -423,10 +454,14 @@ holds the tool and the ask is at its least natural:
 
 The pattern holds without them.
 
-**Limitation.** The 45.1% false-completion rate is conditional on a starting
-inventory that makes stock/flow confusion *available*. Both arms received the
-identical kit, so the comparison is sound, but the absolute rate would not
-transfer to an empty-inventory setting. What transfers is the failure mode.
+**Limitation — now reported as a primary result instead, at §5.1.** The 45.1%
+false-completion rate is conditional on a starting inventory that makes
+stock/flow confusion *available*: it is the average of a 75% cell and a 17%
+cell. Both arms received the identical kit, so the comparison is sound in each
+stratum, but the absolute rate would not transfer to an empty-inventory setting.
+What transfers is the contrast. This was disclosed here from the start; it was
+moved beside the headline because a qualification a reader meets three sections
+after the number it qualifies is a qualification most readers never meet.
 
 #### 8.1.1 The manipulation — emptying the bag removes the failure
 
