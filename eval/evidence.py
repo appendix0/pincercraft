@@ -29,10 +29,10 @@ from eval_db import DB_PATH as DB  # noqa: E402  single env-aware definition
 # Beside the ledger, not beside this file — see the note in taxonomy.py.
 EV_DIR = os.path.join(os.path.dirname(os.path.abspath(DB)), 'eval', '.referee')
 TARGET = 40
-# Pre-registration freeze. Labels before this are pilot data — they developed the
-# grammar they test, so §5 keeps them out of the confirmatory set rather than
-# pooling them. Counting them toward the target would inflate progress.
-FREEZE = '2026-08-07'
+# Pre-registration freeze — one definition, in analysis_rules, beside the other
+# rules that decide what the paper's numbers are computed over. Counting pilot
+# labels toward the target would inflate progress.
+from analysis_rules import FREEZE  # noqa: E402,F401  re-exported for callers
 
 
 def labeled_ids(con, since=None):

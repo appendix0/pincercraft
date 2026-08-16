@@ -17,8 +17,15 @@ Commitments: [preregistration.md](preregistration.md).
 
 4 replicates × 7 arms × 13 tasks, on the dedicated eval world (pincercraft-ts),
 never the owner's live world. Arm order and task order are independently
-shuffled per replicate; `RESET_STATE=1` clears inventory, restores a fixed kit
-and teleports the bot before **every** attempt.
+shuffled per replicate; `RESET_STATE=1` clears inventory and restores a fixed
+kit before **every** attempt.
+
+**The position half of that reset never took effect** — the teleport was issued
+but silently rejected, so the bot resumed each attempt where the previous one
+stopped (§10, and the 2026-08-15 deviation). What controls arm position in this
+campaign is therefore the per-replicate randomization of arm order, not the
+position reset. The inventory half is verified: 484 of 496 attempts (97.6%)
+start on an inventory exactly equal to the reset kit.
 
 | | |
 |---|---|
@@ -31,9 +38,17 @@ and teleports the bot before **every** attempt.
 The design calls for 364 (52 per arm). We have 356: `− completion check` holds
 46 rather than 52, and `no harness` and `− reflexes` hold 51. The 8 missing rows
 are logged in [aborts.md](aborts.md) — a bot death, a 529 retry-budget
-exhaustion, and three task-queue dedup collisions — and they are **not** replaced,
+exhaustion, and two task-queue dedup collisions — and they are **not** replaced,
 because re-running them individually would stamp a false `arm_position` on rows
-whose real position is fixed by the replicate's shuffle.
+whose real position is fixed by the replicate's shuffle. Per slot: `− completion
+check` is missing benchmark #5 in replicate 1 and #0/#4/#8/#10/#11 in replicate
+4; `no harness` is missing #10 in replicate 4; `− reflexes` is missing #4 in
+replicate 2.
+
+*Three* dedup collisions occurred, but only two cost a row. The third hit `no
+harness` in replicate 2, and that replicate was later re-run whole (2026-08-14),
+so its lost benchmark — *Mine 64 NEW cobblestone* — was collected by the re-run
+and is present in the primary set.
 
 **The discard rate counts faults only.** The 77 superseded rows are replicate 2
 re-run whole after credit exhaustion truncated it; they are valid data replaced
@@ -301,6 +316,11 @@ thesis applied to its own cost table.
 
 ## 10. Robustness
 
+The two sensitivity tables below regenerate with
+`python3 eval/campaign_report.py --robustness`. They were hand-transcribed until
+2026-08-15, against this file's own promise that every number comes from the
+script; the flag exists so a reader can reproduce them rather than trust them.
+
 **Platform task.** The 5×5 platform task is scored by the block-scan scorer,
 which the H0 calibration predates. Dropping it:
 
@@ -327,6 +347,36 @@ after seeing which way it moves the result is precisely what the pre-registratio
 forbids, and keeping them costs us effect size rather than manufacturing it.
 **This is a known inconsistency** between the taxonomy rule and the exclusions
 table, flagged here rather than silently resolved.
+
+**Position reset (the 2026-08-15 deviation).** The reset teleport never fired.
+Over the 486 consecutive confirmatory attempt pairs, measuring where attempt N
+ended against where N+1 began:
+
+| start position measured from | median distance | within 3 blocks |
+|---|---:|---:|
+| previous attempt's **end** position | **0.0 blocks** | **457 / 486 = 94%** |
+| the pinned reset point (1141, 86, −4) | 1128.9 blocks | 0 / 486 = 0% |
+
+Position therefore carries across attempts and across arms. Randomized arm order
+is what stands between that and an arm-position confound, and the empirical check
+is that the exploratory `gates` anomaly — which *was* an arm-position artefact —
+did not reproduce (§7).
+
+The direct test is to restrict to replicates where every arm ran in the same
+region of the world. Replicates 1 and 3 qualify; 2 and 4 do not. On the
+stock-satisfied attempts of §8.1, exclusions applied:
+
+| subset | no harness | full harness | Fisher exact |
+|---|---|---|---|
+| replicate 1 (all arms x ≈ 1130–1235) | 6/6 = 100% | 0/6 = 0% | 0.0022 |
+| replicate 3 (all arms x ≈ −56–6) | 6/6 = 100% | 0/6 = 0% | 0.0022 |
+| **replicates 1+3, position-matched** | **12/12 = 100%** (med x 557) | **0/12 = 0%** (med x 566) | **< 0.0001** |
+| all four replicates (as reported) | 18/24 = 75% | 1/24 = 4% | < 0.0001 |
+
+The effect is undiminished when the arms are matched on location, which is what
+would be expected of a failure mode that consists of not moving: 21 of the 22
+false completions produced zero net gain, at a median of 2 steps and 10 seconds
+(§8.1). Terrain does not enter into it.
 
 ## 11. Limitations
 
