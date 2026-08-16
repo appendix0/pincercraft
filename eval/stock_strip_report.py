@@ -135,8 +135,14 @@ def main(tag='stockstrip'):
         return
 
     rate = 100 * new_fd / new_n
-    print(f'\nFisher exact, two-sided: p = '
-          f'{fisher(base_fd, base_n - base_fd, new_fd, new_n - new_fd):.5f}')
+    # `.5f` printed this result as "0.00000": Fisher exact is a closed-form sum,
+    # so unlike a bootstrap it has no resolution floor and the true value here is
+    # 3.7e-08. Rounding it to five decimals both destroyed a real number and
+    # reproduced the "p=0.0000" the 2026-08-10 deviation fixed elsewhere. Below
+    # 0.0001 the value is printed in scientific notation instead of flattened.
+    p = fisher(base_fd, base_n - base_fd, new_fd, new_n - new_fd)
+    print(f'\nFisher exact, two-sided: p = ' +
+          (f'{p:.3g}' if p < 0.0001 else f'{p:.5f}'))
     # Pre-declared 2026-08-15, before any row of this arm existed.
     if rate <= 33:
         verdict = ('MECHANISM CONFIRMED — starting stock causes the false '

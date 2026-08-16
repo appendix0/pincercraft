@@ -202,18 +202,30 @@ def cluster_bootstrap(a_rows, b_rows, n=BOOTSTRAP_N, seed=12345,
         # Two-sided bootstrap p, with the (r+1)/(B+1) correction. Without it a
         # resample set that never crosses zero yields exactly 0, which printed
         # as "p=0.0000" — a value no resampling procedure can justify, and one
-        # a reviewer is right to reject. The floor is 1/(B+1), reported as
-        # "<0.0001" at B=10000.
+        # a reviewer is right to reject.
+        #
+        # The floor is 2/(B+1), NOT 1/(B+1). The one-sided count is doubled, so
+        # the smallest value this expression can return is 2*(0+1)/(B+1) —
+        # 0.0002 at B=10000. Reporting "<0.0001" claimed the statistic had gone
+        # below a bound it cannot reach, and the number it was claiming to be
+        # under is exactly the number it had computed. This is the same class of
+        # error as the "p=0.0000" the (r+1)/(B+1) correction fixed on
+        # 2026-08-10, left half-corrected: the estimator was fixed and the
+        # resolution bound reported beside it was not.
         'p': min(1.0, 2 * (min(sum(d <= 0 for d in diffs),
                                sum(d >= 0 for d in diffs)) + 1) / (len(diffs) + 1)),
-        'p_floor': 1.0 / (len(diffs) + 1),
+        'p_floor': 2.0 / (len(diffs) + 1),
         'tasks': len(tasks),
     }
 
 
 def fmt_p(b):
-    """A bootstrap p at the resolution the resample count can support."""
-    return f'<{b["p_floor"]:.4f}' if b['p'] <= 2 * b['p_floor'] else f'={b["p"]:.4f}'
+    """A bootstrap p at the resolution the resample count can support.
+
+    At the floor the honest report is "<=" and not "<": the procedure returned
+    that exact value and cannot return less, so a strict inequality overstates
+    the resolution by claiming a bound the design never bought."""
+    return f'<={b["p_floor"]:.4f}' if b['p'] <= b['p_floor'] else f'={b["p"]:.4f}'
 
 
 def holm(pairs):

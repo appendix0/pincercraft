@@ -107,7 +107,13 @@ hides that layer's *own* target category.
 Cluster bootstrap, **task as the resampling unit**, 10,000 resamples.
 
 **full harness 67.3% vs no harness 29.4% → +37.9pp, 95% CI [+20.2, +56.9],
-p < 0.0001. H2 supported.**
+p ≤ 0.0002. H2 supported.**
+
+The p is reported at the bootstrap's resolution floor, not below it. A
+two-sided bootstrap p with the `(r+1)/(B+1)` correction cannot fall below
+`2/(B+1)` = 0.0002 at B = 10,000, and 0.0002 is the value the procedure
+returned. This file said `p < 0.0001` until 2026-08-16 — a bound the method
+cannot reach, and half the number it had actually computed.
 
 This **reversed** the exploratory result, in the direction predicted in advance.
 Replicates 1–2 gave +22.2pp with a CI spanning zero (p = 0.15), and the
@@ -123,7 +129,8 @@ in the predicted direction is worth more than the point estimate.
 | full harness | 2/52 = 3.8% | [1.1, 13.0] |
 | no harness | 23/51 = 45.1% | [32.3, 58.6] |
 
-**Difference −41.3pp, 95% CI [−60.8, −23.1], p < 0.0001. H1 supported.**
+**Difference −41.3pp, 95% CI [−60.8, −23.1], p ≤ 0.0002. H1 supported.**
+(Resolution floor, as in §4.)
 
 ## 6. H3 — the gap closes under the harness
 
@@ -228,8 +235,16 @@ The unharnessed agent treated the bag as the answer.
 | **false** completions | **18 / 22 = 82%** |
 | true completions | 5 / 14 = 36% |
 
-Odds ratio 8.1, **Fisher exact two-sided p = 0.0112**. Give-tasks (`−N item`)
-are excluded; they have a different shape.
+Odds ratio 8.1, **Fisher exact two-sided p = 0.0112**.
+
+The denominator is 22 rather than `no harness`'s 23 false completions because
+the one **platform** attempt is dropped: its criterion is a structure, not an
+inventory delta, so "already held ≥ N of the target item" is undefined for it.
+Until 2026-08-16 this sentence read *"Give-tasks (`−N item`) are excluded"* —
+**there are no give-tasks in this benchmark set.** All 13 criteria are `+N`
+deltas or the platform structure. The count was always right and the stated
+reason was wrong; the rule is a leftover from a task set this campaign does not
+use.
 
 It is not partial credit. **21 of the 22 produced literally zero gain** on the
 target item:
@@ -319,7 +334,7 @@ goal was already satisfied at the start.
 | kit supplies the target item (§8.1, as collected) | **18/24 = 75%** |
 | target item removed from the kit | **0/24 = 0%** |
 
-**Fisher exact, two-sided: p < 0.0001.** Pre-declared rule (≤33% confirms,
+**Fisher exact, two-sided: p = 3.7 × 10⁻⁸.** Pre-declared rule (≤33% confirms,
 34–49% inconclusive, ≥50% refutes) returns **confirmed** at 0%.
 
 Twenty of the 24 succeeded, most overshooting the target (+37 cobblestone
@@ -461,8 +476,8 @@ stock-satisfied attempts of §8.1, exclusions applied:
 |---|---|---|---|
 | replicate 1 (all arms x ≈ 1130–1235) | 6/6 = 100% | 0/6 = 0% | 0.0022 |
 | replicate 3 (all arms x ≈ −56–6) | 6/6 = 100% | 0/6 = 0% | 0.0022 |
-| **replicates 1+3, position-matched** | **12/12 = 100%** (med x 557) | **0/12 = 0%** (med x 566) | **< 0.0001** |
-| all four replicates (as reported) | 18/24 = 75% | 1/24 = 4% | < 0.0001 |
+| **replicates 1+3, position-matched** | **12/12 = 100%** (med x 557) | **0/12 = 0%** (med x 566) | **7.4 × 10⁻⁷** |
+| all four replicates (as reported) | 18/24 = 75% | 1/24 = 4% | 5.7 × 10⁻⁷ |
 
 The effect is undiminished when the arms are matched on location, which is what
 would be expected of a failure mode that consists of not moving: 21 of the 22
