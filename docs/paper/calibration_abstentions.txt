@@ -1,0 +1,17 @@
+# Abstentions in the stratified re-calibration (preregistration, 2026-08-16)
+#
+# An abstention is a drawn card the labeller could not call from the evidence.
+# The pre-registration counts it as NEITHER agreement nor disagreement, which
+# means it must still be recorded: `agreement.py label` takes only 0|1, so an
+# abstention writes no gold row, and an unrecorded abstention is indistinguish-
+# able from a card that was never issued. That would silently shrink the
+# denominator and turn "we could not judge this" into "we did not sample it" --
+# the difference between a stated limit of the instrument and a hidden one.
+#
+# The same thing happened on 2026-08-08: the labeller abstained on all three
+# blind platform cards (#394, #404, #414), no row was written for any of them,
+# and the fact survives only in prose. It is recorded here as data instead.
+#
+# Format: task_id <tab> scorer path <tab> why the card could not be called
+#
+937	blockscan	Platform task, ended `cancelled` after 316s with heavy unrelated activity (+8 dirt, +3 ladder, +1 furnace, -6 cobblestone). Six cobblestone placed is neither a 25-block platform nor clearly nothing; the inventory delta cannot settle whether a partial structure exists, and the evidence card carries no block scan.
