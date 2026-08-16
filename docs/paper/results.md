@@ -72,10 +72,112 @@ calibration failure instead.
 **Gate requires ≥ 90% agreement and a Wilson lower bound > 75%. PASS** at 100.0%
 and 91.0%. The pilot is reported separately and never pooled, per §5.
 
+**What that figure is, stated plainly.** It is a *prevalence-weighted aggregate
+over a convenience sample*, and on its own it does not certify the endpoint this
+paper rests on. Regenerating its composition:
+
+| the 39 confirmatory scorer-measured labels | count |
+|---|---|
+| true completion | **34** |
+| capability / budget failure | 3 |
+| **false completion** | **2** |
+| drawn from `conf_*` (the confirmatory campaign) | **0** |
+
+Cards were issued in glob order with no stratification, so 87% of the set is the
+easy case — the scorer says success, the world agrees, the human agrees. The
+scorer's **false-completion** verdict, which is what H1, H3, §8.1 and every
+headline rate actually depend on, is validated here on **2 attempts**: Wilson
+[34.2, 100.0]. Aggregate agreement is the wrong statistic for a rare-cell
+endpoint. Worse, every one of the 39 judges a `bench_*` attempt run on or before
+2026-08-07, while the campaign ran 08-09 → 08-14 and the scorer gained a
+block-scan code path in between. "Confirmatory" in `agreement.py` has meant
+*when the label was written*, not *what it judges*.
+
+§2.1 replaces this figure for the purpose it was being used for. It does not
+retract it: 39/39 remains an accurate statement about the population it was
+drawn from.
+
 The honor-system rows are the counter-exhibit, not a defect: **0/5 agreement
 across both eras**. Where the label came from the agent's own claim, blind human
 judgement disagreed every time. That is the phenomenon, measured on the
 instrument that is supposed to be the alternative to it.
+
+### 2.1 Stratified re-calibration — certifying the cell the paper uses
+
+Regenerate with `python3 eval/calib_report.py`.
+
+Thirty attempts were drawn **from the confirmatory primary set itself**, by a
+sampling rule, allocation, RNG seed and decision rule all registered before any
+card was rendered (preregistration, 2026-08-16), and the draw was sealed behind
+a SHA-256 so the manifest is verifiable rather than trusted. Cards are rendered
+by the unchanged `evidence.py card()` — scorer verdict and arm omitted — so
+these labels are format-comparable with the 39. The universe drops `task_id`
+1074, which maps to two attempt rows, leaving 355 eligible.
+
+The strata are the 2×2 of scorer verdict against agent claim, split by which
+scorer path produced the verdict, because the inventory-delta path and the
+block-scan path are **two different instruments** and a label on one certifies
+nothing about the other.
+
+| cell | what it certifies | share of primary set | labelled | agreement | Wilson 95% |
+|---|---|---|---|---|---|
+| **B** — scorer says FAIL, agent CLAIMED done | **false completion — the endpoint** | 39 / 355 (11.0%) | 21 | **20/21 = 95.2%** | **[77.3, 99.2]** |
+|  ⤷ inventory-delta path | 328 primary rows scored this way | 28 | 17 | **17/17 = 100%** | **[81.6, 100.0]** |
+|  ⤷ block-scan path | 28 primary rows scored this way | 11 | 4 | 3/4 = 75% | [30.1, 95.4] |
+| **A** — scorer says SUCCESS | verified success | 194 / 355 (54.6%) | 4 | 4/4 = 100% | [51.0, 100.0] |
+| **C** — scorer says FAIL, no claim | capability / budget failure | 113 / 355 (31.8%) | 4 | 4/4 = 100% | [51.0, 100.0] |
+
+**The pre-declared rule (≥ 90% per cell) returns PASS on all three cells.** The
+critical cell moves from **n = 2, Wilson [34.2, 100.0]** to **n = 21, Wilson
+[77.3, 99.2]** — and on the inventory-delta path that carries 328 of the 356
+primary rows, to **17/17 with a lower bound of 81.6%**.
+
+Reweighting the per-cell rates by the primary set's own composition gives
+**99.2% overall**, with a conservative bound of **52.9%** and **95.2% strata
+coverage**. Three caveats travel with those two numbers and none is optional.
+The reweighted figure is a weighted mean of per-cell rates, not a count, and is
+**not comparable to 39/39**. The lower bound is a weighted Wilson *lower* bound
+rather than half of a symmetric interval, because three strata returned 100%
+where a Wald variance is exactly zero and a normal interval would collapse to a
+point — the same degenerate-interval failure the 2026-08-10 deviation caught. And
+it is weak (52.9%) for a reason worth stating rather than hiding: the budget was
+deliberately spent on cell B, leaving cells A and C at four labels each. **The
+strong claim here is per-cell and specifically about false completion; the
+reweighted overall is thin and is reported as thin.**
+
+**The one disagreement, reported as it came out.** Attempt #1043, a platform
+task: the agent claimed done, the block scan found **16 of 25** blocks and scored
+it a false completion, and blind human judgement called it a genuine success. It
+is counted as a disagreement in every figure above, and the pre-registration
+forbids re-drawing or revising it now that the verdict is visible.
+
+The diagnostic is worth recording, and is **post-hoc and changes no number**: the
+evidence card showed a −25 cobblestone delta and nothing about geometry, so the
+labeller could see that twenty-five blocks were placed but not that they failed
+to form a solid 5×5. On structure criteria **the human is the weaker instrument,
+not the stronger one** — which inverts the assumption `evidence.py` is built on,
+that the human "sees everything and can catch a criterion the rule mis-encodes".
+That assumption holds for an inventory delta and fails for a shape.
+
+**Consequently the block-scan path is still not human-calibrated, and this paper
+does not claim it is.** Four labels, one disagreement traceable to the card
+rather than the scorer, and one abstention (#937, recorded in
+`calibration_abstentions.txt` rather than left as a silent gap — the 2026-08-08
+platform abstentions survive only in prose). Its warrant remains **engineering
+validation** against RCON-placed ground truth: 25/25 complete at centre, 25/25 at
+a corner, 24/25 with one block removed, 0/25 six blocks away. For a deterministic
+geometric check that is meaningful evidence, and it is not what H0 claims. The
+C/block-scan stratum — 8 primary attempts, 2.3% — carries **no label at all**.
+
+### 2.2 What §2.1 licenses, and what it does not
+
+| claim | status |
+|---|---|
+| When this scorer writes *false completion* on an inventory-delta criterion, a blind human agrees | **Certified.** 17/17, LB 81.6%, on confirmatory attempts |
+| The 45.1% / 3.8% false-completion contrast rests on a validated verdict | **Yes**, for the 328 delta-scored rows |
+| The block-scan criterion is human-calibrated | **No.** Engineering-validated only; 3/4 with the disagreement attributable to the card |
+| Overall scorer agreement on the confirmatory campaign is ≈ 99% | **Point estimate only.** Conservative bound 52.9%, coverage 95.2%, cells A and C thin by design |
+| Sensitivity / specificity in the epidemiological sense | **Not estimated.** Sampling conditioned on the *scorer's* verdict yields predictive values; sensitivity conditions on the human's label and needs a differently drawn sample |
 
 ## 3. Headline — every arm
 
@@ -490,11 +592,17 @@ false completions produced zero net gain, at a median of 2 steps and 10 seconds
    was sized for a 15pp per-layer effect and none was found. Whether the layers
    genuinely share the work, or the design is underpowered for the true effect
    sizes, is not resolved by this data.
-2. **The calibration set is an easy regime.** 39/39 is a strong lower bound
-   (91.0%) but the attempts it covers are inventory-delta criteria where ground
-   truth is cheap. It does not license the scorer on harder criteria; the one
-   confirmatory honor-system disagreement (#384) is on the platform task, the
-   only structure-scored criterion.
+2. **The scorer is certified on the inventory-delta path and not on the
+   block-scan path.** §2.1 puts the false-completion verdict at 17/17 (LB 81.6%)
+   on the 328 delta-scored primary rows, which is what the headline rates
+   depend on. The 28 block-scan rows rest on engineering validation against
+   RCON-placed ground truth, not on blind human judgement: four labels, one
+   disagreement, one abstention, and a further 8 attempts with no label. A
+   labeller cannot check geometry from an inventory delta, so this gap is a
+   property of the evidence card and is not closed by drawing more cards of the
+   same kind. Note also that #384, described in earlier drafts as the
+   structure-scored disagreement, was **honor-system** scored — the block-scan
+   scorer's human coverage was zero until §2.1 and is four labels now.
 3. **A 15.0% infrastructure fault rate** is high for a campaign this size, and
    every fault is a run the rig lost rather than a result.
 4. **Unequal n.** Three arms hold fewer than 52 attempts; `− completion check`
