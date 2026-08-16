@@ -44,7 +44,11 @@ def labeled_ids(con, since=None):
     q = "SELECT notes FROM gold_attempts WHERE notes LIKE '%agree:task_id=%'"
     params = ()
     if since:
-        q += " AND timestamp >= ?"
+        # The n=40 confirmatory target counts the convenience-sampled set only.
+        # The 2026-08-16 stratified labels carry a later timestamp, so without
+        # this they would be counted toward a target they were not drawn for and
+        # report progress of 70/40 against a set that is complete at 40.
+        q += " AND timestamp >= ? AND notes NOT LIKE '%strat=%'"
         params = (since,)
     out = set()
     for (notes,) in con.execute(q, params).fetchall():

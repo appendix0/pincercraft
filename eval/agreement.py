@@ -23,6 +23,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from eval_db import DB_PATH as DB  # noqa: E402  single env-aware definition
 from analysis_rules import FREEZE  # noqa: E402  one definition of the freeze date
 MARK = re.compile(r'agree:task_id=(\d+)')
+# The 2026-08-16 stratified re-calibration writes `strat=<date>` beside the
+# agree tag. Those labels MUST NOT land in the confirmatory cell: `era` below is
+# a property of when a label was recorded, so without this they would sort into
+# `confirmatory` by timestamp and pool a deliberate oversample of the
+# false-completion cell into the 39/39 anchor -- inflating the denominator with
+# a sample drawn precisely because it is not representative, and producing a
+# figure less honest than the one the re-calibration exists to replace.
+# Reported by eval/calib_report.py, per cell, and never summed with these.
+STRAT = re.compile(r'strat=(\S+)')
 
 def head():
     try:
@@ -72,7 +81,10 @@ def report():
             # Which set a label belongs to is a property of WHEN IT WAS RECORDED,
             # not of the attempt it judges: the pilot rows are pilot because they
             # developed the grammar they test (§5).
-            era = 'confirmatory' if (ts or '') >= FREEZE else 'pilot'
+            if STRAT.search(notes or ''):
+                era = 'stratified'
+            else:
+                era = 'confirmatory' if (ts or '') >= FREEZE else 'pilot'
             pairs.append((att, bool(human_success), era))
     print(f'{"task":>6}  {"set":<13} {"label_src":<12} {"scorer":<8} {"human":<6} {"verdict":<9} name')
     tally = defaultdict(lambda: [0, 0])          # (era, src) -> [agreed, total]
@@ -91,7 +103,7 @@ def report():
     # (100%) — so the tool contradicted the protocol and the paper, and a reader
     # who ran it rather than reading results.md §2 would have published the 98%.
     print(f'\n{"set":<15} {"scorer-measured":>17} {"honor-system":>15}')
-    for era in ('confirmatory', 'pilot'):
+    for era in ('confirmatory', 'pilot', 'stratified'):
         cells = []
         for src in ('referee', 'honor_system'):
             ok, n = tally[(era, src)]
@@ -101,6 +113,11 @@ def report():
     if n:
         print(f'\nH0 anchor = the confirmatory scorer-measured cell: {ok}/{n} '
               f'({100*ok/n:.0f}%). The pilot row is reported beside it, never added to it.')
+    if tally[('stratified', 'referee')][1]:
+        print('\nThe stratified row is a DELIBERATE OVERSAMPLE of the '
+              'false-completion cell and\nits aggregate agreement is not a '
+              'meaningful quantity — read it per cell:\n  python3 '
+              'eval/calib_report.py')
 
 if __name__ == '__main__':
     if len(sys.argv) >= 4 and sys.argv[1] == 'label':
