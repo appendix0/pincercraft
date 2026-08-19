@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT">
   <img src="https://img.shields.io/badge/fork%20of-Mindcraft-informational" alt="Fork of Mindcraft">
   <img src="https://img.shields.io/badge/lies%20to%20itself-no-brightgreen" alt="Lies to itself: no">
-  <img src="https://img.shields.io/badge/scorer--verified-9%2F9%20harness%20on%20·%201%2F9%20off-blueviolet" alt="Scorer-verified: 9/9 with the harness, 1/9 without">
+  <img src="https://img.shields.io/badge/false%20success-3.8%25%20on%20·%2045.1%25%20off-blueviolet" alt="False success: 3.8% with the harness, 45.1% without">
 </p>
 
 <p align="center">
@@ -37,14 +37,16 @@ Inventory counts, *"can I mine this?"*, the recipe gap, *"is this task actually 
 
 ## The problem, named and measured
 
-The distance between what an agent *says* it did and what the world's ledger *shows* — the **say-do gap** — is the problem this repo exists to close. We ran the same ten benchmark tasks with the harness on and off, every attempt graded by a deterministic scorer from the world-state delta; the model's own "done!" counts for nothing:
+The distance between what an agent *says* it did and what the world's ledger *shows* — the **say-do gap** — is the problem this repo exists to close. The confirmatory campaign ran 13 benchmark tasks × 4 replicates across 7 arms — **356 scored attempts**, one model held fixed, under a [pre-registration](docs/paper/preregistration.md) frozen before collection. Every attempt is graded by a deterministic scorer from the world-state delta; the model's own "done!" counts for nothing:
 
-| | claimed "done" | the world agreed |
-|---|---|---|
-| **Harness on** | 9/9 | **9/9** |
-| **Harness off** | 9/9 | **1/9** |
+| | claimed "done" | the world agreed | **false success** |
+|---|---|---|---|
+| **Harness on** | 71.2% | **67.3%** | **3.8%** |
+| **Harness off** | 74.5% | **29.4%** | **45.1%** |
 
-Same model, same tasks, same server — the only variable is whether code or the LLM owns the facts. The gap is a loop-design problem, not a model problem, which means a bigger model won't close it and a scorer will. (The scorer itself was calibrated against blind human labels first: 11/12, 92%.) Full table, caveats included, in [Receipts](#receipts).
+**With the harness off, the agent claimed success on 74.5% of attempts and achieved 29.4%.** False success falls 45.1% → 3.8% (−41.3pp, 95% CI [−60.8, −23.1], p < 0.0001); task success rises 29.4% → 67.3% (+37.9pp, 95% CI [+20.2, +56.9], p < 0.0001). All 23 discordant claimed-vs-verified pairs in the off arm run the same way — the agent overstating, never the reverse.
+
+Same model, same prompts, same tasks, same server — the only variable is whether code or the LLM owns the facts. The gap is a loop-design problem, not a model problem, which means a bigger model won't close it and a scorer will. (The scorer itself was calibrated against blind human labels first: 67/68, 98.5%.) Full tables, caveats included, in [Receipts](#receipts).
 
 ## The five features that matter
 
@@ -90,38 +92,63 @@ Physical-AI teams calibrate broad automated data against a small, expensive, hum
 
 | Tier | What | Rows | Role |
 |---|---|---|---|
-| Apex — calibration | blind human verdicts (`gold_attempts`) | 12 comparable | certifies the scorer (11/12, 92% agreement) |
-| Middle — scale | scorer labels from world-state delta (`task_attempts`) | 158 of 192 | cheap, automated, trustworthy *because* calibrated |
-| Base — raw | the model's own honor-system word (`task_attempts`) | 34 of 192 | the counter-exhibit — included on purpose, never headlined |
+| Apex — calibration | blind human verdicts (`gold_attempts`) | 68 comparable | certifies the scorer (**67/68, 98.5%**, Wilson 95% [92.1, 99.7]) |
+| Middle — scale | scorer labels from world-state delta (`task_attempts`) | **356 of 356** | cheap, automated, trustworthy *because* calibrated |
+| Base — raw | the model's own honor-system word | 0 in the primary set | the counter-exhibit — **0/5** agreement with blind human labels, across both eras |
 
-**How the apex count works**, since the table above is the number a reader will check. `gold_attempts` holds **23** human-judged rows, but they are not all calibration. **16** carry an `agree:task_id=N` tag binding the verdict to one specific attempt; the other 7 are curated examples that certify nothing. Of those 16, **12** have a scorer verdict to compare against — 11 agree, hence **11/12 = 92%** — and 4 compare against an honor-system label, where agreement is **0/4**. That 0/4 is not a defect in the apex; it is [the finding](#receipts). Only tagged rows are calibration, and only `eval/agreement.py label` writes them — `eval/gold_add.py` adds curated rows to the same table and does not touch the agreement math.
+**How the apex count works**, since the table above is the number a reader will check. `gold_attempts` holds **92** human-judged rows, but they are not all calibration. **85** carry an `agree:task_id=N` tag binding the verdict to one specific attempt; the other 7 are curated examples that certify nothing. Which set a label belongs to is a property of **when it was recorded**, not of the attempt it judges — pilot labels are pilot because they helped develop the grammar they test, so [the pre-registration](docs/paper/preregistration.md) §5 forbids pooling them. Split accordingly, and reported as a 2×2, never as one total:
 
-**The apex has not grown with the base.** The 2026-08-07 ablation campaign added 120 scorer-labeled rows and zero human ones, so the middle tier is now ~13× the comparable apex, against ~4× when the 92% figure was earned. Worse, those 16 blind labels are *pilot* data: they helped develop the end_factor grammar they test, so [the pre-registration](docs/paper/preregistration.md) §5 forbids pooling them with confirmatory results. **The campaign's numbers currently rest on an apex that does not certify them.** Closing that is a fixed n=40 blind-labelling pass, tooled and pending — see the [runbook](docs/paper/runbook.md). Until it lands, campaign figures are reported as uncertified.
+| set | scorer-measured | honor-system |
+|---|---|---|
+| **post-freeze (the anchor)** | **67/68 = 98.5%** | 0/1 |
+| pilot (*never pooled*) | 11/12 = 91.7% | 0/4 |
+
+The gate set in advance was ≥ 90% agreement with a Wilson lower bound above 75%. **PASS** at 98.5% / 92.1%. The pilot's lower bound was 64.6% — *"your scorer might only be right two-thirds of the time"* was a live objection at that width; the post-freeze floor is 92.1%. Only tagged rows are calibration, and only `eval/agreement.py label` writes them — `eval/gold_add.py` adds curated rows to the same table and does not touch the agreement math.
+
+**The one disagreement is the honest part.** It is the 5×5 platform — the only structure-scored criterion in the set, where the human called a success and the block-scan scorer called a failure. Every inventory-delta criterion agreed. So the calibration is strong on the criterion class carrying 12 of the 13 tasks and demonstrably weaker on the one that isn't, which is a stated limitation rather than something averaged away. Dropping that task entirely makes both headline effects **larger** (§ Robustness in [results.md](docs/paper/results.md)) — including it is the conservative choice.
+
+**The apex closed the gap it used to have.** An earlier version of this section warned that the middle tier was ~13× the comparable apex and that campaign figures were "reported as uncertified". Two blind-labelling passes have since landed (2026-08-08, n=40; 2026-08-16, n=29), drawn from the confirmatory campaign itself. That warning no longer applies.
 
 This matters beyond the labels: any metric *derived* from a verified success — cost per verified success, the say-do gap itself — inherits the apex dependency. Only raw instrument readings (tokens per run, wall clock) stand outside the pyramid, because the model never self-reports them.
 
-Field Trial v1, below, is the pyramid's output: ten tasks, two arms, built entirely on the calibrated middle tier. All three tiers, raw: [`Appendix0/pincercraft-say-do-gap`](https://huggingface.co/datasets/Appendix0/pincercraft-say-do-gap) on Hugging Face.
+The confirmatory campaign below is the pyramid's output: 13 tasks, 7 arms, built entirely on the calibrated middle tier. All three tiers, raw: [`Appendix0/pincercraft-say-do-gap`](https://huggingface.co/datasets/Appendix0/pincercraft-say-do-gap) on Hugging Face.
 
-### Field Trial v1 — harness on vs. harness off (2026-07-19)
+### The confirmatory campaign — 7 arms, 356 attempts (2026-08-15)
 
-The promised benchmark: the same ten fixed tasks run twice — once with the full harness, once with it ablated (raw state injection, no gates, no reflexes, no verified finishes; player-safety stays on in both arms). Every attempt scorer-labeled from the world-state delta, every row in the ledger under `task_set = bench_on` / `bench_off`.
+The benchmark that supersedes Field Trial v1: **13 fixed tasks × 4 replicates × 7 arms**, one model held fixed (`claude-sonnet-4-6`, planner and coder), one commit per comparison, under a [pre-registration](docs/paper/preregistration.md) frozen 2026-08-09 — hypotheses, endpoints, thresholds, exclusion and stopping rules all written before collection. Arm order and task order are independently shuffled per replicate. Inventory is cleared and a fixed kit re-issued before every attempt. Player-safety — the stop reflex, the death handler, the code of conduct — stays on in every arm and is never ablated.
 
-| Tier | Benchmark | Harness ON | Harness OFF |
-|---|---|---|---|
-| 1 | Mine 16 cobblestone | ✅ verified | ❌ claimed done at 6s, gained 0 |
-| 1 | Chop 6 oak logs | ✅ verified | ❌ claimed at 5s, gained 0 |
-| 1 | Collect 8 dirt | ✅ verified | ❌ claimed at 5s, gained 5 of 8 |
-| 2 | Craft 16 oak planks | ✅ verified | ❌ claimed instantly, gained 0 |
-| 2 | Craft 12 sticks | ✅ verified | ❌ claimed at 5s, gained 0 |
-| 2 | Craft 1 furnace | ✅ verified | ❌ claimed at 5s, gained 0 |
-| 3 | Craft 8 torches | ✅ verified | ❌ claimed at 16s, gained 0 |
-| 3 | Craft 1 stone pickaxe | ✅ verified | ❌ claimed at 10s, gained 0 |
-| 3 | Craft 3 ladders | ✅ verified | ✅ verified |
-| 3 | 5×5 platform *(honor-system)* | "pass" — 191s of actual building | "pass" — claimed at 35s, no building |
+| arm | n | task success | claimed | **false success** |
+|---|---|---|---|---|
+| **full harness** | 52 | **67.3%** | 71.2% | **3.8%** |
+| **no harness** | 51 | **29.4%** | 74.5% | **45.1%** |
+| − perception | 52 | 59.6% | 63.5% | 3.8% |
+| − preconditions | 52 | 63.5% | 65.4% | 1.9% |
+| − reflexes | 51 | 58.8% | 58.8% | 2.0% |
+| − completion check | 46 | 54.3% | 71.7% | 17.4% |
+| − deterministic termination | 52 | 65.4% | 67.3% | 5.8% |
 
-**Scorer-verified success: 9/9 with the harness, 1/9 without.** Both arms *claimed* 9/9. The off-arm failure shape is uniform — declare done within seconds, scorer measures nothing gained. The one honest off-arm pass (ladders) had the materials already on hand. And the platform row is the honor-system exhibit hiding in plain sight: builds have no scorer coverage yet, so both arms "pass" — including the 35-second claim with zero blocks placed. That's why honor labels never make a headline here.
+**The single most important row is `no harness`: it claimed success on 74.5% of attempts and achieved 29.4%.** McNemar exact on claimed-vs-verified gives p = 2.4 × 10⁻⁷ for that arm and every one of its 23 discordant pairs runs the same way — the agent overstating its own success, never the reverse. A symmetric error would produce pairs in both directions. This one has a sign.
 
-Fine print, because receipts cut both ways: the off arm inherited a stocked inventory from the on arm's runs (an *easier* setup) and still went 1/9 — the gap is conservative. The scorer itself was calibrated first: **11/12 (92%)** agreement with blind human labels across gain, loss, and cancel criteria. Token cost tells the same story — the harness arm spent ~413k input / 6.5k output tokens doing the actual work; the ablated arm spent ~318k / 2k mostly generating claims.
+**What the false successes actually are.** They concentrate where the starting kit already held the goal item: **18 of 22 (82%)**, against 36% of true completions (Fisher p = 0.0112). Twenty-one of the 22 produced *literally zero gain* on the target item — `needed +12 stick, had 96, gained 0 → claimed done`. The agent was not deprived of the facts: under ablation it still receives its inventory every turn. It had the number in front of it and read an absolute quantity as if it were the required net gain.
+
+So we removed the cause instead of arguing about it. A **pre-declared** follow-up re-ran the six affected tasks unharnessed with only that task's target item stripped from the kit — every enabler kept, the work required unchanged:
+
+| no harness, same six tasks | false success |
+|---|---|
+| kit supplies the target item | **18/24 = 75%** |
+| target item removed from the kit | **0/24 = 0%** |
+
+**Fisher exact, two-sided: p < 0.0001.** The decision rule (≤33% confirms / 34–49% inconclusive / ≥50% refutes) was written before any attempt ran and is applied in code. Twenty of the 24 succeeded, most overshooting the ask. The four that failed did so *openly* — three timeouts and a cancel — and **not one of them claimed completion**. With an empty bag the agent either did the work or failed without reporting success.
+
+**Why no single layer gets the credit.** Our pre-registered per-layer hypothesis **failed**, and that is reported as it came out: no single-layer ablation moved its target failure category by the pre-declared 15 points after multiplicity correction. Splitting every arm on the same variable shows why — removing any *one* layer leaves the failure at or near zero, and only removing *all five* produces 75%. The harness is **redundant** on this failure mode: one trigger, five independent guards, any one of which suffices. That redundancy is exactly what makes each layer individually undetectable. Defence in depth and per-component attribution are in tension, and a builder should want the former.
+
+**Cost tells the same story.** Per run the two whole-harness arms are indistinguishable — 89.6k vs 90.4k input tokens. Per unit of work that actually happened, the harness is **2.3× cheaper** (133k vs 307k input tokens per verified success), because the ablated arm spends tokens on attempts that produce nothing and then declares victory. Tokens-per-run and tokens-per-verified-success rank the arms differently, and only one of them measures something you would pay for — which is this repo's own thesis applied to its own cost table.
+
+**Fine print, because receipts cut both ways.** A **15.0% infrastructure fault rate**: every fault is a run the rig lost rather than a result, all logged at the time with cause in [aborts.md](docs/paper/aborts.md), and the rate is reported rather than absorbed. The **position reset never fired** — a defect in the RCON client means a teleport the server refuses is indistinguishable from one that worked, so position carried across attempts and randomized arm order is what actually controls it; restricting to replicates where every arm ran in the same region leaves the effect undiminished (12/12 vs 0/12), and it is disclosed as a protocol deviation. Eight attempts recorded **zero steps** and are counted as failures anyway; excluding them makes both effects *larger*, so they stay in. Three arms hold fewer than 52 attempts. And the 45.1% absolute rate is **conditional on a kit that makes stock/flow confusion available** — both arms got the identical kit so the comparison is sound, but what transfers to another setting is the failure mode, not the number. **One model, one world, one task family**; nothing here separates the harness effect from properties of either.
+
+Full tables, statistics and limitations: [results.md](docs/paper/results.md). Regenerate every number yourself with `python3 eval/campaign_report.py`.
+
+> **Field Trial v1 (2026-07-19, 9/9 vs 1/9 over ten tasks) is superseded** by the campaign above and is no longer quoted here. It was a two-arm pilot on an uncalibrated apex, with the platform row scored on the honor system. Its receipts are untouched in `docs/receipts/` and in git history — superseded, not deleted.
 
 ## Structural symmetry with physical-AI safety systems
 
@@ -135,7 +162,7 @@ This is a Minecraft agent, but the architecture it converged on is the one the r
 | Craft-preflight gate — bounce a plan the world can't support | VLA feasibility awareness — shield the policy from out-of-distribution subtasks | ASIMOV-Agentic §2.4 |
 | Plan-mode entry on ambiguous asks | Instruction ambiguity — pause and query the operator | ASIMOV-Agentic §2.5 |
 | Honor-system rows, kept as the counter-exhibit | Self-reported episode success labels in robot datasets | e.g. `next.success` in LeRobot |
-| Scorer calibrated against blind human labels (11/12) | *no widely adopted counterpart* | — |
+| Scorer calibrated against blind human labels (67/68) | *no widely adopted counterpart* | — |
 
 The last row is the interesting one. DeepMind's supervising gate is itself a statistical model — an LLM judging an LLM — and their own numbers show it wobbling: on human-proximity monitoring, holding false stops under 5% costs a false-negative rate above 40%. The gate here is deterministic code reading world state, so it cannot hallucinate its own compliance, and it was calibrated against blind human labels before being trusted at scale. Calibrating the judge is ordinary practice in measurement and still rare in agent evaluation.
 
