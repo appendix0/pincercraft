@@ -36,13 +36,27 @@ def pct(x):
 
 
 def signed(x):
-    return f'{100 * x:+.1f}'
+    """A signed number with a real minus sign.
+
+    In LaTeX text mode an ASCII '-' sets a hyphen, not a minus, so a bare
+    "-41.3pp" renders the headline effect with a word-joining dash. Both signs
+    go through math mode: they are equal-width in the roman fonts, so the
+    right-aligned columns still line up.
+    """
+    s = f'{100 * x:+.1f}'
+    return ('$-$' if s[0] == '-' else '$+$') + s[1:]
 
 
 def emit(out_dir, name, lines):
     path = os.path.join(out_dir, name)
     with open(path, 'w') as f:
-        f.write(HEADER + '\n'.join(lines) + '\n')
+        # Trailing '%' comments out the final newline so the fragment emits no
+        # stray space token after its last row. Standard hygiene for a LaTeX
+        # fragment read in the middle of a tabular. Note this is NOT what makes
+        # \bottomrule work after the read -- LaTeX's \input appends a \relax
+        # that starts a spurious row, so main.tex reads these with the TeX
+        # primitive instead (see \inputrows there).
+        f.write(HEADER + '\n'.join(lines) + '%\n')
     print(f'  wrote {name}')
 
 
