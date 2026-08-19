@@ -17,8 +17,15 @@ Commitments: [preregistration.md](preregistration.md).
 
 4 replicates × 7 arms × 13 tasks, on the dedicated eval world (pincercraft-ts),
 never the owner's live world. Arm order and task order are independently
-shuffled per replicate; `RESET_STATE=1` clears inventory, restores a fixed kit
-and teleports the bot before **every** attempt.
+shuffled per replicate; `RESET_STATE=1` clears inventory and restores a fixed
+kit before **every** attempt.
+
+**The position half of that reset never took effect** — the teleport was issued
+but silently rejected, so the bot resumed each attempt where the previous one
+stopped (§10, and the 2026-08-15 deviation). What controls arm position in this
+campaign is therefore the per-replicate randomization of arm order, not the
+position reset. The inventory half is verified: 484 of 496 attempts (97.6%)
+start on an inventory exactly equal to the reset kit.
 
 | | |
 |---|---|
@@ -31,9 +38,17 @@ and teleports the bot before **every** attempt.
 The design calls for 364 (52 per arm). We have 356: `− completion check` holds
 46 rather than 52, and `no harness` and `− reflexes` hold 51. The 8 missing rows
 are logged in [aborts.md](aborts.md) — a bot death, a 529 retry-budget
-exhaustion, and three task-queue dedup collisions — and they are **not** replaced,
+exhaustion, and two task-queue dedup collisions — and they are **not** replaced,
 because re-running them individually would stamp a false `arm_position` on rows
-whose real position is fixed by the replicate's shuffle.
+whose real position is fixed by the replicate's shuffle. Per slot: `− completion
+check` is missing benchmark #5 in replicate 1 and #0/#4/#8/#10/#11 in replicate
+4; `no harness` is missing #10 in replicate 4; `− reflexes` is missing #4 in
+replicate 2.
+
+*Three* dedup collisions occurred, but only two cost a row. The third hit `no
+harness` in replicate 2, and that replicate was later re-run whole (2026-08-14),
+so its lost benchmark — *Mine 64 NEW cobblestone* — was collected by the re-run
+and is present in the primary set.
 
 **The discard rate counts faults only.** The 77 superseded rows are replicate 2
 re-run whole after credit exhaustion truncated it; they are valid data replaced
@@ -151,6 +166,13 @@ completion) is more than three times the largest single-layer effect (13.5pp),
 and no layer clears the threshold alone.** The effect is distributed across the
 harness rather than localised in one component. This is a negative result on a
 hypothesis we registered, and it is reported as it came out.
+
+**§8.1.2 supplies the mechanism.** Split on whether the kit already satisfied the
+goal, every single-layer ablation holds the failure at or near zero and only the
+whole-harness ablation reaches 75%. The layers are redundant on this failure
+mode, so each one is individually undetectable by construction — which is what a
+15-point per-layer threshold was always going to find. H4's null is explained
+rather than merely reported.
 
 The grounded completion check is the closest and points the predicted way — its
 unadjusted interval excludes zero — but it does not survive multiplicity and sits
@@ -278,6 +300,90 @@ inventory that makes stock/flow confusion *available*. Both arms received the
 identical kit, so the comparison is sound, but the absolute rate would not
 transfer to an empty-inventory setting. What transfers is the failure mode.
 
+#### 8.1.1 The manipulation — emptying the bag removes the failure
+
+Everything above is an association measured *within* one arm. The matched test
+is causal for the **harness**; nothing in it is causal for the **stock**. This
+follow-up supplies that manipulation. It was **pre-declared in full** —
+prediction, thresholds and the meaning of a null — before any attempt ran
+(preregistration, 2026-08-15), and the decision rule is applied in code by
+`eval/stock_strip_report.py` rather than by eye.
+
+The six stock-satisfied tasks were re-run under `harness_off` for 4 replicates,
+each with a kit that drops **only that task's target item** and keeps every
+enabler, so the work required is unchanged and the sole variable is whether the
+goal was already satisfied at the start.
+
+| no harness, same six tasks | false completion |
+|---|---|
+| kit supplies the target item (§8.1, as collected) | **18/24 = 75%** |
+| target item removed from the kit | **0/24 = 0%** |
+
+**Fisher exact, two-sided: p < 0.0001.** Pre-declared rule (≤33% confirms,
+34–49% inconclusive, ≥50% refutes) returns **confirmed** at 0%.
+
+Twenty of the 24 succeeded, most overshooting the target (+37 cobblestone
+against a +16 ask, +48 sticks against +12). The four that failed did so
+**openly** — three timeouts and a cancel on the tier-4 *Mine 64* task, one short
+chop — and *not one of them claimed completion*. That is the distinction the
+endpoint measures: with an empty bag the agent either did the work or failed
+without reporting success. One attempt (#1202) mined 71 cobblestone against a
++64 target and never claimed it — the opposite error, `reached-not-recognized`,
+which is `deterministic termination`'s own endpoint and absent from this arm by
+construction.
+
+Rig integrity: 24 of 24 collected, all at one commit (`fccb7a3`), all
+`label_source = referee`, and **zero attempts began holding ≥ N of their target**
+— the report refuses to interpret the result otherwise, since that would be a
+kit failure rather than a finding. The arm restarts the bot before every
+attempt, where `conf_off` restarted once per arm; the confirmatory data bounds
+that difference at 4/6 = 67% for positions 1–4, far above the 33% threshold, so
+the cadence cannot manufacture this result.
+
+#### 8.1.2 Why no single layer was found responsible
+
+Splitting every arm on the same variable shows why the per-layer ablation (§7)
+found nothing:
+
+| arm | kit supplies the target | kit empty of it |
+|---|---|---|
+| full harness | 1/24 = 4% | 0/24 = 0% |
+| **no harness** | **18/24 = 75%** | 4/23 = 17% |
+| − perception | **0/24 = 0%** | 0/24 = 0% |
+| − preconditions | **0/24 = 0%** | 0/24 = 0% |
+| − reflexes | **0/23 = 0%** | 1/24 = 4% |
+| − completion check | 2/21 = 10% | 3/21 = 14% |
+| − deterministic termination | **0/24 = 0%** | 0/24 = 0% |
+
+Removing any **single** layer leaves the failure at or near zero; only removing
+**all five** produces 75%. The failure therefore has one trigger and several
+independent guards, any one of which is sufficient. **That is the mechanism
+behind H4's null:** no single-layer ablation could reach the pre-declared
+15-point threshold, because four other layers still caught the case. H4 is not
+merely unsupported — the harness is redundant on this failure mode, and the
+redundancy is what makes each layer individually undetectable.
+
+#### 8.1.3 What starting stock does not explain
+
+The unharnessed arm still false-completes **4/23 = 17%** with an empty bag:
+
+```
+#750   +3 ladder   start 0  end 0   9 steps
+#753   +8 dirt     start 0  end 0   0 steps
+#1067  +8 torch    start 0  end 0   5 steps
+#1124  +8 torch    start 0  end 0   3 steps
+```
+
+Empty bag, some work attempted, nothing gained, completion claimed anyway. This
+is a **second and smaller failure mode**, and starting stock does not account for
+it. Reported here rather than folded into the mechanism.
+
+Note also that §8.1.1's 0/24 and this 17% are **not** the same comparison: the
+stripped arm covers the six originally-stocked tasks (tiers 1–4, skewed low),
+while the empty-start six are the harder set (torches, ladders, iron). The
+manipulation shows that removing the stock removes the failure *on those six
+tasks*; it does not bound the residual to zero in general.
+
 ## 9. Cost
 
 | arm | input tokens/run | sec/run | **input tokens per verified success** |
@@ -300,6 +406,11 @@ one of them measures something a user would pay for — which is the paper's own
 thesis applied to its own cost table.
 
 ## 10. Robustness
+
+The two sensitivity tables below regenerate with
+`python3 eval/campaign_report.py --robustness`. They were hand-transcribed until
+2026-08-15, against this file's own promise that every number comes from the
+script; the flag exists so a reader can reproduce them rather than trust them.
 
 **Platform task.** The 5×5 platform task is scored by the block-scan scorer,
 which the H0 calibration predates. Dropping it:
@@ -327,6 +438,36 @@ after seeing which way it moves the result is precisely what the pre-registratio
 forbids, and keeping them costs us effect size rather than manufacturing it.
 **This is a known inconsistency** between the taxonomy rule and the exclusions
 table, flagged here rather than silently resolved.
+
+**Position reset (the 2026-08-15 deviation).** The reset teleport never fired.
+Over the 486 consecutive confirmatory attempt pairs, measuring where attempt N
+ended against where N+1 began:
+
+| start position measured from | median distance | within 3 blocks |
+|---|---:|---:|
+| previous attempt's **end** position | **0.0 blocks** | **457 / 486 = 94%** |
+| the pinned reset point (1141, 86, −4) | 1128.9 blocks | 0 / 486 = 0% |
+
+Position therefore carries across attempts and across arms. Randomized arm order
+is what stands between that and an arm-position confound, and the empirical check
+is that the exploratory `gates` anomaly — which *was* an arm-position artefact —
+did not reproduce (§7).
+
+The direct test is to restrict to replicates where every arm ran in the same
+region of the world. Replicates 1 and 3 qualify; 2 and 4 do not. On the
+stock-satisfied attempts of §8.1, exclusions applied:
+
+| subset | no harness | full harness | Fisher exact |
+|---|---|---|---|
+| replicate 1 (all arms x ≈ 1130–1235) | 6/6 = 100% | 0/6 = 0% | 0.0022 |
+| replicate 3 (all arms x ≈ −56–6) | 6/6 = 100% | 0/6 = 0% | 0.0022 |
+| **replicates 1+3, position-matched** | **12/12 = 100%** (med x 557) | **0/12 = 0%** (med x 566) | **< 0.0001** |
+| all four replicates (as reported) | 18/24 = 75% | 1/24 = 4% | < 0.0001 |
+
+The effect is undiminished when the arms are matched on location, which is what
+would be expected of a failure mode that consists of not moving: 21 of the 22
+false completions produced zero net gain, at a median of 2 steps and 10 seconds
+(§8.1). Terrain does not enter into it.
 
 ## 11. Limitations
 

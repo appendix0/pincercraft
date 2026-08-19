@@ -17,6 +17,16 @@ import json, os
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BENCH = os.path.join(ROOT, 'eval', 'benchmarks.json')
 
+# Pre-registration freeze. Human labels recorded before it are PILOT rows: they
+# developed the grammar they test, so §5 keeps them out of the confirmatory set
+# rather than pooling them. Anything that reports calibration has to know this
+# date, and the two tools that do — evidence.py (progress toward n=40) and
+# agreement.py (the H0 table) — held it separately or, in agreement.py's case,
+# not at all, which is why `report` printed one pooled figure that §5 forbids
+# and labelled it "the anchor number". It lives here for the same reason the
+# other rules do: one definition, or it drifts.
+FREEZE = '2026-08-07'
+
 CATEGORIES = [
     'true_completion',          # claimed done, and it was
     'false_completion',         # claimed done, world says otherwise

@@ -66,10 +66,13 @@ reasons they fail a reader:
 2. **It reads as A/B testing**, which is a different methodology. A reviewer
    scanning a results table misparses it before reaching the legend.
 3. **An index carries no information.** `B3` requires a round-trip to the legend
-   on every row, and we lost track of it ourselves: the frozen pre-registration
-   says `B1–B5` in its design table (§6) and `B1–B4` in its analysis plan (§10),
-   a stale count left over from before the verify/autofinish split. Five layer
-   arms exist and five comparisons were run.
+   on every row, and we lost track of it ourselves: the pre-registration says
+   `B1–B5` in its design table (§4) and `B1–B4` in its analysis plan (§10), a
+   stale count left over from before the verify/autofinish split. Five layer
+   arms exist and five comparisons were run. Both labels are left as written —
+   the pre-registration's header keeps the historical arm codes deliberately —
+   so this contradiction stands as the argument against index labels rather
+   than being tidied away.
 
 The minus form matches how ablation tables are read in this literature —
 `Full`, `w/o X`, `− X` — so no legend traffic is needed. On first use in the

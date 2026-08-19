@@ -44,8 +44,15 @@ def load_claims():
     """task_id -> what the AGENT said. Kept apart from the scorer verdict on
     purpose: collapsing them is exactly the error the campaign measures.
 
-    `task_id` is unique per attempt (verified over all 287 bench+conf rows), so
-    this is a per-attempt lookup, not a per-task one."""
+    `task_id` is *almost* unique per attempt, so this is a per-attempt lookup and
+    not a per-task one. It was verified unique over 287 bench+conf rows; at 756
+    rows it no longer is. Two ids repeat — #856 and #1074, both `conf_off` — and
+    they are exactly the task-queue dedup collisions in aborts.md (2026-08-13),
+    whose signature *is* one id logged twice. Each pair therefore shares one
+    evidence file and one claim here, the second row overwriting the first.
+    Harmless today: both phantoms sit in `exclusions`, so neither reaches the
+    primary set. It stops being harmless the moment a collision lands on a row
+    that is kept, so the runner defect is the fix, not a key change here."""
     out = {}
     for p in glob.glob(os.path.join(EV_DIR, '*.evidence.json')):
         try:
