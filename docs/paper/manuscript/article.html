@@ -122,7 +122,7 @@
     border: 1px solid var(--rule);
     border-left: 3px solid var(--accent);
     padding: 1.6rem 1.7rem;
-    margin: 0 0 3rem;
+    margin: 0 0 2.5rem;
   }
   .abstract h2 {
     font-family: var(--mono);
@@ -173,6 +173,22 @@
     line-height: 1.3;
     text-wrap: balance;
     margin: 2rem 0 .7rem;
+    position: relative;
+  }
+  h3 .num {
+    position: absolute;
+    left: calc(var(--rail) * -1);
+    top: .2em;
+    width: calc(var(--rail) - 1.1rem);
+    text-align: right;
+    font-family: var(--mono);
+    font-size: .72rem;
+    font-weight: 400;
+    color: var(--ink-faint);
+    letter-spacing: 0;
+  }
+  @media (max-width: 42rem) {
+    h3 .num { position: static; display: inline; width: auto; margin-right: .4rem; }
   }
   p { margin: 0 0 1.05rem; }
   a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
@@ -182,6 +198,10 @@
     border-radius: 2px;
   }
   strong { font-weight: 650; }
+
+  /* run-in heads: the atomic unit of this manuscript — one question each */
+  .runin { font-weight: 650; }
+  .runin::after { content: " "; }
 
   /* every machine-verified figure is set in mono: the paper's own thesis,
      applied to its own typography — prose is a claim, mono is a receipt. */
@@ -194,6 +214,180 @@
   }
   .up   { color: var(--verified); font-weight: 500; }
   .down { color: var(--false);    font-weight: 500; }
+
+  /* ---- contributions ----------------------------------------------- */
+  ol.contrib {
+    list-style: none;
+    padding: 0;
+    margin: 1.4rem 0 0;
+    counter-reset: c;
+  }
+  ol.contrib li {
+    counter-increment: c;
+    position: relative;
+    padding-left: 2.4rem;
+    margin-bottom: .85rem;
+  }
+  ol.contrib li::before {
+    content: "C" counter(c);
+    position: absolute;
+    left: 0;
+    top: .22em;
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .04em;
+    color: var(--accent);
+    border: 1px solid var(--rule);
+    padding: .05rem .3rem;
+    border-radius: 2px;
+  }
+
+  /* ---- named principle --------------------------------------------- */
+  .principle {
+    border-top: 1px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+    padding: 1.15rem 0;
+    margin: 1.7rem 0;
+    text-align: center;
+  }
+  .principle span {
+    display: block;
+    font-family: var(--mono);
+    font-size: .66rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: .5rem;
+  }
+  .principle b {
+    display: block;
+    font-size: 1.25rem;
+    line-height: 1.32;
+    font-weight: 600;
+    letter-spacing: -.014em;
+    text-wrap: balance;
+  }
+
+  /* ---- figures ----------------------------------------------------- */
+  figure { margin: 1.6rem 0; }
+  figcaption {
+    font-family: var(--mono);
+    font-size: .7rem;
+    line-height: 1.65;
+    color: var(--ink-faint);
+    margin: .7rem 0 1.6rem;
+  }
+  figcaption b { color: var(--ink-soft); font-weight: 500; }
+  figcaption .fig { font-size: 1em; }
+
+  /* teaser bar chart */
+  .teaser {
+    border: 1px solid var(--rule);
+    background: var(--surface);
+    padding: 1.4rem 1.5rem 1.2rem;
+  }
+  .t-group {
+    font-family: var(--mono);
+    font-size: .64rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 .55rem;
+  }
+  .t-sep { height: 1.15rem; }
+  .t-row {
+    display: grid;
+    grid-template-columns: 7.5rem 1fr 3.4rem;
+    align-items: center;
+    gap: .6rem;
+    margin-bottom: .38rem;
+  }
+  .t-lab {
+    font-family: var(--mono);
+    font-size: .68rem;
+    color: var(--ink-soft);
+    text-align: right;
+  }
+  .t-bar {
+    height: .95rem;
+    background: var(--surface-alt);
+    position: relative;
+    overflow: hidden;
+  }
+  .t-bar i {
+    position: absolute;
+    top: 0; bottom: 0; left: 0;
+    background: var(--ink-faint);
+  }
+  .t-bar i.up   { background: var(--verified); }
+  .t-bar i.down { background: var(--false); }
+  .t-val {
+    font-family: var(--mono);
+    font-size: .72rem;
+    font-variant-numeric: tabular-nums;
+  }
+  @media (max-width: 34rem) {
+    .t-row { grid-template-columns: 5.4rem 1fr 3rem; }
+    .t-lab { font-size: .6rem; }
+  }
+
+  /* architecture diagram */
+  .arch {
+    border: 1px solid var(--rule);
+    background: var(--surface);
+  }
+  .arch-head {
+    display: grid;
+    grid-template-columns: 9.5rem 1fr;
+    font-family: var(--mono);
+    font-size: .63rem;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    border-bottom: 1px solid var(--rule);
+  }
+  .arch-head span { padding: .7rem .9rem; }
+  .arch-head span + span { border-left: 2px solid var(--accent); }
+  .arch-row {
+    display: grid;
+    grid-template-columns: 9.5rem 1fr;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  .arch-row:last-of-type { border-bottom: 0; }
+  .arch-l {
+    padding: .7rem .9rem;
+    font-family: var(--mono);
+    font-size: .67rem;
+    line-height: 1.55;
+    color: var(--ink-soft);
+  }
+  .arch-r {
+    padding: .7rem .9rem;
+    border-left: 2px solid var(--accent);
+    font-size: .88rem;
+    line-height: 1.5;
+  }
+  .arch-r .ln {
+    font-family: var(--mono);
+    font-size: .66rem;
+    color: var(--ink-faint);
+    margin-right: .45rem;
+  }
+  .arch-foot {
+    border-top: 1px solid var(--rule);
+    background: var(--surface-alt);
+    padding: .8rem .9rem;
+    font-family: var(--mono);
+    font-size: .67rem;
+    line-height: 1.6;
+    color: var(--ink-soft);
+  }
+  @media (max-width: 34rem) {
+    .arch-head { grid-template-columns: 1fr; }
+    .arch-head span + span { border-left: 0; border-top: 2px solid var(--accent); }
+    .arch-row { grid-template-columns: 1fr; }
+    .arch-r { border-left: 0; border-top: 1px dashed var(--rule); }
+  }
 
   /* ---- result block ------------------------------------------------ */
   .result {
@@ -293,6 +487,13 @@
   ul, ol { margin: 0 0 1.05rem; padding-left: 1.2rem; }
   li { margin-bottom: .45rem; }
 
+  .note {
+    font-size: .93rem;
+    color: var(--ink-soft);
+    border-left: 2px solid var(--rule);
+    padding-left: .9rem;
+  }
+
   details {
     border-top: 1px solid var(--rule-soft);
     padding: .8rem 0;
@@ -306,6 +507,21 @@
     text-transform: uppercase;
   }
   details p { margin-top: .9rem; font-size: .97rem; }
+
+  /* ---- appendix divider -------------------------------------------- */
+  .appendix-open {
+    margin: 4rem 0 2.5rem;
+    padding-top: 1.6rem;
+    border-top: 2px solid var(--ink);
+  }
+  .appendix-open p {
+    font-family: var(--mono);
+    font-size: .7rem;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0;
+  }
 
   footer {
     margin-top: 4rem;
@@ -323,7 +539,7 @@
 <div class="wrap">
 
 <header class="masthead">
-  <p class="eyebrow">Draft manuscript · 2026-08-16 · not yet submitted</p>
+  <p class="eyebrow">Draft manuscript · 2026-08-19 · not yet submitted</p>
   <h1>Claimed, Not Achieved</h1>
   <p class="subtitle">A controlled same-model ablation of a deterministic harness, in an open world where establishing ground truth is the engineering problem.</p>
   <p class="byline">
@@ -335,20 +551,50 @@
 
 <div class="abstract">
   <h2>Abstract</h2>
-  <p>An LLM agent acting in an open world reports its own success, and that report is the signal most evaluation pipelines record. We ablate a deterministic harness under a fixed model to measure what that report is worth. Across <span class="fig">356</span> pre-registered attempts — 7 arms × 13 tasks × 4 replicates, one model, one world, one commit — the harnessed and unharnessed agents claim success at statistically indistinguishable rates, <span class="fig">71.2%</span> and <span class="fig">74.5%</span>, while delivering <span class="fig up">67.3%</span> and <span class="fig down">29.4%</span> verified success. Ablating the harness raises false success from <span class="fig up">3.8%</span> to <span class="fig down">45.1%</span> (<span class="fig">−41.3pp</span>, 95% CI <span class="fig">[−60.8, −23.1]</span>); under ablation the agent overstated its success on 23 of 51 attempts and understated on none.</p>
-  <p>We locate the mechanism and then manipulate it. False successes concentrate where the starting kit already contained the goal item — the agent reads an absolute quantity as if it were the required gain — and stripping only that item from the kit drives false success from <span class="fig">18/24</span> to <span class="fig">0/24</span> under a decision rule fixed in advance. A pre-registered per-layer ablation finds <em>no</em> single layer responsible, and the stratified data explains why: the layers are redundant on this failure mode, so each is individually undetectable by construction.</p>
-  <p>Because the paper's subject is that self-report is untrustworthy, we treat our own instrument the same way. A blind human re-calibration drawn <em>by scorer verdict</em> from the campaign itself, sealed before any card was rendered, certifies the scorer's false-success verdict at <span class="fig">20/21</span>, Wilson <span class="fig">[77.3, 99.2]</span> — and shows the structure-scoring path remains uncertified, which we state rather than average away.</p>
+  <p>Open-world LLM agents are increasingly evaluated, and increasingly trained, on a completion signal the agent itself produces. This is a defensible engineering choice — in an unbounded action space there is no answer key — but it makes the party with an interest in the number the party who certifies it. The resulting error has been measured at scale, and every such measurement was taken in a domain where ground truth is a lookup. In this paper we measure it where verification is itself the engineering problem. We ablate a five-layer deterministic harness under a fixed model, world, task set and commit, layer by layer, recording three signals that are never collapsed: the agent's own claim, an independent scorer's verdict, and the taxonomy derived from their disagreement. Across <span class="fig">356</span> pre-registered attempts — <span class="fig">7</span> arms × <span class="fig">13</span> tasks × <span class="fig">4</span> replicates — the harnessed and unharnessed agents claim success at statistically indistinguishable rates, <span class="fig">71.2%</span> against <span class="fig">74.5%</span>, while delivering <span class="fig up">67.3%</span> against <span class="fig down">29.4%</span> verified success. Ablation raises false success from <span class="fig up">3.8%</span> to <span class="fig down">45.1%</span> (<span class="fig">−41.3pp</span>, 95% CI <span class="fig">[−60.8, −23.1]</span>): the agent overstates on 23 of 51 attempts and understates on none. We then locate the mechanism and manipulate it — false successes concentrate where the starting kit already contained the goal item, and stripping only that item drives them from <span class="fig">18/24</span> to <span class="fig">0/24</span> under a decision rule fixed in advance. A pre-registered per-layer ablation finds <em>no</em> single layer responsible, and the stratified data explains why: the layers are redundant on this failure mode, so each is individually undetectable by construction. Because the paper's subject is that self-report cannot be trusted, we hold our own instrument to the same standard — a blind human pass drawn <em>by scorer verdict</em> and sealed under a published hash before any evidence card was rendered certifies the false-success verdict at <span class="fig">20/21</span>, Wilson <span class="fig">[77.3, 99.2]</span>, and declines to certify the structure-scoring path rather than averaging it away. Pre-registration, deviations log, ledger, evidence files and analysis code are released.</p>
 </div>
 
+<figure class="teaser">
+  <p class="t-group">what the agent said</p>
+  <div class="t-row">
+    <span class="t-lab">full harness</span>
+    <span class="t-bar"><i style="width:71.2%"></i></span>
+    <span class="t-val fig">71.2%</span>
+  </div>
+  <div class="t-row">
+    <span class="t-lab">no harness</span>
+    <span class="t-bar"><i style="width:74.5%"></i></span>
+    <span class="t-val fig">74.5%</span>
+  </div>
+  <div class="t-sep"></div>
+  <p class="t-group">what the world showed</p>
+  <div class="t-row">
+    <span class="t-lab">full harness</span>
+    <span class="t-bar"><i class="up" style="width:67.3%"></i></span>
+    <span class="t-val fig up">67.3%</span>
+  </div>
+  <div class="t-row">
+    <span class="t-lab">no harness</span>
+    <span class="t-bar"><i class="down" style="width:29.4%"></i></span>
+    <span class="t-val fig down">29.4%</span>
+  </div>
+</figure>
+<figcaption><b>Figure 1: The whole paper in four bars.</b> Same model, same world, same commit; the harness is the only difference. The two arms are indistinguishable on the signal an evaluation pipeline usually records and differ by <span class="fig">37.9</span> points on the signal it is meant to stand for. The harness does not make the agent claim less — it makes the claims true.</figcaption>
+
 <section>
-  <h2><span class="num">1</span>The regime where verification is the hard part</h2>
-  <p>That LLM agents assert completion they have not achieved is established. It has a name — <em>false success</em> — and it has been measured at scale: across 9,876 tau2-bench trajectories and 1,879 AppWorld trajectories, it accounts for 45–48% of failures in single-control domains and 75.8% among self-assessing coding trajectories <a href="#r-falsesuccess">[1]</a>. That capability and self-report are separable axes is also established: VIGIL separates world completion from self-termination across 20 models and 1,000 frozen episodes, and finds systems with near-identical execution differing by up to 19.7 points in benchmark success <a href="#r-vigil">[2]</a>.</p>
-  <p>We claim neither. What is missing is elsewhere, and it is a claim about <em>measurement regimes</em>.</p>
-  <p>Every large false-success measurement above was taken where establishing ground truth is cheap. tau2-bench checks a database row; AppWorld checks an API result; SpreadsheetBench checks a cell against an exact match. Those settings establish that the phenomenon exists and is common. They say nothing about the setting where verification is <em>itself the engineering problem</em> — and that is the setting anything acting in a physical world operates in.</p>
+  <h2><span class="num">1</span>Introduction</h2>
+
+  <p>Open-ended embodied agents built on large language models have moved quickly from demonstrations to systems that accumulate their own competence. Voyager explores a Minecraft world indefinitely and writes reusable skills into a permanent library <a href="#r-voyager">[3]</a>; Luban builds creative artifacts through autonomous embodied verification <a href="#r-luban">[4]</a>; MineEvolve distils successful executions into accumulated knowledge across long horizons <a href="#r-mineevolve">[5]</a>; MineExplorer evaluates open-world exploration with rule-based milestones <a href="#r-mineexplorer">[6]</a>. The common ambition is long-horizon autonomy in a world nobody enumerated in advance, and the common ingredient is a loop that decides, on its own, when a task is finished.</p>
+
+  <p>That the loop grades itself is not an oversight, and the case for it deserves stating. In a domain with an unbounded action space there is no answer key to consult: the set of world states that count as "a shelter" cannot be written down, and instrumenting an environment to recognise each one is a per-task engineering cost that scales with the curriculum. The agent's own report, by contrast, is free, universal, and available for every task — including tasks invented at run time. A critic agent generalises where a checker does not. Self-report became the default in open worlds because it is the only completion signal that is always there.</p>
+
+  <p>The cost is specific, and it compounds. In Voyager the critic's approval is what admits code to the permanent skill library, so a single wrong judgment contaminates the library and the error is re-executed on every reuse <a href="#r-voyager">[3]</a>. Luban's pipeline rests on the same self-issued verification <a href="#r-luban">[4]</a>, and MineEvolve distils executions its own loop judged successful <a href="#r-mineevolve">[5]</a>. In each case the certification sits upstream of everything downstream — what gets stored, what gets retried, what gets published as a success rate — and it is issued by the party with an interest in the answer.</p>
+
+  <p>That this concern is real rather than hypothetical is already established, and we claim neither part of it. That agents assert completion they have not achieved has a name — <em>false success</em> — and has been measured at scale: across 9,876 tau2-bench and 1,879 AppWorld trajectories it accounts for 45–48% of failures in single-control domains and 75.8% among self-assessing coding trajectories <a href="#r-falsesuccess">[1]</a>. That capability and self-report are separable axes is also established: VIGIL separates world completion from self-termination across 20 models and 1,000 frozen episodes and finds systems with near-identical execution differing by up to 19.7 points in benchmark success <a href="#r-vigil">[2]</a>. What is missing is elsewhere, and it is a claim about <em>measurement regimes</em>. Every measurement above was taken where establishing ground truth is cheap. tau2-bench checks a database row; AppWorld checks an API result; SpreadsheetBench compares a cell to an exact match. Those settings establish that the phenomenon exists and is common. They say nothing about the setting where verification is <em>itself the engineering problem</em> — which is the setting anything acting in a physical world operates in.</p>
 
   <div class="tablewrap">
     <table>
-      <caption>Two regimes, and what changes between them</caption>
+      <caption>Table 1 · Two regimes, and what changes between them</caption>
       <thead><tr><th>&nbsp;</th><th>API / tool benchmarks</th><th>open world</th></tr></thead>
       <tbody>
         <tr><td>action space</td><td>enumerable, documented</td><td>effectively unbounded</td></tr>
@@ -360,73 +606,115 @@
     </table>
   </div>
 
-  <p>And in this second regime the field still runs on the honor system. Voyager's tasks are self-verified by a critic agent, and critic-approved code enters a permanent skill library — a wrong judgment contaminates the library and the error compounds on every reuse <a href="#r-voyager">[3]</a>. Luban builds on "autonomous embodied verification" <a href="#r-luban">[4]</a>. MineEvolve distils <em>successful</em> executions into reusable skills, success as judged by the agent's own loop <a href="#r-mineevolve">[5]</a>. There is movement toward external scoring — MineExplorer uses rule-based milestone evaluators <a href="#r-mineexplorer">[6]</a> — but it scores exploration, not the claimed-versus-verified gap.</p>
-  <p><strong>The two literatures have not met.</strong> The papers that measure false success do it where checking is easy; the papers working where checking is hard still let the agent grade itself. This paper is an intervention in the gap: a controlled, same-model ablation of a deterministic harness, in an environment where establishing ground truth is expensive, with the per-layer ablation asking which part does the work.</p>
-  <p>Minecraft is the arena because it is the cheapest environment with the real property — unbounded actions, expensive ground truth, long horizons, recovery-from-failure as part of the task. It is not the target, and we argue for neither the game nor the harness as artifacts.</p>
-</section>
+  <p>In this paper we measure the claimed-versus-verified gap in the second regime, and we measure it causally rather than observationally. We build a harness of five deterministic layers beneath an LLM that only plans, make each layer independently switchable, and run a controlled ablation in which the model, the world, the task set and the commit are all held fixed and the harness is the only thing that varies. Every arm is scored by the same independent instrument, which is never ablated. Minecraft is the arena because it is the cheapest environment with the properties that matter — unbounded actions, expensive ground truth, long horizons, and recovery-from-failure as part of the task rather than the end of it. It is not the target, and we argue for neither the game nor the harness as artifacts.</p>
 
-<section>
-  <h2><span class="num">2</span>What is already known, and what is left</h2>
-  <p>The closest prior work to our design names our contribution as its own limitation. A cross-benchmark decomposition of a production enterprise agent separates scaffolding, routing, specialist models and a verification loop, and reports that the verification step's isolated contribution is <span class="fig">+1.5</span> points of an <span class="fig">+11.0</span> point uplift <a href="#r-leni">[7]</a>. Two things follow.</p>
-  <p>First, their verification loop is measured on <em>task success</em>, where it looks marginal. That is the same shape as our own secondary endpoint, and it corroborates a claim we make structurally: <strong>overall success is the wrong endpoint for a verification layer.</strong> It dilutes the layer across every run in which its failure mode never arises. Measured on the category each layer targets, far less data is required — a difference between <span class="fig">n≈372</span> and <span class="fig">n≈52</span> per arm in our own power calculation.</p>
-  <p>Second, that work's stated limitations include the absence of a controlled same-model scaffold ablation, alongside vendor evaluation, single scored runs, and unreleased weights and prompts. We have the controlled same-model ablation, repeated replicates, an independent scorer, and open receipts.</p>
-  <p>The remaining supporting context: the MAST taxonomy places premature termination at 6.2% of multi-agent failures <a href="#r-mast">[8]</a>; Aegis taxonomises agent–environment failures <a href="#r-aegis">[9]</a>; and StressWeb shows agents are miscalibrated between claimed and actual success even in clean environments, with perturbations amplifying it <a href="#r-stressweb">[10]</a>.</p>
-  <p>We adopt the field's vocabulary rather than coining our own: <em>false success</em> for what our code calls <span class="fig">false_completion</span>, and on first use we map our <em>reached-not-recognized</em> to VIGIL's <em>post-attainment drift</em> and our <em>capability failure</em> to its <em>missed execution</em>. A paper that invents a synonym for false success is a paper nobody searching for false success will find.</p>
-</section>
-
-<section>
-  <h2><span class="num">3</span>The system under test</h2>
-  <p>The harness is five deterministic layers under an LLM that only plans. Each is independently ablatable by a flag, and each was ablated alone in its own arm.</p>
-  <ul>
-    <li><strong>Perception</strong> — supplies <span class="fig">TASK-PROGRESS</span>, the delta from the task's own start snapshot, and <span class="fig">CAPABILITIES</span>.</li>
-    <li><strong>Preconditions</strong> — gates actions on checkable state: can this block be mined, is the tool held, is the recipe satisfiable.</li>
-    <li><strong>Reflexes</strong> — named deterministic responses to recurring situations, run in code rather than proposed by the model.</li>
-    <li><strong>Grounded completion check</strong> — refuses a finish claim the world state does not support.</li>
-    <li><strong>Deterministic termination</strong> — closes a task the world shows as met, whether or not the agent noticed.</li>
-  </ul>
-  <p>One thing the ablated arm does <em>not</em> lose is data. Under full ablation the agent still receives <span class="fig">SELF / INVENTORY / NEARBY</span> every turn at upstream parity. What perception adds is the subtraction — the delta against the task's start — and the refusal to accept a claim when that subtraction fails. The intervention is not <em>give the model the facts</em>. It is <strong>do the arithmetic in code, and refuse the claim when the arithmetic disagrees.</strong></p>
-  <p>The scorer is never ablated. It is the measuring instrument, not a component under test; an early draft of the design listed it as an ablation arm, which would have removed the measurement rather than varying a condition, and that was corrected before any data existed.</p>
-</section>
-
-<section>
-  <h2><span class="num">4</span>Method</h2>
-  <p>Seven arms × 13 tasks × 4 replicates, within-subject on tasks. One model (<span class="fig">claude-sonnet-4-6</span>), one dedicated world, one commit — verified: all 356 primary rows carry the same hash. Arms are the full harness, the fully ablated harness, and five single-layer ablations. Arm order and task order are independently shuffled per replicate, and arm position is recorded per attempt as a covariate.</p>
-  <p><strong>Three signals, never collapsed.</strong> The scorer's verdict, computed from an inventory delta or a block scan against the world; the agent's own terminal report, recorded independently in the task queue's log; and the outcome taxonomy derived from their cross-classification. False success is exactly the cell where the agent claimed done and the world disagreed.</p>
-  <p><strong>Endpoints were registered before collection</strong>, each layer scored on the taxonomy category it targets rather than on overall success, with a minimum effect of interest of 15 points declared in advance and applied in code as a verdict rather than left in prose for a reader to apply by eye.</p>
-  <div class="tablewrap">
-    <table>
-      <caption>Disposition of every attempt logged</caption>
-      <thead><tr><th>&nbsp;</th><th>attempts</th></tr></thead>
-      <tbody>
-        <tr><td>logged</td><td>496</td></tr>
-        <tr class="key"><td>primary set</td><td>356</td></tr>
-        <tr><td>discarded — infrastructure faults</td><td>63 (15.0%)</td></tr>
-        <tr><td>superseded by a declared whole-replicate re-run</td><td>77</td></tr>
-        <tr><td>never logged (bot death, retry exhaustion, queue collisions)</td><td>8</td></tr>
-      </tbody>
-    </table>
+  <div class="principle">
+    <span>The design principle</span>
+    <b>The claim and the check must not share an author.</b>
   </div>
-  <p>Faults and supersessions are counted separately and never summed: a discard is an infrastructure fault, meaning the attempt was never evidence; a supersession is valid data replaced wholesale by a declared re-run. Reporting them together produced a 28.2% "fault rate" against a true 15.0%, inventing a reliability problem we did not have. Both leave the primary set; no attempt is ever deleted, and discards are recorded against immutable rows.</p>
-  <div class="prereg">
-    <span class="label">Disclosed deviation</span>
-    <p>The per-attempt state reset restored inventory as specified — 484 of 496 attempts (97.6%) begin on an inventory exactly equal to the fixed kit — but <strong>its teleport was silently rejected</strong>, so every attempt resumed where the previous one ended. Root cause is a defect class: the RCON client returns each command's response and never inspects it, and Minecraft answers a refused command with an error <em>string</em> over a normal response, so a declined teleport is indistinguishable from one that worked.</p>
-    <p>Consequently arm-position control rests entirely on the per-replicate randomization of arm order, not on the reset. §9 reports the position-matched analysis this forces.</p>
-  </div>
+
+  <p>The intuition behind the design is a separation of authorship. The model is the right author of a plan, because a plan is a judgment over an unbounded space. It is the wrong author of a completion check, because a check is arithmetic over observable state and the model has an interest in the answer. Generalised: code owns every fact it can compute, and the model owns only what it cannot. The five layers are that principle instantiated five times — supply the arithmetic, gate on it, act on it deterministically, refuse a claim that contradicts it, and close a task the world already shows as met.<sup>1</sup> The analogy is not to a better model but to double-entry bookkeeping: the audit function exists because the party who benefits from a number should not be the party who certifies it.</p>
+
+  <p>We then study the harness the way a systems paper studies an architecture, and the results were not what the design predicted. The whole-harness effect is large and survives every attempt we made to break it. The per-layer decomposition — pre-registered, each layer scored on the failure category it targets — found <em>no single layer responsible</em>, and the surprise is instructive rather than deflating: splitting every arm on the same covariate shows the failure has one trigger and five independent guards, so removing any one of them leaves it near zero. Capability degrades roughly additively as layers come off; honesty does not. Alongside this we identify the trigger from stratified data and then remove it experimentally in a follow-up campaign, which turns an association measured inside one arm into an intervention.</p>
+
+  <ol class="contrib">
+    <li>We draw and then exploit a distinction between <em>measurement regimes</em>: the setting where checking is cheap, in which false success has been measured at scale, and the setting where checking is the engineering problem, in which the field still runs on the honor system. The two literatures have not met.</li>
+    <li>We run a controlled same-model ablation of a five-layer deterministic harness, whole and layer-by-layer, with pre-registered endpoints and a minimum effect of interest fixed in advance — the ablation the closest prior work names among its own limitations <a href="#r-leni">[7]</a>.</li>
+    <li>We locate the failure's trigger and then remove it experimentally, driving false success from <span class="fig">18/24</span> to <span class="fig">0/24</span> under a decision rule declared before collection; and we report the per-layer null as it came out, with the redundancy that explains it.</li>
+    <li>We apply the paper's own standard to the paper's own instrument, with a stratified blind human calibration sealed under a published hash before any evidence card was rendered, and we release the pre-registration, deviations log, ledger, evidence files and analysis scripts.</li>
+  </ol>
+
+  <p class="note"><sup>1</sup> The five layers are not five checks. Two supply facts, one gates, one acts, one refuses and one terminates; what unifies them is that each moves a decision out of the model wherever the decision is computable. §3.1 states each precisely.</p>
 </section>
 
 <section>
-  <h2><span class="num">5</span>The instrument, and how far it is certified</h2>
-  <p>A paper whose subject is that self-report cannot be trusted has an obligation to its own instrument. Ours is a deterministic scorer; the question is whether a blind human agrees with it, and specifically whether it agrees <em>on the verdict the paper depends on</em>.</p>
-  <p>An earlier calibration reported 39 of 39 blind labels in agreement, Wilson <span class="fig">[91.0, 100.0]</span>. That figure is accurate about the population it was drawn from and it does not certify this campaign. Cards had been issued in glob order with no stratification, and regenerating the composition shows why that matters: <strong>34 of the 39 labels are true completions</strong>, 3 are capability failures, and <strong>2 are false successes</strong>. None of the 39 judges an attempt from this campaign at all. The scorer's false-success verdict — what every headline number here rests on — was human-validated on two attempts, Wilson <span class="fig">[34.2, 100.0]</span>. Aggregate agreement is the wrong statistic for a rare-cell endpoint.</p>
+  <h2><span class="num">2</span>Related Work</h2>
+
+  <p><span class="runin">False success where ground truth is cheap.</span> A body of recent work measures the gap between claimed and actual completion directly. The largest characterisation covers 9,876 tau2-bench and 1,879 AppWorld trajectories and reports false success at 45–48% of failures in single-control domains, rising to 75.8% among self-assessing coding trajectories <a href="#r-falsesuccess">[1]</a>. VIGIL separates the two axes explicitly, distinguishing world completion from self-termination over 20 models and 1,000 frozen episodes and finding up to 19.7 points of benchmark difference between systems with near-identical execution <a href="#r-vigil">[2]</a>. StressWeb shows the miscalibration persists in clean web environments and grows under perturbation <a href="#r-stressweb">[10]</a>; the MAST taxonomy places premature termination at 6.2% of multi-agent failures <a href="#r-mast">[8]</a>, and Aegis taxonomises agent–environment failures more broadly <a href="#r-aegis">[9]</a>. <em>Different from ours</em>, all of these are situated where a verdict is a lookup — a row, an API response, an exact cell match. They establish the phenomenon and its prevalence; they cannot speak to the regime in which producing the verdict is itself the hard part. We claim neither the phenomenon nor the two-axis distinction as a contribution.</p>
+
+  <p><span class="runin">Self-verification where ground truth is expensive.</span> The open-world agent literature operates in exactly that regime and largely resolves it by delegation to the agent. Voyager's tasks are self-verified by a critic agent whose approval admits code to a permanent skill library, so an error compounds on reuse <a href="#r-voyager">[3]</a>. Luban is built on autonomous embodied verification <a href="#r-luban">[4]</a>; MineEvolve distils skills from executions its own loop judged successful <a href="#r-mineevolve">[5]</a>. There is movement toward external scoring — MineExplorer uses rule-based milestone evaluators <a href="#r-mineexplorer">[6]</a> — but it scores exploration coverage rather than the claimed-versus-verified gap. <em>In contrast</em>, we hold the model fixed and vary only the machinery that produces the verdict, which turns the honor system from a background assumption into a manipulable condition, and we record the claim and the world independently on every attempt so the gap between them is an observable rather than an inference.</p>
+
+  <p><span class="runin">Decomposing a scaffold's contribution.</span> The closest prior work to our design is a cross-benchmark decomposition of a production enterprise agent, which separates scaffolding, routing, specialist models and a verification loop and reports the verification step's isolated contribution as +1.5 points of an +11.0 point uplift <a href="#r-leni">[7]</a>. Two things follow, and both shaped this paper. First, their verification loop is measured on <em>task success</em>, where it looks marginal — the same shape as our own secondary endpoint, and a structural corroboration of our choice to score each layer on the category it targets instead: overall success dilutes a verification layer across every run in which its failure mode never arises, and our own power calculation puts the difference at n≈372 against n≈52 per arm. Second, <em>different from ours</em>, that work's stated limitations include the absence of a controlled same-model scaffold ablation, alongside vendor evaluation, single scored runs, and unreleased weights and prompts. We supply the controlled same-model ablation, repeated replicates, an independent scorer, and open receipts.</p>
+
+  <p><span class="runin">Vocabulary.</span> We adopt the field's terms rather than coining our own: <em>false success</em> for what our code calls <span class="fig">false_completion</span>, and on first use we map our <em>reached-not-recognized</em> to VIGIL's post-attainment drift and our <em>capability failure</em> to its missed execution. A paper that invents a synonym for false success is a paper nobody searching for false success will find.</p>
+</section>
+
+<section>
+  <h2><span class="num">3</span>Method</h2>
+
+  <p><span class="runin">Problem formulation.</span> A task <span class="fig">t</span> is issued to an agent situated in a world at state <span class="fig">w₀</span>. The agent acts and eventually terminates, emitting a terminal report <span class="fig">c ∈ {claimed, not claimed}</span> and leaving the world at <span class="fig">w₁</span>. Independently, a scorer computes <span class="fig">s = V(t, w₀, w₁) ∈ {success, fail}</span> from world state alone, never from the agent's report. Every criterion in this work is a <em>net gain</em> measured against the task's own start snapshot, so <span class="fig">V</span> is a function of the pair and not of <span class="fig">w₁</span> in isolation. The four cells of <span class="fig">c × s</span> are the unit of analysis, and the cell <span class="fig">c = claimed ∧ s = fail</span> is <em>false success</em>, the primary endpoint. Its complement in the claimed row is true completion; the unclaimed row splits into reached-not-recognized (<span class="fig">s = success</span>) and, by cause, capability failure or budget exhaustion. The estimand is the difference in the rate of a given cell between two harness configurations, with model, world and task set fixed.</p>
+
+  <p><span class="runin">Overall architecture.</span> The system under test is an LLM that only plans, sitting above five deterministic layers, each independently switchable by a flag and each ablated alone in its own arm (Figure 2). One property of the design matters for interpretation and is easy to misread: the fully ablated arm does not lose <em>data</em>. It still receives the same <span class="fig">SELF</span> / <span class="fig">INVENTORY</span> / <span class="fig">NEARBY</span> blocks every turn, at parity with the upstream system. What perception adds is the <em>subtraction</em> — the delta against the task's start — and what the completion check adds is the refusal to accept a claim when that subtraction disagrees. The intervention is not <em>give the model the facts</em>. It is <em>do the arithmetic in code, and refuse the claim when the arithmetic disagrees</em>.</p>
+
+  <figure class="arch">
+    <div class="arch-head">
+      <span>Model — authors the plan and the claim</span>
+      <span>Deterministic code — authors every check</span>
+    </div>
+    <div class="arch-row">
+      <div class="arch-l">reads world context</div>
+      <div class="arch-r"><span class="ln">L1</span><strong>Perception.</strong> Supplies <span class="fig">TASK-PROGRESS</span> — the delta from the task's own start snapshot — and <span class="fig">CAPABILITIES</span>.</div>
+    </div>
+    <div class="arch-row">
+      <div class="arch-l">proposes a step</div>
+      <div class="arch-r"><span class="ln">L2</span><strong>Preconditions.</strong> Gates the action on checkable state: is this block mineable, is the tool held, is the recipe satisfiable.</div>
+    </div>
+    <div class="arch-row">
+      <div class="arch-l">— not consulted —</div>
+      <div class="arch-r"><span class="ln">L3</span><strong>Reflexes.</strong> Named deterministic responses to recurring situations, run in code rather than proposed by the model.</div>
+    </div>
+    <div class="arch-row">
+      <div class="arch-l">reports "done"</div>
+      <div class="arch-r"><span class="ln">L4</span><strong>Grounded completion check.</strong> Refuses a finish claim the world state does not support.</div>
+    </div>
+    <div class="arch-row">
+      <div class="arch-l">— not consulted —</div>
+      <div class="arch-r"><span class="ln">L5</span><strong>Deterministic termination.</strong> Closes a task the world shows as met, whether or not the agent noticed.</div>
+    </div>
+    <div class="arch-foot">Scorer — never ablated. Reads world state independently over RCON and computes the verdict from the start/end pair. The measuring instrument, not a component under test.</div>
+  </figure>
+  <figcaption><b>Figure 2: Authorship, not capability.</b> The five layers sit on the boundary between what the model decides and what code decides; each is switchable alone, and the arms of §3.3 are exactly the settings of these five flags. Two layers supply facts, one gates, one acts, one refuses and one terminates — what unifies them is that each moves a computable decision out of the model. The scorer sits outside the boundary entirely, which is why it is the one component the ablation never touches.</figcaption>
+
+  <h3><span class="num">3.1</span>The five layers</h3>
+  <p>Each layer is stated as its input and the decision it removes from the model. <strong>Perception</strong> computes the per-task inventory and world delta and injects it as <span class="fig">TASK-PROGRESS</span>, together with a <span class="fig">CAPABILITIES</span> block enumerating what the agent can presently do. <strong>Preconditions</strong> refuse an action whose requirements are checkably absent, converting a doomed attempt into an immediate legible refusal. <strong>Reflexes</strong> replace model-proposed responses to recurring situations with named deterministic ones. <strong>The grounded completion check</strong> intercepts a terminal claim and refuses it when the recomputed delta does not satisfy the criterion. <strong>Deterministic termination</strong> is its mirror image: it closes a task whose criterion the world already satisfies, whether or not the agent recognised it. The last two are why the taxonomy has two distinct unclaimed-success cells, and why each layer is scored against a different category in §4.3.</p>
+
+  <h3><span class="num">3.2</span>The scorer, and why it is never ablated</h3>
+  <p>The scorer computes each verdict by one of two paths: an <em>inventory delta</em> against the start snapshot, carrying <span class="fig">328</span> of the <span class="fig">356</span> primary rows, or a <em>block scan</em> of world geometry over RCON for structure criteria, carrying the remaining <span class="fig">28</span>. It never reads the agent's report. An early draft of the design listed the scorer as an ablation arm; that would have removed the measurement rather than varying a condition, and it was corrected before any data existed. The scorer's own trustworthiness is not assumed — §3.4 states the protocol that tests it and §4.1 reports the result.</p>
+
+  <h3><span class="num">3.3</span>Ablation design</h3>
+  <p>Seven arms × 13 tasks × 4 replicates, within-subject on tasks. One model (<span class="fig">claude-sonnet-4-6</span>), one dedicated world, one commit — verified: all <span class="fig">356</span> primary rows carry the same hash. The arms are the full harness, the fully ablated harness, and the five single-layer ablations. Arm order and task order are independently shuffled per replicate, and arm position is recorded per attempt as a covariate. Three signals are recorded and never collapsed: the scorer's verdict; the agent's terminal report, logged independently in the task queue; and the taxonomy derived from their cross-classification. Attempt disposition, the discard-versus-supersession distinction, and one disclosed deviation affecting position control are in Appendix A.</p>
+
+  <h3><span class="num">3.4</span>Pre-registration, endpoints, and instrument certification</h3>
+  <p><span class="runin">Endpoints and decision rules.</span> Endpoints were registered before collection. Each layer is scored on the taxonomy category it targets rather than on overall success, with a minimum effect of interest of <span class="fig">15</span> points declared in advance and applied in code as a verdict, rather than left in prose for a reader to apply by eye. Inference is by cluster bootstrap with the task as the resampling unit and <span class="fig">10,000</span> resamples, Wilson intervals for single proportions, McNemar exact for the within-attempt claim/verify contrast, and Holm–Bonferroni across the five-layer family.</p>
+
+  <p><span class="runin">Certifying the instrument.</span> A paper whose subject is that self-report cannot be trusted owes the same treatment to its own scorer. The question is not whether a blind human agrees with the scorer on average, but whether one agrees <em>on the verdict the paper depends on</em> — which is rare by construction. The protocol therefore samples by verdict rather than at random: thirty attempts drawn from this campaign's own primary set, stratified by scorer verdict and by which scoring path produced it, oversampling the false-success cell roughly fifteen-fold.</p>
+
   <div class="prereg">
     <span class="label">Registered before any card was rendered</span>
-    <p>Thirty attempts were drawn from this campaign's own primary set, stratified <em>by scorer verdict</em> and by which scoring path produced it, oversampling the false-success cell roughly fifteen-fold. The sampling rule, allocation, RNG seed and decision rule were committed first; the stratum-annotated manifest is the answer key, so it was sealed behind a SHA-256 and withheld, leaving only the hash and a stratum-blind presentation order. The draw re-derives from the seed and verifies against the seal.</p>
-    <p>The rule fixed in advance: report per cell and never pool, because the sample is deliberately non-representative; below 90% agreement in a cell, apply the measured error rate as a correction to every rate depending on it and report a corrected instrument — not a limitation of the labels, and not grounds to fall back on the earlier figure. Abstentions are recorded as abstentions and counted as neither agreement nor disagreement.</p>
+    <p>The sampling rule, allocation, RNG seed and decision rule were committed first. The stratum-annotated manifest is the answer key, so it was sealed behind a SHA-256 and withheld, leaving only the hash and a stratum-blind presentation order; the draw re-derives from the seed and verifies against the seal.</p>
+    <p>The rule fixed in advance: <strong>report per cell and never pool</strong>, because the sample is deliberately non-representative. Below 90% agreement in a cell, apply the measured error rate as a correction to every rate depending on it and report a corrected instrument — not a limitation of the labels, and not grounds to fall back on an earlier figure. Abstentions are recorded as abstentions and counted as neither agreement nor disagreement.</p>
   </div>
+
+  <p>Because stratified sampling by verdict fixes the column margins of the 2×2, the per-cell rates are predictive values rather than sensitivity and specificity. They answer the question a reader of a rate actually has — <em>given that the scorer said this, how often is it right</em> — and cannot be read as a single accuracy figure. Seed, allocation, seal hash, verification command and prevalence reweighting are in Appendix C.</p>
+</section>
+
+<section>
+  <h2><span class="num">4</span>Experiments</h2>
+
+  <p><span class="runin">Environment and tasks.</span> All attempts run against a dedicated Minecraft server instance reserved for evaluation and isolated from any production world, with the scorer reading state over RCON. The task set is 13 tasks spanning gathering, crafting, tool progression and one structure criterion, each expressed as a net gain from the attempt's own start snapshot. Every attempt begins from a fixed starting kit built from the observed campaign median of each consumable, and the kit is deliberately unable to satisfy any criterion on its own: "+16 cobblestone this run" still requires mining 16 with 96 already in the bag. That intent is stated in the frozen runner, written before collection began, and it is the design decision §4.4 turns out to depend on. Task definitions, kit composition and per-arm trial counts are in Appendix B.</p>
+
+  <p><span class="runin">Implementation details.</span> One model, <span class="fig">claude-sonnet-4-6</span>, at fixed decoding settings across all arms; one commit across all <span class="fig">356</span> primary rows, verified by hash. Each attempt runs under a fixed step and wall-clock budget, with budget exhaustion recorded as its own taxonomy category rather than folded into failure. Every attempt writes one append-only ledger row plus an evidence file; every taxonomy label, derived metric and statistic is recomputed downstream from those raw receipts, and every table in this manuscript is generated from the ledger rather than transcribed.</p>
+
+  <h3><span class="num">4.1</span>Instrument certification</h3>
+
+  <p><span class="runin">Why the earlier figure does not certify this campaign.</span> An earlier calibration reported <span class="fig">39</span> of <span class="fig">39</span> blind labels in agreement, Wilson <span class="fig">[91.0, 100.0]</span>. That figure is accurate about the population it was drawn from and it does not certify this campaign. Cards had been issued in glob order with no stratification, and regenerating the composition shows why that matters: <span class="fig">34</span> of the 39 labels are true completions, <span class="fig">3</span> are capability failures, and <span class="fig">2</span> are false successes. None of the 39 judges an attempt from this campaign at all. The scorer's false-success verdict — what every headline number here rests on — was human-validated on two attempts, Wilson <span class="fig">[34.2, 100.0]</span>. Aggregate agreement is the wrong statistic for a rare-cell endpoint, and that is what motivated the stratified protocol of §3.4.</p>
+
   <div class="tablewrap">
     <table>
-      <caption>Blind human agreement, by scorer verdict cell</caption>
-      <thead><tr><th>cell</th><th>in primary set</th><th>labelled</th><th>agreement</th><th>Wilson 95%</th></tr></thead>
+      <caption>Table 2 · Blind human agreement, by scorer verdict cell</caption>
+      <thead>
+        <tr><th>cell</th><th>in primary set</th><th>labelled</th><th>agreement</th><th>Wilson 95%</th></tr>
+      </thead>
       <tbody>
         <tr class="key"><td>scorer says false success</td><td>39</td><td>21</td><td>20/21 = 95.2%</td><td>[77.3, 99.2]</td></tr>
         <tr><td class="sub">via inventory delta</td><td>28</td><td>17</td><td>17/17 = 100%</td><td>[81.6, 100.0]</td></tr>
@@ -436,32 +724,32 @@
       </tbody>
     </table>
   </div>
-  <p>The pre-declared rule returns a pass on all three cells. The endpoint cell moves from <span class="fig">n=2</span> to <span class="fig">n=21</span>, and on the inventory-delta path that scores 328 of the 356 primary rows, to <span class="fig up">17/17</span> with a lower bound of <span class="fig">81.6%</span>.</p>
 
-  <h3>The one disagreement, and what it costs us</h3>
-  <p>On a structure task the agent claimed completion, the block scan found 16 of 25 blocks and scored a false success, and blind human judgement called it a genuine success. It is counted as a disagreement in every figure above; the pre-registration forbids revising it now that the verdict is visible.</p>
-  <p>The diagnostic changes no number and is worth recording. The evidence card showed a −25 cobblestone delta and nothing about geometry, so the labeller could see that twenty-five blocks were placed but not that they failed to form a solid 5×5. <strong>On structure criteria the human is the weaker instrument, not the stronger one</strong> — which inverts the assumption blind calibration is built on, that the human sees everything and can catch a criterion the rule mis-encodes. That assumption holds for an inventory delta and fails for a shape.</p>
-  <p>We therefore do not claim the block-scan path is human-calibrated. Its warrant is engineering validation against ground truth placed over RCON — a complete 5×5 at centre and at a corner both pass at 25/25, one block removed fails at 24/25, six blocks away fails at 0/25 — which for a deterministic geometric check is meaningful evidence and is not what a calibration claims. One further stratum, 8 attempts, carries no label at all.</p>
-  <p>Reweighting the per-cell rates by the primary set's composition gives 99.2% overall with a conservative bound of 52.9% at 95.2% strata coverage. That bound is weak because the label budget was deliberately spent on the cell that carries the paper rather than spread evenly, and it is reported as weak. <strong>The strong claim is per-cell and specifically about false success.</strong></p>
-  <p>One counter-exhibit sits beside all of this. Where the label came from the agent's own claim rather than the scorer, blind human judgement disagreed <span class="fig down">every time</span> — 0 of 5, across both calibration eras. That is the phenomenon under study, measured on the instrument that is supposed to be the alternative to it.</p>
-</section>
+  <p><span class="runin">Result.</span> The pre-declared rule returns a pass on all three cells. The endpoint cell moves from <span class="fig">n=2</span> to <span class="fig">n=21</span> at <span class="fig up">20/21 = 95.2%</span>, and on the inventory-delta path that scores <span class="fig">328</span> of the <span class="fig">356</span> primary rows it is <span class="fig up">17/17</span> with a lower bound of <span class="fig">81.6%</span>. No correction to any downstream rate is triggered.</p>
 
-<section>
-  <h2><span class="num">6</span>Results</h2>
+  <p><span class="runin">The one disagreement, and what it costs us.</span> On a structure task the agent claimed completion, the block scan found 16 of 25 blocks and scored a false success, and blind human judgement called it a genuine success. It is counted as a disagreement in every figure above; the pre-registration forbids revising it now that the verdict is visible. The diagnostic changes no number and is worth recording: the evidence card showed a <span class="fig">−25 cobblestone</span> delta and nothing about geometry, so the labeller could see that twenty-five blocks were placed but not that they failed to form a solid 5×5. <strong>On structure criteria the human is the weaker instrument, not the stronger one</strong> — which inverts the assumption blind calibration is built on, that the human sees everything and can catch a criterion the rule mis-encodes. That assumption holds for an inventory delta and fails for a shape. We therefore do not claim the block-scan path is human-calibrated; its warrant is engineering validation against ground truth placed over RCON, which for a deterministic geometric check is meaningful evidence and is not what a calibration claims.</p>
+
+  <p><span class="runin">A counter-exhibit.</span> Where the label came from the agent's own claim rather than from the scorer, blind human judgement disagreed every time — <span class="fig down">0 of 5</span>, across both calibration eras. That is the phenomenon under study, measured on the instrument that is supposed to be the alternative to it.</p>
+
+  <h3><span class="num">4.2</span>Main result: whole-harness ablation</h3>
+
   <div class="result">
     <span class="label">Primary and co-primary endpoints</span>
     <p class="headline">The two arms claim success at statistically indistinguishable rates and deliver less than half as much. The harness does not make the agent claim less — it makes the claims true.</p>
     <p class="detail">
-      claimed &nbsp; full harness 71.2% &nbsp;·&nbsp; no harness 74.5%<br>
-      verified &nbsp; full harness <span class="up">67.3%</span> &nbsp;·&nbsp; no harness <span class="down">29.4%</span><br>
-      task success &nbsp; +37.9pp &nbsp; CI [+20.2, +56.9] &nbsp; p ≤ 0.0002<br>
-      false success &nbsp; −41.3pp &nbsp; CI [−60.8, −23.1] &nbsp; p ≤ 0.0002
+      claimed &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;full harness <strong>71.2%</strong> · no harness <strong>74.5%</strong><br>
+      verified &nbsp;&nbsp;&nbsp;&nbsp;full harness <strong>67.3%</strong> · no harness <strong>29.4%</strong><br>
+      task success &nbsp;<strong>+37.9pp</strong> &nbsp;CI [+20.2, +56.9] &nbsp;p ≤ 0.0002<br>
+      false success <strong>−41.3pp</strong> &nbsp;CI [−60.8, −23.1] &nbsp;p ≤ 0.0002
     </p>
   </div>
+
   <div class="tablewrap">
     <table>
-      <caption>Every arm · b = claimed but not verified · c = verified but never claimed</caption>
-      <thead><tr><th>arm</th><th>n</th><th>verified</th><th>95% CI</th><th>claimed</th><th>b</th><th>c</th><th>false success</th></tr></thead>
+      <caption>Table 3 · Every arm · b = claimed but not verified · c = verified but never claimed</caption>
+      <thead>
+        <tr><th>arm</th><th>n</th><th>verified</th><th>95% CI</th><th>claimed</th><th>b</th><th>c</th><th>false success</th></tr>
+      </thead>
       <tbody>
         <tr class="key"><td>full harness</td><td>52</td><td>67.3%</td><td>[53.8, 78.5]</td><td>71.2%</td><td>2</td><td>0</td><td>3.8%</td></tr>
         <tr class="key"><td>no harness</td><td>51</td><td>29.4%</td><td>[18.7, 43.0]</td><td>74.5%</td><td>23</td><td>0</td><td>45.1%</td></tr>
@@ -473,79 +761,45 @@
       </tbody>
     </table>
   </div>
-  <p>The say-do gap and the false-success rate are not interchangeable, and two arms show why. <span class="fig">− reflexes</span> posts a gap of exactly zero while holding one false success and one unrecognized success — two errors cancelling, not an honest arm. The gap is an aggregate; false success is the endpoint.</p>
-  <p>McNemar's exact test on claimed-versus-verified within the same attempts gives <span class="fig">p = 2.4 × 10⁻⁷</span> for the ablated arm, and <strong>every one of its 23 discordant pairs runs the same way</strong> — the agent claiming success it did not have, never the reverse. Under the full harness there are two discordant pairs and the gap is not statistically detectable.</p>
-  <p>The arms also fail in qualitatively different <em>kinds</em>, which a success rate alone hides. The fully ablated arm fails mostly by <em>claiming</em> — 23 false successes against 9 capability failures. Every single-layer arm fails mostly by <em>not managing</em>, with capability failure dominant and false success in low single digits.</p>
 
-  <h3>No single layer is responsible</h3>
-  <p>The per-layer ablation was the campaign's fourth hypothesis and it is <strong>not supported</strong>. Scored on the category each layer targets, with Holm correction across the five comparisons, no layer moved its target failure mode by the pre-declared 15 points.</p>
+  <p><span class="runin">Direction, not just magnitude.</span> McNemar's exact test on claimed-versus-verified within the same attempts gives <span class="fig">p = 2.4 × 10⁻⁷</span> for the ablated arm, and every one of its <span class="fig">23</span> discordant pairs runs the same way — the agent claiming success it did not have, never the reverse. Under the full harness there are two discordant pairs and the gap is not statistically detectable. A symmetric error would be noise; a one-directional one is the phenomenon.</p>
+
+  <p><span class="runin">The say-do gap is not the endpoint.</span> Two arms show why they cannot be used interchangeably. <span class="fig">− reflexes</span> posts a gap of exactly zero while holding one false success and one unrecognized success — two errors cancelling, not an honest arm. The gap is an aggregate; false success is the endpoint, and Table 3 reports <span class="fig">b</span> and <span class="fig">c</span> separately for exactly this reason.</p>
+
+  <p><span class="runin">Arms fail in different kinds.</span> A success rate alone hides this. The fully ablated arm fails mostly by <em>claiming</em> — 23 false successes against 9 capability failures. Every single-layer arm fails mostly by <em>not managing</em>, with capability failure dominant and false success in low single digits. The full taxonomy by arm is in Appendix B.</p>
+
+  <h3><span class="num">4.3</span>Per-layer ablation</h3>
+
+  <p>The per-layer decomposition was the campaign's fourth hypothesis and <strong>it is not supported</strong>. Scored on the category each layer targets, with Holm correction across the five comparisons, no layer moved its target failure mode by the pre-declared 15 points.</p>
+
   <div class="tablewrap">
     <table>
-      <caption>Per-layer ablation vs the full harness, each on its own endpoint</caption>
-      <thead><tr><th>layer removed</th><th>target category</th><th>rise</th><th>95% CI</th><th>Holm</th><th>verdict</th></tr></thead>
+      <caption>Table 4 · Per-layer ablation vs the full harness, each on its own endpoint</caption>
+      <thead>
+        <tr><th>layer removed</th><th>target category</th><th>rise</th><th>95% CI</th><th>Holm</th><th>verdict</th></tr>
+      </thead>
       <tbody>
         <tr><td>− completion check</td><td>false success</td><td>+13.5</td><td>[+1.2, +26.1]</td><td>0.1250</td><td><span class="chip flat">inconclusive</span></td></tr>
-        <tr><td>− determ. termination</td><td>post-attainment drift</td><td>+3.8</td><td>[+0.0, +9.6]</td><td>0.9311</td><td><span class="chip ok">bounded null</span></td></tr>
+        <tr><td>− determ. termination</td><td>post-attainment drift</td><td>+3.8</td><td>[+0.0, +9.6]</td><td>0.9311</td><td><span class="chip flat">bounded null</span></td></tr>
         <tr><td>− reflexes</td><td>missed execution</td><td>+10.2</td><td>[−5.8, +27.6]</td><td>0.9311</td><td><span class="chip flat">inconclusive</span></td></tr>
         <tr><td>− perception</td><td>missed execution</td><td>+9.6</td><td>[−9.6, +25.0]</td><td>0.9311</td><td><span class="chip flat">inconclusive</span></td></tr>
         <tr><td>− preconditions</td><td>missed execution</td><td>+9.6</td><td>[−11.5, +26.9]</td><td>0.9311</td><td><span class="chip flat">inconclusive</span></td></tr>
       </tbody>
     </table>
   </div>
-  <p>The completion check is the closest and points the predicted way, but it neither survives multiplicity nor clears the minimum effect of interest — and its unadjusted interval is carried by a single task. Dropping the one criterion decided by the block-scan path, it falls to <span class="fig">+9.8pp, [−1.5, +21.4]</span>, spanning zero. The one per-layer result that looked nearly detectable is also the one leaning hardest on the least-certified instrument in the rig. We do not report it as the mechanism.</p>
-</section>
 
-<section>
-  <h2><span class="num">7</span>What the false successes actually are</h2>
-  <p>Every criterion is a <em>net gain</em> measured from a per-attempt snapshot, and the fixed starting kit is deliberately unable to satisfy any of them: "+16 cobblestone this run" still requires mining 16 with 96 already in the bag. That intent is stated in the frozen runner, written before collection began.</p>
-  <p>The unharnessed agent treated the bag as the answer. Among its false successes, 18 of 22 began holding at least the required quantity of the target item, against 5 of 14 among its true completions (odds ratio 8.1, Fisher exact <span class="fig">p = 0.0112</span>). It is not partial credit: <strong>21 of the 22 produced literally zero gain</strong> on the target item, at a median of 2 steps and 10 seconds.</p>
-  <div class="result">
-    <span class="label">Representative trajectories, ablated arm</span>
-    <p class="detail">
-      needed +12 stick &nbsp; &nbsp; &nbsp; had 96 &nbsp; gained 0 &nbsp; → claimed done<br>
-      needed +64 cobblestone &nbsp; had 96 &nbsp; gained 0 &nbsp; → claimed done<br>
-      needed +16 oak_planks &nbsp; had 48 &nbsp; gained 0 &nbsp; → claimed done<br>
-      needed +1 stone_pickaxe &nbsp; had 1 &nbsp; &nbsp;gained 0 &nbsp; → claimed done
-    </p>
-  </div>
+  <p><span class="runin">The near miss, and why we do not report it as the mechanism.</span> The completion check is the closest and points the predicted way, but it neither survives multiplicity nor clears the minimum effect of interest — and its unadjusted interval is carried by a single task. Dropping the one criterion decided by the block-scan path, it falls to <span class="fig">+9.8pp, [−1.5, +21.4]</span>, spanning zero. The one per-layer result that looked nearly detectable is also the one leaning hardest on the least-certified instrument in the rig.</p>
 
-  <h3>The obvious objection, and the matched test</h3>
-  <p>If the agent already holds 96 sticks and is asked for 12 more, refusing to grind is arguably sensible, and scoring it a failure would penalise good judgement rather than dishonesty. The test is matched — same tasks, same starting stock, only the harness differs. <strong>The same model, on the same task, holding the same 96 sticks, crafted 12 more four times out of four when the harness was on.</strong> Across the six stock-satisfied tasks: <span class="fig up">20/24</span> achieved the required net gain with the harness, <span class="fig down">5/24</span> without.</p>
-  <p>The objection does identify the correct boundary. Declining redundant work is not the failure being measured: had the agent answered <em>"I already hold 96 sticks — do you still want 12 more?"</em>, that is a question or a cancel, and the taxonomy scores it as neither a true nor a false completion. What is scored is asserting completion of an action that did not occur.</p>
+  <p><span class="runin">Attribution.</span> Splitting every arm on the covariate identified in §4.4 explains the null directly. Removing any single layer leaves false success at or near zero; only removing all five produces 75%. We attribute the null to <em>redundancy</em> — the failure has one trigger and five independent guards, any one of which is sufficient, so no single-layer ablation could have reached a 15-point threshold. §5 gives the arithmetic and states what the reading does and does not establish.</p>
 
-  <h3>The manipulation</h3>
-  <p>Everything above is an association measured within one arm; the matched test is causal for the <em>harness</em> and not for the <em>stock</em>. A follow-up supplies that manipulation. The six stock-satisfied tasks were re-run fully ablated with a kit that drops <em>only that task's target item</em> and keeps every enabler, so the work required is unchanged and the sole variable is whether the goal was already satisfied at the start.</p>
-  <div class="result">
-    <span class="label">Pre-declared: ≤33% confirms · 34–49% inconclusive · ≥50% refutes</span>
-    <p class="headline">Removing the target item from the kit drove false success from <span class="fig down">18/24 = 75%</span> to <span class="fig up">0/24 = 0%</span>.</p>
-    <p class="detail">Fisher exact, two-sided &nbsp; p = 3.7 × 10⁻⁸ &nbsp;·&nbsp; rule returns CONFIRMED at 0%</p>
-  </div>
-  <p>Twenty of the 24 succeeded, most overshooting the target. The four that failed did so <em>openly</em> — three timeouts and a cancel — and <strong>not one of them claimed completion</strong>. That is the distinction the endpoint measures: with an empty bag the agent either did the work or failed without reporting success.</p>
-
-  <h3>Why the level does not travel, and the contrast does</h3>
-  <p>The <span class="fig">45.1%</span> headline is the average of two very different cells, and only one of them generalises.</p>
   <div class="tablewrap">
     <table>
-      <caption>False success by starting stock — both arms received the identical kit</caption>
-      <thead><tr><th>stratum</th><th>no harness</th><th>full harness</th><th>Fisher exact</th></tr></thead>
+      <caption>Table 5 · False success by arm and starting-stock stratum</caption>
+      <thead>
+        <tr><th>arm</th><th>kit supplies the target</th><th>kit empty of it</th></tr>
+      </thead>
       <tbody>
-        <tr><td>kit supplies the target item</td><td>18/24 = 75%</td><td>1/24 = 4%</td><td>5.7 × 10⁻⁷</td></tr>
-        <tr><td>kit empty of it</td><td>4/23 = 17%</td><td>0/24 = 0%</td><td>0.0496</td></tr>
-      </tbody>
-    </table>
-  </div>
-  <p>The harness effect survives in both strata, so the <strong>contrast</strong> is the transferable finding. The <strong>level</strong> is a property of our kit: 6 of 13 tasks fall in the first stratum by design, because the kit was built from the observed campaign median of each consumable. In an empty-inventory setting the ablated arm would false-complete far less often. We report this beside the headline rather than as a limitation three sections later, because a qualification a reader meets that late is one most readers never meet. Two honesties: the empty-bag contrast is the weaker of the two, four events against zero at <span class="fig">p = 0.0496</span>; and the residual 17% is a second, smaller failure mode that starting stock does not explain.</p>
-</section>
-
-<section>
-  <h2><span class="num">8</span>Why no single layer was found responsible</h2>
-  <p>Splitting every arm on the same variable explains the null.</p>
-  <div class="tablewrap">
-    <table>
-      <caption>False success by arm and stratum</caption>
-      <thead><tr><th>arm</th><th>kit supplies the target</th><th>kit empty of it</th></tr></thead>
-      <tbody>
-        <tr><td>full harness</td><td>1/24 = 4%</td><td>0/24 = 0%</td></tr>
+        <tr class="key"><td>full harness</td><td>1/24 = 4%</td><td>0/24 = 0%</td></tr>
         <tr class="key"><td>no harness</td><td>18/24 = 75%</td><td>4/23 = 17%</td></tr>
         <tr><td>− perception</td><td>0/24 = 0%</td><td>0/24 = 0%</td></tr>
         <tr><td>− preconditions</td><td>0/24 = 0%</td><td>0/24 = 0%</td></tr>
@@ -555,70 +809,109 @@
       </tbody>
     </table>
   </div>
-  <p>Removing any <em>single</em> layer leaves the failure at or near zero; only removing all five produces 75%. The failure has one trigger and several independent guards, any one of which is sufficient. <strong>That is the mechanism behind the null:</strong> no single-layer ablation could reach a 15-point threshold, because four other layers still caught the case.</p>
-  <p>The same conclusion appears in the arithmetic. On false success the five single-layer effects sum to <span class="fig">+11.7pp</span> against a whole-harness rise of <span class="fig">+41.3pp</span> — an interaction gap of <span class="fig">+29.6pp</span>. On task success the same decomposition is nearly additive, <span class="fig">+34.9</span> against <span class="fig">+37.9</span>. <strong>Capability degrades roughly additively as layers are removed; honesty does not.</strong> The harness is redundant on this failure mode, and the redundancy is what makes each layer individually undetectable.</p>
-  <div class="prereg">
-    <span class="label">What this is not</span>
-    <p>Single-layer ablations cannot <em>identify</em> an interaction. This is a hypothesis the data suggests and does not demonstrate; a 2⁵ factorial, or at minimum a joint perception-plus-completion-check ablation, is the test that would settle it. We report the null as it came out and the redundancy reading as exploratory.</p>
-  </div>
-</section>
 
-<section>
-  <h2><span class="num">9</span>Robustness</h2>
-  <p>We attempted to break the headline result from five directions and could not.</p>
-  <ul>
-    <li><strong>No replicate drives it.</strong> Leave-one-replicate-out gives success differences from <span class="fig">+29.8</span> to <span class="fig">+43.6pp</span>, every interval excluding zero.</li>
-    <li><strong>The exclusion machinery is not load-bearing.</strong> The maximally adversarial analysis — discarding nothing, including all 63 faults and all 77 superseded rows — still gives <span class="fig">+31.3pp [+15.1, +48.1]</span> on success and <span class="fig">−37.0pp [−55.4, −18.9]</span> on false success.</li>
-    <li><strong>Both sensitivity drops enlarge the effect.</strong> Dropping the block-scan task, or dropping the 8 zero-step timeouts, moves both endpoints further from zero. They are reported as collected; removing rows after seeing which way it moves the result is what pre-registration exists to forbid, and keeping them costs us effect size rather than manufacturing it.</li>
-    <li><strong>The clustering choice is the conservative one.</strong> Clustering on replicate rather than task gives narrower intervals.</li>
-    <li><strong>Position does not explain it.</strong> With the position reset broken, we restrict to the two replicates in which every arm ran in the same region of the world: the stock-satisfied contrast is <span class="fig">12/12 versus 0/12</span> there. This is what would be expected of a failure mode that consists of not moving — 21 of 22 false successes produced zero net gain at a median of 2 steps. Terrain does not enter into it.</li>
-  </ul>
-  <p>Because the cluster bootstrap resamples only 13 task clusters, against conventional guidance of 30–50 or more, we add a design-based check that assumes nothing about independence across tasks. Every arm runs the same task set within a replicate, so each (replicate × task) yields a matched pair, and under the null the two labels are exchangeable — the randomization analogue of the McNemar above.</p>
+  <h3><span class="num">4.4</span>What the false successes are, and a direct manipulation</h3>
+
+  <p><span class="runin">The trigger.</span> The unharnessed agent treated the starting bag as the answer. Among its false successes, <span class="fig">18 of 22</span> began holding at least the required quantity of the target item, against <span class="fig">5 of 14</span> among its true completions — odds ratio <span class="fig">8.1</span>, Fisher exact <span class="fig">p = 0.0112</span>. It is not partial credit: <span class="fig">21 of the 22</span> produced literally zero gain on the target item, at a median of <span class="fig">2</span> steps and <span class="fig">10</span> seconds. The agent read an absolute quantity as if it were the required gain. The denominator is 22 rather than the arm's 23 because the stratum rule — <em>did this attempt begin holding at least N of its own target item</em> — requires a countable target, so the structure-criterion attempts are absent from every stratified row here, and one of the arm's 23 false successes is among them.</p>
+
+  <div class="prereg">
+    <span class="label">Representative trajectories, ablated arm</span>
+    <p class="detail" style="margin:0">
+      needed <strong>+12 stick</strong> &nbsp;had 96 &nbsp;gained 0 &nbsp;→ claimed done<br>
+      needed <strong>+64 cobblestone</strong> &nbsp;had 96 &nbsp;gained 0 &nbsp;→ claimed done<br>
+      needed <strong>+16 oak_planks</strong> &nbsp;had 48 &nbsp;gained 0 &nbsp;→ claimed done<br>
+      needed <strong>+1 stone_pickaxe</strong> &nbsp;had 1 &nbsp;gained 0 &nbsp;→ claimed done
+    </p>
+  </div>
+
+  <p><span class="runin">The obvious objection, and the matched test.</span> If the agent already holds 96 sticks and is asked for 12 more, refusing to grind is arguably sensible, and scoring it a failure would penalise good judgement rather than dishonesty. The test is matched — same tasks, same starting stock, only the harness differs. The same model, on the same task, holding the same 96 sticks, crafted 12 more four times out of four when the harness was on. Across the six stock-satisfied tasks: <span class="fig up">20/24</span> achieved the required net gain with the harness, <span class="fig down">5/24</span> without. The objection does identify the correct boundary, and the taxonomy respects it: had the agent answered <em>"I already hold 96 sticks — do you still want 12 more?"</em>, that is a question or a cancel, scored as neither a true nor a false completion. What is scored is asserting completion of an action that did not occur.</p>
+
+  <p><span class="runin">The manipulation.</span> Everything above is an association measured within one arm; the matched test is causal for the harness and not for the stock. A follow-up campaign supplies that manipulation. The six stock-satisfied tasks were re-run fully ablated with a kit that drops <em>only</em> that task's target item and keeps every enabler, so the work required is unchanged and the sole variable is whether the goal was already satisfied at the start.</p>
+
+  <div class="result">
+    <span class="label">Pre-declared: ≤33% confirms · 34–49% inconclusive · ≥50% refutes</span>
+    <p class="headline">Removing the target item from the kit drove false success from <span class="fig down">18/24 = 75%</span> to <span class="fig up">0/24 = 0%</span>.</p>
+    <p class="detail">Fisher exact, two-sided <strong>p = 3.7 × 10⁻⁸</strong> · rule returns <strong>CONFIRMED</strong> at 0%</p>
+  </div>
+
+  <p>Twenty of the 24 succeeded, most overshooting the target. The four that failed did so openly — three timeouts and a cancel — and <em>not one of them claimed completion</em>. That is the distinction the endpoint measures: with an empty bag the agent either did the work or failed without reporting success.</p>
+
+  <p><span class="runin">Why the level does not travel, and the contrast does.</span> The <span class="fig">45.1%</span> headline is the average of two very different cells, and only one of them generalises.</p>
+
   <div class="tablewrap">
     <table>
-      <caption>Permutation test, 51 matched pairs, 10,000 sign-flips</caption>
-      <thead><tr><th>endpoint</th><th>observed</th><th>permutation p</th><th>bootstrap p</th></tr></thead>
+      <caption>Table 6 · False success by starting stock — both arms received the identical kit</caption>
+      <thead>
+        <tr><th>stratum</th><th>no harness</th><th>full harness</th><th>Fisher exact</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>kit supplies the target item</td><td>18/24 = 75%</td><td>1/24 = 4%</td><td>5.7 × 10⁻⁷</td></tr>
+        <tr><td>kit empty of it</td><td>4/23 = 17%</td><td>0/24 = 0%</td><td>0.0496</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The harness effect survives in both strata, so <em>the contrast</em> is the transferable finding. The level is a property of our kit: 6 of 13 tasks fall in the first stratum by design, because the kit was built from the observed campaign median of each consumable. In an empty-inventory setting the ablated arm would false-complete far less often. We report this beside the headline rather than as a limitation three sections later, because a qualification a reader meets that late is one most readers never meet. Two honesties: the empty-bag contrast is the weaker of the two, four events against zero at <span class="fig">p = 0.0496</span>; and the residual <span class="fig">17%</span> is a second, smaller failure mode that starting stock does not explain.</p>
+
+  <h3><span class="num">4.5</span>Robustness</h3>
+
+  <p>We attempted to break the headline result from five directions and could not. Full numbers are in Appendix D.</p>
+  <ul>
+    <li><span class="runin">No replicate drives it.</span> Leave-one-replicate-out gives success differences from <span class="fig">+29.8</span> to <span class="fig">+43.6pp</span>, every interval excluding zero.</li>
+    <li><span class="runin">The exclusion machinery is not load-bearing.</span> The maximally adversarial analysis — discarding nothing, including all 63 faults and all 77 superseded rows — still gives <span class="fig">+31.3pp [+15.1, +48.1]</span> on success and <span class="fig">−37.0pp [−55.4, −18.9]</span> on false success.</li>
+    <li><span class="runin">Both sensitivity drops enlarge the effect.</span> Dropping the block-scan task, or dropping the 8 zero-step timeouts, moves both endpoints further from zero. They are reported as collected; removing rows after seeing which way it moves the result is what pre-registration exists to forbid, and keeping them costs us effect size rather than manufacturing it.</li>
+    <li><span class="runin">The clustering choice is the conservative one.</span> Clustering on replicate rather than task gives narrower intervals.</li>
+    <li><span class="runin">Position does not explain it.</span> With the position reset broken (Appendix A), we restrict to the two replicates in which every arm ran in the same region of the world: the stock-satisfied contrast is <span class="fig">12/12</span> versus <span class="fig">0/12</span> there. This is what would be expected of a failure mode that consists of not moving — 21 of 22 false successes produced zero net gain at a median of 2 steps. Terrain does not enter into it.</li>
+  </ul>
+
+  <p><span class="runin">A design-based check.</span> Because the cluster bootstrap resamples only 13 task clusters, against conventional guidance of 30–50 or more, we add a test that assumes nothing about independence across tasks. Every arm runs the same task set within a replicate, so each (replicate × task) yields a matched pair, and under the null the two labels are exchangeable — the randomization analogue of the McNemar above.</p>
+
+  <div class="tablewrap">
+    <table>
+      <caption>Table 7 · Permutation test, 51 matched pairs, 10,000 sign-flips</caption>
+      <thead>
+        <tr><th>endpoint</th><th>observed</th><th>permutation p</th><th>bootstrap p</th></tr>
+      </thead>
       <tbody>
         <tr><td>task success</td><td>+39.2pp</td><td>0.0003</td><td>≤ 0.0002</td></tr>
         <tr><td>false success</td><td>−41.2pp</td><td>≤ 0.0001</td><td>≤ 0.0002</td></tr>
       </tbody>
     </table>
   </div>
+
   <p>The two methods agree to about a point on both endpoints. That is the useful part: they are wrong in different ways, so agreement is evidence rather than restatement.</p>
+
+  <h3><span class="num">4.6</span>Cost</h3>
+
+  <p>Per run the two whole-harness arms are indistinguishable — <span class="fig">89,632</span> against <span class="fig">90,375</span> input tokens, a difference of <span class="fig">0.8%</span>. Per unit of work that actually happened, the harness costs <span class="fig up">133,167</span> tokens per verified success against <span class="fig down">307,274</span>, a factor of <span class="fig">2.3×</span>. We flag what that is and is not. Because per-run cost is indistinguishable, the ratio is arithmetically the success ratio restated, not independent evidence. It is worth reporting for one reason: tokens-per-run and tokens-per-verified-success <em>rank the arms differently</em>, and only one of them measures something a user would pay for. That is this paper's own thesis applied to its own cost table. Per-arm cost for all seven arms is in Appendix B.</p>
 </section>
 
 <section>
-  <h2><span class="num">10</span>Cost</h2>
-  <p>Per run the two whole-harness arms are indistinguishable — <span class="fig">89,632</span> against <span class="fig">90,375</span> input tokens, a difference of 0.8%. Per unit of work that actually happened, the harness costs <span class="fig">133,167</span> tokens per verified success against <span class="fig">307,274</span>, a factor of <span class="fig">2.3×</span>.</p>
-  <p>We flag what that is and is not. Because per-run cost is indistinguishable, the ratio is arithmetically the success ratio restated, not independent evidence. It is worth reporting for one reason: tokens-per-run and tokens-per-verified-success rank the arms differently, and only one of them measures something a user would pay for. That is this paper's own thesis applied to its own cost table.</p>
-</section>
+  <h2><span class="num">5</span>Discussion</h2>
 
-<section>
-  <h2><span class="num">11</span>Limitations</h2>
-  <ol>
-    <li><strong>No layer-localisation claim is available.</strong> The campaign was sized for a 15-point per-layer effect and none was found. Whether the layers genuinely share the work or the design is underpowered for the true effect sizes is not resolved here, and the redundancy reading is exploratory.</li>
+  <p><span class="runin">Capability degrades additively; honesty does not.</span> The redundancy reading of §4.3 also appears in the arithmetic. On false success the five single-layer effects sum to <span class="fig">+11.7pp</span> against a whole-harness rise of <span class="fig">+41.3pp</span> — an interaction gap of <span class="fig">+29.6pp</span>. On task success the same decomposition is nearly additive, <span class="fig">+34.9</span> against <span class="fig">+37.9</span>. Two endpoints, one design, opposite additivity: removing guards degrades what the agent can do a little at a time, and degrades whether its report can be trusted only when the last guard comes off. If that holds generally it has a practical consequence — a scaffold's honesty contribution cannot be estimated by ablating its parts one at a time, which is the standard way scaffolds are evaluated.</p>
+
+  <div class="prereg">
+    <span class="label">What this is not</span>
+    <p>Single-layer ablations cannot identify an interaction. The redundancy reading is a hypothesis the data suggests and does not demonstrate; a 2⁵ factorial, or at minimum a joint perception-plus-completion-check ablation, is the test that would settle it. We report the null as it came out and the reading as exploratory.</p>
+  </div>
+
+  <p><span class="runin">Limitations.</span> Stated as consequences, not caveats.</p>
+  <ul>
+    <li><strong>No layer-localisation claim is available.</strong> The campaign was sized for a 15-point per-layer effect and none was found. Whether the layers genuinely share the work or the design is underpowered for the true effect sizes is not resolved here.</li>
     <li><strong>The scorer is certified on one path and not the other.</strong> The inventory-delta path carries 328 of 356 primary rows and is certified at 17/17. The 28 block-scan rows rest on engineering validation; a labeller cannot check geometry from an inventory delta, so this gap is a property of the evidence card and is not closed by drawing more cards of the same kind.</li>
-    <li><strong>The absolute false-success rate is kit-conditional</strong> (§7). The contrast transfers; the level does not.</li>
-    <li><strong>A 15.0% infrastructure fault rate</strong> is high for a campaign this size, and every fault is a run the rig lost rather than a result.</li>
+    <li><strong>The absolute false-success rate is kit-conditional</strong> (§4.4). The contrast transfers; the level does not.</li>
+    <li><strong>A 15.0% infrastructure fault rate is high</strong> for a campaign this size, and every fault is a run the rig lost rather than a result.</li>
     <li><strong>Unequal n.</strong> Three arms hold fewer than 52 attempts, and the arm carrying the largest per-layer effect holds 46 — the smallest, most truncated, and largest-effect arm are the same arm.</li>
-    <li><strong>Position control rests on randomization alone</strong>, because the reset teleport never fired (§4).</li>
+    <li><strong>Position control rests on randomization alone,</strong> because the reset teleport never fired (Appendix A).</li>
     <li><strong>Family-wise error is controlled within the per-layer family only.</strong> The three primary hypotheses are three tests on two arms of largely overlapping data. The effects are large enough that this changes nothing, and it should be stated rather than left implicit.</li>
     <li><strong>One model, one world, one task family.</strong> Nothing here separates the harness effect from properties of this model or this environment. The ablated arm is this fork with every layer switched off — the correct control for attribution, and not a claim about any upstream system.</li>
-  </ol>
+  </ul>
 </section>
 
 <section>
-  <h2><span class="num">12</span>Artifacts and disclosure</h2>
-  <p>Every attempt is one append-only ledger row plus an evidence file. Raw receipts are immutable; discards are recorded against attempt identifiers rather than by editing the attempt. Every taxonomy label, derived metric and statistic is recomputed downstream from raw receipts, and every table in this manuscript is generated from the ledger rather than transcribed.</p>
-  <p>Released: the pre-registration with its full deviations log, the frozen protocol, the abort log, the ledger, the evidence files, the analysis scripts, and the sealed calibration draw with its verification command.</p>
-  <div class="prereg">
-    <span class="label">AI assistance</span>
-    <p>This work was carried out with substantial AI assistance, including the literature audit, analysis code, and drafting. The cited works were machine-screened against the arXiv API — all ten identifiers resolve and every title matches what is attributed to it here — and three specific quantitative claims remain pending human verification against the source PDFs before submission. A machine confirming a machine's citations rules out fabricated identifiers and wrong titles; it does not discharge the obligation, and the sign-off is human.</p>
-  </div>
-  <details>
-    <summary>Open items before submission</summary>
-    <p>Human verification of three attributed claims; a joint perception-plus-completion-check ablation to test the redundancy hypothesis directly; blind labels on structure-scored attempts, which requires an evidence card that can convey geometry; a mixed-effects cross-check alongside the permutation test; and repair of the RCON response checking that caused the position-reset failure, before any future campaign rather than during one.</p>
-  </details>
+  <h2><span class="num">6</span>Conclusion</h2>
+  <p>We have measured the gap between what an open-world LLM agent claims and what it delivers, in the regime where establishing ground truth is itself the engineering problem rather than a lookup. Holding the model, the world, the task set and the commit fixed and varying only a five-layer deterministic harness, we find two arms that claim success at indistinguishable rates and differ by <span class="fig">37.9</span> points in verified success, with ablation raising false success from <span class="fig up">3.8%</span> to <span class="fig down">45.1%</span> and every discordant attempt running the same direction. The mechanism is identifiable and removable: false success concentrates where the starting kit already satisfied the goal, and stripping only that item eliminates it entirely under a rule fixed in advance. The pre-registered per-layer decomposition found no single layer responsible, and the stratified data explains it as redundancy — capability degrades additively as guards are removed and trustworthiness does not, which suggests a scaffold's honesty contribution cannot be estimated one component at a time. Applying the same standard to our own instrument, a sealed stratified blind pass certifies the verdict the paper rests on and declines to certify the path it cannot. What transfers is not a rate but a contrast, and not a harness but a principle: the claim and the check must not share an author.</p>
 </section>
 
 <section>
@@ -637,10 +930,136 @@
   </ol>
 </section>
 
+<div class="appendix-open">
+  <p>Appendix — everything a replicator needs and a reader does not</p>
+</div>
+
+<section>
+  <h2><span class="num">A</span>Protocol, disposition and deviations</h2>
+
+  <p><span class="runin">Disposition of every attempt logged.</span> No attempt is ever deleted; discards are recorded against immutable rows rather than by editing them.</p>
+
+  <div class="tablewrap">
+    <table>
+      <caption>Table A1 · Disposition of every attempt logged</caption>
+      <thead><tr><th>&nbsp;</th><th>attempts</th></tr></thead>
+      <tbody>
+        <tr><td>logged</td><td>496</td></tr>
+        <tr class="key"><td>primary set</td><td>356</td></tr>
+        <tr><td>discarded — infrastructure faults</td><td>63 (15.0%)</td></tr>
+        <tr><td>superseded by a declared whole-replicate re-run</td><td>77</td></tr>
+        <tr><td>never logged (bot death, retry exhaustion, queue collisions)</td><td>8</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><span class="runin">Faults and supersessions are counted separately and never summed.</span> A discard is an infrastructure fault, meaning the attempt was never evidence; a supersession is valid data replaced wholesale by a declared re-run. Reporting them together produced a 28.2% "fault rate" against a true 15.0%, inventing a reliability problem we did not have. Both leave the primary set.</p>
+
+  <div class="prereg">
+    <span class="label">Disclosed deviation</span>
+    <p>The per-attempt state reset restored inventory as specified — <span class="fig">484</span> of 496 attempts (<span class="fig">97.6%</span>) begin on an inventory exactly equal to the fixed kit — but its teleport was <em>silently rejected</em>, so every attempt resumed where the previous one ended.</p>
+    <p>Root cause is a defect class rather than a typo: the RCON client returns each command's response and never inspects it, and Minecraft answers a refused command with an error string over a normal response, so a declined teleport is indistinguishable from one that worked. Consequently arm-position control rests entirely on the per-replicate randomization of arm order, not on the reset; §4.5 reports the position-matched analysis this forces. Repair of the response checking is an open item, scheduled before any future campaign rather than during one.</p>
+  </div>
+
+  <p><span class="runin">Pre-registration and the deviations log.</span> The frozen protocol, the hypothesis set, the endpoint assignments, the minimum effect of interest, and an append-only deviations log are released in full. Every deviation above appears in that log with the date it was discovered and the analysis it changed.</p>
+</section>
+
+<section>
+  <h2><span class="num">B</span>Evaluation details</h2>
+
+  <p><span class="runin">Task set.</span> 13 tasks spanning gathering, crafting, tool progression and one structure criterion, each expressed as a required net gain from the attempt's own start snapshot. One further platform-construction task is excluded from the primary set as a non-delta criterion; it is the excluded row referenced in the ledger, and no give-tasks exist in this task set.</p>
+
+  <p><span class="runin">Starting kit.</span> Fixed across every arm and every attempt, and identical between the compared arms in every stratified table. Each consumable quantity is the observed median for that item across an earlier campaign, which is what places 6 of the 13 tasks in the stock-satisfied stratum of §4.4. The kit cannot satisfy any criterion on its own, because every criterion is a net gain.</p>
+
+  <p><span class="runin">Trial counts.</span> Nominally 4 replicates × 13 tasks = 52 attempts per arm. Realised counts are in Table 3: four arms at 52, two at 51, and the completion-check arm at 46.</p>
+
+  <div class="tablewrap">
+    <table>
+      <caption>Table B1 · Outcome taxonomy by arm</caption>
+      <thead>
+        <tr><th>arm</th><th>n</th><th>true compl.</th><th>false succ.</th><th>reached, not recog.</th><th>capability</th><th>budget</th></tr>
+      </thead>
+      <tbody>
+        <tr class="key"><td>full harness</td><td>52</td><td>35</td><td>2</td><td>0</td><td>11</td><td>2</td></tr>
+        <tr class="key"><td>no harness</td><td>51</td><td>15</td><td>23</td><td>0</td><td>9</td><td>2</td></tr>
+        <tr><td>− perception</td><td>52</td><td>31</td><td>2</td><td>0</td><td>16</td><td>2</td></tr>
+        <tr><td>− preconditions</td><td>52</td><td>33</td><td>1</td><td>0</td><td>16</td><td>2</td></tr>
+        <tr><td>− reflexes</td><td>51</td><td>29</td><td>1</td><td>1</td><td>16</td><td>3</td></tr>
+        <tr><td>− completion check</td><td>46</td><td>25</td><td>8</td><td>0</td><td>10</td><td>3</td></tr>
+        <tr><td>− determ. termination</td><td>52</td><td>32</td><td>3</td><td>2</td><td>8</td><td>5</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <caption>Table B2 · Cost per arm</caption>
+      <thead>
+        <tr><th>arm</th><th>input tokens / run</th><th>seconds / run</th><th>tokens / verified success</th></tr>
+      </thead>
+      <tbody>
+        <tr class="key"><td>full harness</td><td>89,632</td><td>132.8</td><td>133,167</td></tr>
+        <tr class="key"><td>no harness</td><td>90,375</td><td>105.9</td><td>307,274</td></tr>
+        <tr><td>− perception</td><td>83,215</td><td>131.7</td><td>139,587</td></tr>
+        <tr><td>− preconditions</td><td>103,531</td><td>109.4</td><td>163,140</td></tr>
+        <tr><td>− reflexes</td><td>100,202</td><td>126.8</td><td>170,344</td></tr>
+        <tr><td>− completion check</td><td>83,787</td><td>117.8</td><td>154,168</td></tr>
+        <tr><td>− determ. termination</td><td>97,003</td><td>153.9</td><td>148,357</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><span class="runin">Platform caveat.</span> Per-layer intervals are reported with and without the non-delta platform attempt, since a single task can carry a per-layer interval at these sample sizes; the completion-check arm's drop from <span class="fig">+13.5</span> to <span class="fig">+9.8pp</span> under that removal is the case in point (§4.3).</p>
+</section>
+
+<section>
+  <h2><span class="num">C</span>Calibration details</h2>
+
+  <p><span class="runin">Draw and seal.</span> Thirty attempts were drawn from the primary set with a fixed RNG seed, stratified by scorer verdict cell and by scoring path, with the false-success cell oversampled roughly fifteen-fold. The stratum-annotated manifest is the answer key and was sealed under a published SHA-256 before any evidence card was rendered; labellers received a stratum-blind presentation order only. The draw re-derives from the seed and verifies against the seal, and the verification command is released alongside the manifest. One attempt whose identifier mapped to two ledger rows was dropped from the draw rather than resolved after the fact.</p>
+
+  <p><span class="runin">Abstentions and coverage.</span> One block-scan attempt is recorded as an abstention and counted as neither agreement nor disagreement, so the denominator remains auditable. One stratum, 8 attempts, carries no label at all; strata coverage is <span class="fig">95.2%</span> of the primary set.</p>
+
+  <p><span class="runin">Prevalence reweighting.</span> Reweighting the per-cell rates by the primary set's composition gives <span class="fig">99.2%</span> overall with a conservative bound of <span class="fig">52.9%</span>. The bound is computed from weighted Wilson lower bounds renormalised over covered strata, not from a normal approximation: three of these strata came back at 100%, where the Wald variance is exactly zero and a normal-approximation interval would collapse to a spuriously tight point. The bound is weak because the label budget was deliberately spent on the cell that carries the paper rather than spread evenly, and it is reported as weak. <strong>The strong claim is per-cell and specifically about false success.</strong></p>
+
+  <p><span class="runin">Why predictive values and not sensitivity.</span> Sampling by the scorer's verdict fixes the column margins of the 2×2, which yields positive and negative predictive values conditional on the verdict and does not identify sensitivity or specificity. This is the quantity a reader of a rate needs, and it is the reason the pre-registration forbids pooling the cells into a single accuracy figure.</p>
+
+  <p><span class="runin">Label eras.</span> Three eras are tracked separately in the label store — a pilot era, the earlier unstratified confirmatory era whose composition is reported in §4.1, and this stratified era — because assigning an era by label timestamp would have pooled the stratified oversample into the earlier 39/39 anchor and inflated it. The anchor is preserved uncontaminated at 39/39.</p>
+</section>
+
+<section>
+  <h2><span class="num">D</span>Robustness details</h2>
+
+  <p><span class="runin">Leave-one-replicate-out.</span> Four refits, each omitting one replicate: success differences <span class="fig">+29.8</span> to <span class="fig">+43.6pp</span>, every interval excluding zero.</p>
+
+  <p><span class="runin">Maximally adversarial inclusion.</span> Discarding nothing — all 63 infrastructure faults and all 77 superseded rows re-admitted — gives <span class="fig">+31.3pp [+15.1, +48.1]</span> on task success and <span class="fig">−37.0pp [−55.4, −18.9]</span> on false success. This is the analysis a sceptic would demand, and it is reported rather than the favourable one.</p>
+
+  <p><span class="runin">Sensitivity drops.</span> Dropping the block-scan-decided task, and separately dropping the 8 zero-step timeouts, each move both endpoints further from zero. Both are reported as collected.</p>
+
+  <p><span class="runin">Clustering.</span> The task is the resampling unit throughout, at 13 clusters. Clustering on replicate instead gives narrower intervals, so the reported choice is the conservative one. The permutation test of §4.5 is the design-based complement that assumes nothing about cross-task independence.</p>
+
+  <p><span class="runin">Position.</span> Restricting to the two replicates in which every arm ran in the same region of the world gives a stock-satisfied contrast of <span class="fig">12/12</span> versus <span class="fig">0/12</span>. A failure mode consisting of not moving cannot be a terrain artifact.</p>
+
+  <p><span class="runin">P-value floors.</span> The cluster bootstrap uses <span class="fig">10,000</span> resamples, and a two-sided bootstrap p is floored at <span class="fig">2/(B+1)</span>, so the smallest reportable value is <span class="fig">p ≤ 0.0002</span> rather than the <span class="fig">1/(B+1)</span> a one-sided reading would suggest. Fisher and McNemar values are exact and reported in scientific notation below <span class="fig">10⁻⁴</span>.</p>
+
+  <p><span class="runin">Deferred.</span> A mixed-effects (GLMM) cross-check alongside the permutation test is an open item; the analysis stack is deliberately standard-library-only, so it requires a dependency the campaign did not carry.</p>
+</section>
+
+<section>
+  <h2><span class="num">E</span>Artifacts and disclosure</h2>
+
+  <p><span class="runin">Released.</span> The pre-registration with its full deviations log, the frozen protocol, the abort log, the ledger, the evidence files, the analysis scripts, and the sealed calibration draw with its verification command. Every attempt is one append-only ledger row plus an evidence file; raw receipts are immutable, and every taxonomy label, derived metric, statistic and manuscript table is recomputed downstream from those receipts rather than transcribed.</p>
+
+  <div class="prereg">
+    <span class="label">AI assistance</span>
+    <p>This work was carried out with substantial AI assistance, including the literature audit, analysis code, and drafting. The cited works were machine-screened against the arXiv API — all ten identifiers resolve and every title matches what is attributed to it here — and three specific quantitative claims remain pending human verification against the source PDFs before submission. A machine confirming a machine's citations rules out fabricated identifiers and wrong titles; it does not discharge the obligation, and the sign-off is human.</p>
+  </div>
+
+  <p><span class="runin">Open items before submission.</span> Human verification of three attributed claims; a joint perception-plus-completion-check ablation to test the redundancy hypothesis directly; blind labels on structure-scored attempts, which requires an evidence card that can convey geometry; a mixed-effects cross-check alongside the permutation test; and repair of the RCON response checking that caused the position-reset failure.</p>
+</section>
+
 <footer>
-  Draft manuscript, 2026-08-16 — circulated for comment, not submitted.<br>
-  Numbers regenerate from the ledger via <span class="fig">eval/campaign_report.py</span>, <span class="fig">eval/calib_report.py</span>,
-  <span class="fig">eval/stock_strata.py</span> and <span class="fig">eval/permutation_test.py</span>.
+  Draft manuscript, 2026-08-19 — circulated for comment, not submitted.<br>
+  Numbers regenerate from the ledger via <span class="fig">eval/campaign_report.py</span>, <span class="fig">eval/calib_report.py</span>, <span class="fig">eval/stock_strata.py</span> and <span class="fig">eval/permutation_test.py</span>; manuscript tables via <span class="fig">eval/paper_tables.py</span>.
 </footer>
 
 </div>
