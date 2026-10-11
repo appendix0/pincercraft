@@ -1,8 +1,43 @@
-# PincerCraft
+<a id="readme-top"></a>
 
-**A Minecraft harness for studying agent reliability.**
+<p align="center">
+  <img src="banner.webp" alt="PincerCraft — code owns the facts, the LLM owns the plan" width="640">
+</p>
 
-[About](#about-the-project) · [Getting started](#getting-started) · [Usage](#usage) · [Evaluation](#evaluation) · [Status and limits](#project-status-and-limits) · [Contributing](#contributing) · [License](#license)
+<h1 align="center">PincerCraft</h1>
+
+<p align="center">
+  <strong>A Minecraft harness for studying agent reliability.</strong>
+  <br>
+  <a href="docs/current-architecture.md">Explore the implementation</a>
+  · <a href="#usage">Usage</a>
+  · <a href="https://github.com/appendix0/pincercraft/issues">Report an issue</a>
+</p>
+
+<details>
+  <summary>Table of contents</summary>
+  <ol>
+    <li><a href="#about-the-project">About the project</a>
+      <ul>
+        <li><a href="#built-with">Built with</a></li>
+        <li><a href="#learning-questions">Learning questions</a></li>
+      </ul>
+    </li>
+    <li><a href="#how-it-works">How it works</a></li>
+    <li><a href="#getting-started">Getting started</a>
+      <ul>
+        <li><a href="#prerequisites">Prerequisites</a></li>
+        <li><a href="#installation">Installation</a></li>
+      </ul>
+    </li>
+    <li><a href="#usage">Usage</a></li>
+    <li><a href="#evaluation">Evaluation</a></li>
+    <li><a href="#project-status-and-limits">Project status and limits</a></li>
+    <li><a href="#contributing">Contributing</a></li>
+    <li><a href="#acknowledgments">Acknowledgments</a></li>
+    <li><a href="#license">License</a></li>
+  </ol>
+</details>
 
 ## About the project
 
@@ -43,7 +78,11 @@ The repository also contains prompt caching and history compaction, an in-game r
 
 The checkout includes configuration for the development bot. Adapt it before starting your own instance.
 
+### Prerequisites
+
 You need Node.js 20.x, npm, a Java-edition Minecraft server, and model API credentials. The project’s recorded setup used Paper 1.21.x and Node 20; Node 24 caused an agent-process failure in that setup. Native graphics dependencies may require platform-specific build libraries.
+
+### Installation
 
 ```bash
 git clone https://github.com/appendix0/pincercraft.git
@@ -123,7 +162,7 @@ Bug reports should include the code revision, relevant configuration with secret
 
 Use [GitHub issues](https://github.com/appendix0/pincercraft/issues) to report a problem or discuss a change. Keep fixes focused and run the relevant checks in [test/](test/) or [eval/](eval/).
 
-## Background and credits
+## Acknowledgments
 
 [Mindcraft](https://github.com/mindcraft-bots/mindcraft) provides the underlying LLM–Minecraft integration through [Mineflayer](https://github.com/PrismarineJS/mineflayer). PincerCraft builds on that foundation with harness and evaluation work.
 
