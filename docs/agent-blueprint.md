@@ -1,5 +1,7 @@
 # Pincercraft Agent Blueprint v2
 
+> **Historical design plan (May 2026).** This document preserves the proposed architecture and the code snapshot from that time. Planned features, defaults, and success criteria below are not current runtime claims. For the implementation and checked-in settings reviewed on 2026-10-11, see the [current implementation guide](current-architecture.md).
+
 > **Status**: Plan committed 2026-05-20, **revised 2026-05-20 (rev-2)** after a full code-read pass. Rev-2 deltas are tagged inline per step. Reality-check findings (what the code actually does, with file:line citations) live in [Appendix B](#appendix-b--code-reality-snapshot-2026-05-20).
 > **Supersedes** the original blueprint (preserved as Appendix A).
 > **Triggered by**: today's testing session on YOON that exposed how thin the previous foundations are. See [diagnosis-2026-05-20.md](./diagnosis-2026-05-20.md) for the evidence.
