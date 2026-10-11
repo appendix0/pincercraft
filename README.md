@@ -6,7 +6,7 @@
 
 **Code owns the facts. The LLM owns the plan.**
 
-A hands-on project in agent harness engineering, using Minecraft.
+A harness for LLM agents tackling long-horizon tasks in open worlds.
 
 [Getting started](#getting-started) · [Design](docs/current-architecture.md) · [Report a bug](https://github.com/appendix0/pincercraft/issues)
 
@@ -24,11 +24,10 @@ A hands-on project in agent harness engineering, using Minecraft.
 
 ## About the project
 
-PincerCraft is a hands-on project exploring how to make agents more useful on
-long-running tasks in open worlds. Using Minecraft, I’m building a harness that
-tracks world state, checks action preconditions, and verifies task completion.
-Through implementation and controlled experiments, I study where agents fail
-and how the surrounding system can help them work more reliably.
+PincerCraft builds the execution layer around an LLM agent: tracking world state,
+checking action preconditions, coordinating tasks, and verifying supported
+completion criteria. The objective is to make agents useful on long-running
+tasks in open worlds. Minecraft is the development and evaluation environment.
 
 The project builds on **Mindcraft**. The LLM plans and generates actions; the
 **harness** supplies observations, manages execution, and checks supported task
@@ -38,7 +37,7 @@ world shows.
 
 For example, gathering 16 additional cobblestone requires a gain of 16 from the
 starting inventory. Already holding 16 is not enough. Making these distinctions
-explicit, then testing how they affect execution, is the learning approach.
+explicit, then testing how they affect execution, guides the harness design.
 
 Built with JavaScript, Node.js, and Mineflayer for the bot; Python and SQLite for
 evaluation. The experiments use Claude Sonnet 4.6. Minecraft provides the test
@@ -134,8 +133,9 @@ those labels must be distinguished from measured outcomes.
 ## Project status
 
 The current implementation includes world-state observations, action checks,
-task queues, loop guards, completion checks, and an evaluation workflow. It is
-an engineering and learning project with a working Minecraft bot.
+task queues, loop guards, completion checks, and an evaluation workflow. These
+components support a working Minecraft agent. Development combines implementation,
+controlled experiments, and inspection of failure cases.
 
 With the model held fixed, I evaluated 13 tasks across four replicates and seven
 harness configurations. The primary set contains 356 scored attempts. The two
