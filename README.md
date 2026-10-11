@@ -4,7 +4,7 @@
   <img src="banner.webp" alt="PincerCraft — code owns the facts, the LLM owns the plan" width="640">
 </p>
 
-<p align="center"><b>Code owns the facts. The LLM owns the plan.</b><br>A Minecraft agent with a deterministic backbone, built for open-world, long-horizon tasks. A Mindcraft fork.</p>
+<p align="center"><b>Code owns the facts. The LLM owns the plan.</b><br>A Minecraft agent with a deterministic backbone, built for open-world, long-horizon tasks. A Mindcraft fork, inspired by Voyager.</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT">
@@ -209,6 +209,8 @@ The self-improvement loop lives in [`eval/`](eval/) (`bash eval/session.sh` runs
 ## Based on Mindcraft
 
 This is a fork of [mindcraft-bots/mindcraft](https://github.com/mindcraft-bots/mindcraft) (formerly kolbytn/mindcraft), which provides the core integration of LLMs with Minecraft via [Mineflayer](https://prismarinejs.github.io/mineflayer/). All credit for the foundation goes to the Mindcraft authors. License is MIT, preserved verbatim — see [LICENSE](LICENSE).
+
+The idea of an LLM agent pursuing long, open-ended goals in Minecraft comes from [Voyager](https://voyager.minedojo.org/) (Wang et al., 2023). PincerCraft borrows Voyager's labeled observation format (`src/agent/live_state.js`) but none of its code; the departure is in who checks the work — Voyager's critic is itself an LLM, while here completion is decided by code from the world state.
 
 To pull upstream updates:
 
