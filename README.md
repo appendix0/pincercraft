@@ -43,6 +43,10 @@ Built with JavaScript, Node.js, and Mineflayer for the bot; Python and SQLite fo
 evaluation. The experiments use Claude Sonnet 4.6. Minecraft provides the test
 environment; useful behavior over longer, more open-ended tasks remains the goal.
 
+<p align="center">
+  <img src="docs/images/harness-diagram.jpeg" alt="PincerCraft harness: world-state observations, action precondition checks, and task-completion checks built on Mindcraft" width="960">
+</p>
+
 ## Getting started
 
 Use Node.js 20.x, npm, a Java-edition Minecraft server, and the API credentials
